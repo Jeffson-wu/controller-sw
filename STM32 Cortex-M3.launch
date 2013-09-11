@@ -2,12 +2,12 @@
 <launchConfiguration type="com.zylin.embeddedcdt.idleNative">
 <booleanAttribute key="com.zylin.embeddedcdt.debugger_app_console" value="false"/>
 <stringAttribute key="com.zylin.embeddedcdt.debugger_init_commands" value="set tdesc filename workaround.xml&#10;set remote hardware-breakpoint-limit 6&#10;set remote hardware-watchpoint-limit 0"/>
-<stringAttribute key="com.zylin.embeddedcdt.debugger_run_commands" value="target remote localhost:3333&#10;monitor reset halt&#10;monitor poll&#10;&#10;monitor flash probe 0&#10;monitor flash protect 0 0 127 off&#10;monitor reset halt&#10;monitor flash erase_sector 0 0 127&#10;monitor flash write_image erase controller&#10;monitor flash protect 0 0 127 on&#10;monitor soft_reset_halt&#10;&#10;break main&#10;continue&#10;break delete main"/>
+<stringAttribute key="com.zylin.embeddedcdt.debugger_run_commands" value="target remote localhost:3333&#10;monitor reset halt&#10;monitor poll&#10;&#10;monitor flash probe 0&#10;monitor flash protect 0 0 127 off&#10;monitor reset halt&#10;monitor stm32f1x mass_erase 0&#10;monitor flash write_image /home/gna/STM3210C-EVAL/controller&#10;monitor flash protect 0 0 127 on&#10;&#10;monitor soft_reset_halt&#10;thbreak main&#10;continue"/>
 <stringAttribute key="org.eclipse.cdt.debug.mi.core.DEBUG_NAME" value="/home/gna/gcc-arm-none-eabi-4_7-2013q2/bin/arm-none-eabi-gdb"/>
 <stringAttribute key="org.eclipse.cdt.debug.mi.core.GDB_INIT" value=""/>
 <booleanAttribute key="org.eclipse.cdt.debug.mi.core.breakpointsFullPath" value="true"/>
 <stringAttribute key="org.eclipse.cdt.debug.mi.core.commandFactory" value="org.eclipse.cdt.debug.mi.core.standardCommandFactory"/>
-<stringAttribute key="org.eclipse.cdt.debug.mi.core.protocol" value="mi2"/>
+<stringAttribute key="org.eclipse.cdt.debug.mi.core.protocol" value="mi"/>
 <booleanAttribute key="org.eclipse.cdt.debug.mi.core.verboseMode" value="false"/>
 <stringAttribute key="org.eclipse.cdt.launch.DEBUGGER_ID" value="com.zylin.embeddedcdt.EmbeddedCDebugger"/>
 <stringAttribute key="org.eclipse.cdt.launch.DEBUGGER_REGISTER_GROUPS" value=""/>
