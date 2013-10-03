@@ -57,6 +57,13 @@ typedef struct
   u8 data[1];
 }WriteModbusRegsReq;
 
+typedef struct
+{
+  u8 slave;
+  u16 addr;
+  u16 datasize;
+}ReadModbusRegsReq;
+
 void UART_SendMsg( u8 *buffer, int len);
 
 xQueueHandle ModbusQueueHandle;
@@ -293,7 +300,7 @@ static void ModbusTask( void * pvParameters )
         {
           ReadModbusRegsReq *p;
           p=(WriteModbusRegsReq *)(msg->ucData);
-          ModbusReadRegs(p->slave, p->addr, p->data, p->datasize);
+          ModbusReadRegs(p->slave, p->addr, p->datasize);
         }
         default:
         break;
