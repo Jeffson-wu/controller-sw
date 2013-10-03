@@ -13,7 +13,7 @@ TARGET = arm-none-eabi-
 CC = $(TARGET)gcc
 OBJCOPY = $(TARGET)objcopy
 
-INCLUDES = -I ./include -I ./board -I ./arch
+INCLUDES = -I ./include -I ./board -I ./arch -I ./freertos/include -I ./ -I ./freertos/portable/GCC/ARM_CM3 
 CFLAGS = -g -O0 -c -mcpu=cortex-m3 -mthumb -DSTM32F1XX -DUSE_STDPERIPH_DRIVER $(INCLUDES)
 LDFLAGS = -T arch/stm32_flash.ld -mcpu=cortex-m3 -mthumb -nostartfiles -nostdlib -nodefaultlibs -Wl,--gc-section
 LIBS = -lc -lgcc
@@ -49,7 +49,14 @@ SOURCES = \
     drivers/stm32f10x_spi.c \
     drivers/stm32f10x_tim.c \
     drivers/stm32f10x_usart.c \
-    drivers/stm32f10x_wwdg.c
+    drivers/stm32f10x_wwdg.c \
+    freertos/croutine.c \
+    freertos/list.c \
+    freertos/queue.c \
+    freertos/tasks.c \
+    freertos/timers.c \
+    freertos/portable/GCC/ARM_CM3/port.c \
+    freertos/portable/MemMang/heap_1.c 
 
 OBJECTS = $(patsubst %,$(OBJECTS_DIR)/%,$(SOURCES:%.c=%.o))
 DEPENDS = $(patsubst %,$(DEPENDS_DIR)/%,$(SOURCES:%.c=%.d))
