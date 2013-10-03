@@ -20,6 +20,8 @@ void DebugMon_Handler(void) __attribute__ ((weak));
 void PendSV_Handler(void) __attribute__ ((weak));
 void SysTick_Handler(void) __attribute__ ((weak));
 void Default_Handler(void) __attribute__ ((weak));
+void UART2_TX_Handler(void) __attribute__ ((weak));
+void UART2_RX_Handler(void) __attribute__ ((weak));
 
 /* Vector table for (cl) Connectivity Line devices (STM32F105xx and STM32F107xx) */
 isr_handler *vectors[] __attribute__ ((section(".isr_vector"))) = {
@@ -55,8 +57,8 @@ isr_handler *vectors[] __attribute__ ((section(".isr_vector"))) = {
     Default_Handler,            /* 13: DMA1_Channel3 */
     Default_Handler,            /* 14: DMA1_Channel4 */
     Default_Handler,            /* 15: DMA1_Channel5 */
-    Default_Handler,            /* 16: DMA1_Channel6 */
-    Default_Handler,            /* 17: DMA1_Channel7 */
+    UART2_RX_Handler,           /* 16: DMA1_Channel6 */
+    UART2_TX_Handler,           /* 17: DMA1_Channel7 */
     Default_Handler,            /* 18: ADC1_2 */
     Default_Handler,            /* 19: CAN1_TX */
     Default_Handler,            /* 20: CAN1_RX0 */
