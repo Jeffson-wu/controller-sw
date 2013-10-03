@@ -21,186 +21,388 @@
 /* Includes ------------------------------------------------------------------*/
 #include "stm32f10x.h"
 #include "stm3210c-eval.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include "stm32f10x_usart.h"
+#include "stm32f10x_dma.h"
+#include "FreeRTOS.h"
+#include "task.h"
+#include "queue.h"
+#include "semphr.h"
 
-/* Private typedef -----------------------------------------------------------*/
-/* Private define ------------------------------------------------------------*/
-#define  LSE_FAIL_FLAG  0x80
-#define  LSE_PASS_FLAG  0x100
-/* Private macro -------------------------------------------------------------*/
-/* Private consts ------------------------------------------------------------*/
+#define CRC16 0x8888
+#define QUEUESIZE 10
+#define MODBUS_SILENT_INTERVAL 10
 
-/* Private variables ---------------------------------------------------------*/
-u32 LSE_Delay = 0;
-u32 count = 0;
-u32 BlinkSpeed = 0;
-u32 KeyState = 0;
-static __IO uint32_t TimingDelay;
-/* Private function prototypes -----------------------------------------------*/
-void Delay(uint32_t nTime);
-void TimingDelay_Decrement(void);
+enum
+{
+  FIRST_MSG,
+  WRITE_MODBUS_REGS,
+  READ_MODBUS_REGS,
+  LAST_MSG
+};
 
-/* Private functions ---------------------------------------------------------*/
+
+typedef struct 
+{
+   portCHAR ucMessageID;
+   portCHAR ucData[1];
+}xMessage;
+
+typedef struct
+{
+  u8 slave;
+  u16 addr;
+  u16 datasize;
+  u8 data[1];
+}WriteModbusRegsReq;
+
+void UART_SendMsg( u8 *buffer, int len);
+
+xQueueHandle ModbusQueueHandle;
+xSemaphoreHandle xSemaphore = NULL;
+
+static u16 gen_crc16(const u8 *data, u16 size)
+{
+    u16 out = 0;
+    int bits_read = 0, bit_flag, i;
+    u16 crc = 0;
+    /* Sanity check: */
+    if(data == 0)
+        return 0;
+    while(size > 0)
+    {
+        bit_flag = out >> 15;
+
+        /* Get next bit: */
+        out <<= 1;
+        out |= (*data >> bits_read) & 1; // item a) work from the least significant bits
+        /* Increment bit counter: */
+        bits_read++;
+        if(bits_read > 7)
+        {
+            bits_read = 0;
+            data++;
+            size--;
+        }
+        /* Cycle check: */
+        if(bit_flag)
+            out ^= CRC16;
+    }
+    // item b) "push out" the last 16 bits
+    for (i = 0; i < 16; ++i)
+    {
+        bit_flag = out >> 15;
+        out <<= 1;
+        if(bit_flag)
+            out ^= CRC16;
+    }
+    // item c) reverse the bits
+    i = 0x8000;
+    int j = 0x0001;
+    for (; i != 0; i >>=1, j <<= 1)
+    {
+        if (i & out) crc |= j;
+    }
+    return crc;
+}
+
+static bool handleModbusTelegram(u8 *telegram, u16 size)
+{
+    bool result=FALSE;
+    u8 bytecount;
+    u16 crc;
+    u8 slaveID=telegram[0];
+    switch(telegram[1])
+    {
+      case 3: /*read regs*/
+      {
+         u16 addr, datasize;
+         bytecount=telegram[2];
+         crc=telegram[3+bytecount];
+         crc+=telegram[4+bytecount]<<8;
+         if(gen_crc16(&telegram[0], 3+bytecount) == crc)
+         {
+           result=TRUE;
+         }
+      }
+      break;
+     case 16: /*write regs*/
+     {
+         u16 addr, datasize;
+         addr=telegram[2];
+         addr+=telegram[3]<<8;
+         datasize=telegram[4];
+         datasize+=telegram[5]<<8;
+         crc=telegram[6];
+         crc+=telegram[7]<<8;
+         if(gen_crc16(&telegram[0], 6) == crc)
+         {
+           result=TRUE;
+         }
+      }
+      break;
+     default:
+     break;
+    };
+    return result;
+}
+
+void waitForRespons(u8 *telegram, int *telegramsize)
+{
+  int i=0;
+  int stopReceiver=0;
+  
+  while(stopReceiver==0)
+  {
+    portTickType time=xTaskGetTickCount();
+    while(USART_GetFlagStatus(USART2, USART_FLAG_RXNE)== RESET)
+    {
+      portTickType currentTime=xTaskGetTickCount();
+      if(time>currentTime)
+      {
+        /*wrap around*/
+        portTickType maxtime=-1;
+        if(currentTime+(maxtime-time)>MODBUS_SILENT_INTERVAL && i>1)
+        {
+          stopReceiver=1;
+          break;
+        }
+      }
+      else if(currentTime>time+MODBUS_SILENT_INTERVAL && i>1)
+      {
+        stopReceiver=1;
+        break;
+      }
+    }
+    if(stopReceiver==0)
+    {
+      if(i<*telegramsize)
+      {
+        *telegram = USART_ReceiveData(USART2);
+        telegram++;
+        i++;
+      }
+      else
+      {
+        USART_ReceiveData(USART2);
+      }
+    }
+  }
+  *telegramsize=i;
+}
+
+static bool ModbusReadRegs(u8 slave, u16 addr, u16 datasize)
+{
+  u16 crc;
+  u8 telegram[255];
+  int telegramsize=255;
+  telegram[0]=slave;
+  telegram[1]=3;/*write multiple regs*/
+  telegram[2]=addr & 0x00FF;
+  telegram[3]=(addr & 0xFF00)>>8;
+  telegram[4]=datasize & 0x00FF;
+  telegram[5]=(datasize & 0xFF00)>>8;
+  crc = gen_crc16(&telegram[0], 6);
+  memcpy(&(telegram[6]), &crc, (size_t)2);
+  UART_SendMsg( telegram, 6+2);
+  waitForRespons(telegram, &telegramsize);
+  if(telegramsize==0)
+  {
+    return FALSE;
+  }
+  else
+  {
+    return TRUE;
+  }
+}
+
+static bool ModbusWriteRegs(u8 slave, u16 addr, u8 *data, u16 datasize)
+{
+  u16 crc;
+  u8 telegram[255];
+  int telegramsize=255;
+  telegram[0]=slave;
+  telegram[1]=16;/*write multiple regs*/
+  telegram[2]=addr & 0x00FF;
+  telegram[3]=(addr & 0xFF00)>>8;
+  telegram[4]=datasize & 0x00FF;
+  telegram[5]=(datasize & 0xFF00)>>8;
+  telegram[6]=(datasize*2) & 0x00FF;
+  telegram[7]=((datasize*2) & 0xFF00)>>8;
+  memcpy(&telegram[8], data, datasize*2);
+  crc = gen_crc16(&telegram[0], 8+datasize*2);
+  memcpy(&(telegram[8+datasize*2]), &crc, 2);
+  UART_SendMsg( telegram, 8+datasize*2+2);
+  waitForRespons(telegram, &telegramsize);
+  if(telegramsize==0)
+  {
+    return FALSE;
+  }
+  else
+  {
+    return TRUE;
+  }
+}
+
+static ModbusHandler(void)
+{
+  static int i=0;
+  if(i>=4)
+  {
+      i=0;
+      /*handle modbus*/
+      /*handle incomming requests*/
+  }
+}
+
+static void AppTask( void * pvParameters )
+{
+  xMessage *msg;
+  WriteModbusRegsReq *p;
+  msg=pvPortMalloc(sizeof(xMessage)+sizeof(WriteModbusRegsReq)+20);
+  msg->ucMessageID=WRITE_MODBUS_REGS;
+  p=(WriteModbusRegsReq *)msg->ucData;
+  p->slave=0x22;
+  p->addr=0x1111;
+  memcpy(p->data, "01234567890123456789", 20);
+  p->datasize=20;
+  xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);
+  while(1);
+}
+
+static void ModbusTask( void * pvParameters )
+{
+  short usData;
+  xMessage *msg;
+  while(1)
+  {
+    /*wait for queue msg*/
+    if( xQueueReceive( ModbusQueueHandle, &msg, portMAX_DELAY) == pdPASS )
+    {
+      switch(msg->ucMessageID)
+      {
+        case WRITE_MODBUS_REGS:
+        {
+          WriteModbusRegsReq *p;
+          p=(WriteModbusRegsReq *)(msg->ucData);
+          ModbusWriteRegs(p->slave, p->addr, p->data, p->datasize);
+        }
+        break;
+        case READ_MODBUS_REGS:
+        {
+          ReadModbusRegsReq *p;
+          p=(WriteModbusRegsReq *)(msg->ucData);
+          ModbusReadRegs(p->slave, p->addr, p->data, p->datasize);
+        }
+        default:
+        break;
+      };
+      /*dealloc the msg*/
+      vPortFree(msg);
+    }
+
+    /*call msg handler*/
+  
+  }
+}
+
+void UART_SendMsg( u8 *buffer, int len)
+{
+    DMA_InitTypeDef         DMA_InitStructure;
+    NVIC_InitTypeDef NVIC_InitStructure;
+    /*rework KSKS*/
+    static char txBuffer[255];
+    if(len > 255)
+    {
+      DMA_InitStructure.DMA_BufferSize = 255;
+    }
+    else
+    {
+      DMA_InitStructure.DMA_BufferSize = len;
+    }
+    memcpy(txBuffer, buffer, DMA_InitStructure.DMA_BufferSize);
+    DMA_DeInit(DMA1_Channel7);
+    DMA_InitStructure.DMA_PeripheralBaseAddr = (uint32_t) & USART2->DR;
+    DMA_InitStructure.DMA_MemoryBaseAddr = (uint32_t)txBuffer;
+    DMA_InitStructure.DMA_DIR = DMA_DIR_PeripheralDST;
+    DMA_InitStructure.DMA_PeripheralInc = DMA_PeripheralInc_Disable;
+    DMA_InitStructure.DMA_MemoryInc = DMA_MemoryInc_Enable;
+    DMA_InitStructure.DMA_PeripheralDataSize = DMA_PeripheralDataSize_Byte;
+    DMA_InitStructure.DMA_MemoryDataSize = DMA_PeripheralDataSize_Byte;
+    DMA_InitStructure.DMA_Mode = DMA_Mode_Normal;
+    DMA_InitStructure.DMA_Priority = DMA_Priority_Medium;
+    DMA_InitStructure.DMA_M2M = DMA_M2M_Disable;
+    DMA_Init(DMA1_Channel7, &DMA_InitStructure);
+
+    NVIC_InitStructure.NVIC_IRQChannel = DMA1_Channel7_IRQn;
+    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 1;
+    NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1;
+    NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+    NVIC_Init(&NVIC_InitStructure);
+    DMA_ITConfig(DMA1_Channel7, DMA_IT_TC, ENABLE);
+
+    USART_DMACmd(USART2, USART_DMAReq_Tx, ENABLE);
+    USART_ClearFlag(USART2, USART_FLAG_TC);
+    DMA_Cmd(DMA1_Channel7, ENABLE);
+}
+
+
+void UART2_TX_Handler(void)
+{
+    DMA_ClearITPendingBit(DMA1_IT_TC7);
+}
+
+void HW_Init(void)
+{
+  GPIO_InitTypeDef GPIO_InitStructure;
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_5;
+  RCC->APB2ENR |= RCC_APB2ENR_AFIOEN | RCC_APB2Periph_GPIOD;
+  AFIO->MAPR |= AFIO_MAPR_USART2_REMAP;
+  RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART2, ENABLE);
+  RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA1, ENABLE);
+
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_5;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_Init(GPIOD, &GPIO_InitStructure);
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_6;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
+  GPIO_Init(GPIOD, &GPIO_InitStructure);
+}
+
+void UART_Init(void)
+{
+  USART_InitTypeDef USART_InitStruct;
+  USART_StructInit(&USART_InitStruct);
+  USART_Init(USART2, &USART_InitStruct);
+  USART_Cmd(USART2, ENABLE);
+}
+
+
 
 /**
   * @brief  Main program.
   * @param  None
   * @retval None
   */
-
 int main(void)
 {
-  /* Enable Power Module Clock */
-  RCC_APB1PeriphClockCmd(RCC_APB1Periph_PWR, ENABLE);
-  
-  /* Initialise LEDs LD3&LD4, both off */
-  STM3210c_eval_LEDInit(LED3);
-  STM3210c_eval_LEDInit(LED4);
-  
-  STM3210c_eval_LEDOff(LED3);
-  STM3210c_eval_LEDOff(LED4);
-  
-  /* Initialise USER Button */
-  STM3210c_eval_PBInit(BUTTON_USER, BUTTON_MODE_GPIO); 
-  
-  /* Setup SysTick Timer for 1 msec interrupts  */
-  if (SysTick_Config(SystemCoreClock / 1000))
-  { 
-    /* Capture error */ 
-    while (1);
-  }
+  int result;
+  xTaskHandle pvCreatedTask;
+  xTaskHandle modbusCreatedTask;
 
-  /* Enable access to the backup register => LSE can be enabled */
-  PWR_BackupAccessCmd(ENABLE);
-  
-  /* Enable LSE (Low Speed External Oscillation) */
-  RCC_LSEConfig(RCC_LSE_ON);
-  
-  /* Check the LSE Status */
-  while(1)
-  {
-    if(LSE_Delay < LSE_FAIL_FLAG)
-    {
-      /* check whether LSE is ready, with 4 seconds timeout */
-      Delay (500);
-      LSE_Delay += 0x10;
-      if(RCC_GetFlagStatus(RCC_FLAG_LSERDY) != RESET)
-      {
-        /* Set flag: LSE PASS */
-        LSE_Delay |= LSE_PASS_FLAG;
-        /* Turn Off Led4 */
-        STM3210c_eval_LEDOff(LED4);
-        /* Disable LSE */
-        RCC_LSEConfig(RCC_LSE_OFF);
-        break;
-      }        
-    }
-    
-    /* LSE_FAIL_FLAG = 0x80 */  
-    else if(LSE_Delay >= LSE_FAIL_FLAG)
-    {          
-      if(RCC_GetFlagStatus(RCC_FLAG_LSERDY) == RESET)
-      {
-        /* Set flag: LSE FAIL */
-        LSE_Delay |= LSE_FAIL_FLAG;
-        /* Turn On Led4 */
-        STM3210c_eval_LEDOn(LED4);
-      }        
-      /* Disable LSE */
-      RCC_LSEConfig(RCC_LSE_OFF);
-      break;
-    }
-  }
-  
-  /* main while */
-  while(1)
-  {
-    if(0 == STM3210c_eval_PBGetState(BUTTON_USER))
-      {
-        if(KeyState == 1)
-        {
-           if(0 == STM3210c_eval_PBGetState(BUTTON_USER))
-          {
-            /* USER Button released */
-              KeyState = 0;
-            /* Turn Off LED4 */
-              STM3210c_eval_LEDOff(LED4);
-          }       
-        }
-      }
-    else if(STM3210c_eval_PBGetState(BUTTON_USER))
-      { 
-        if(KeyState == 0)
-        {
-           if(STM3210c_eval_PBGetState(BUTTON_USER))
-          {
-            /* USER Button released */
-              KeyState = 1;
-            /* Turn ON LED4 */
-            STM3210c_eval_LEDOn(LED4);
-            Delay(1000);
-            /* Turn OFF LED4 */
-            STM3210c_eval_LEDOff(LED4);
-            /* BlinkSpeed: 0 -> 1 -> 2, then re-cycle */    
-              BlinkSpeed ++ ; 
-          }
-        }
-      }
-        count++;
-        Delay(100);
-      /* BlinkSpeed: 0 */ 
-      if(BlinkSpeed == 0)
-          {
-            if(4 == (count % 8))
-            STM3210c_eval_LEDOn(LED3);
-            if(0 == (count % 8))
-            STM3210c_eval_LEDOff(LED3);
-         }
-           /* BlinkSpeed: 1 */ 
-           if(BlinkSpeed == 1)
-          {
-            if(2 == (count % 4))
-            STM3210c_eval_LEDOn(LED3);
-            if(0 == (count % 4))
-            STM3210c_eval_LEDOff(LED3);
-          }  
-          /* BlinkSpeed: 2 */        
-          if(BlinkSpeed == 2)
-          {
-            if(0 == (count % 2))
-            STM3210c_eval_LEDOn(LED3);
-            else
-            STM3210c_eval_LEDOff(LED3);     
-          }     
-          /* BlinkSpeed: 3 */ 
-          else if(BlinkSpeed == 3)
-        BlinkSpeed = 0;
-  }
+  xSemaphore = xSemaphoreCreateMutex();
+  /*create queue*/
+  ModbusQueueHandle=xQueueCreate( QUEUESIZE, ( unsigned portBASE_TYPE ) sizeof( void * ) );
+
+  result=xTaskCreate( ModbusTask, ( const signed char * ) "Modbus task", ( unsigned short ) 200, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &modbusCreatedTask );
+  result=xTaskCreate( AppTask, ( const signed char * ) "App task", ( unsigned short ) 200, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvCreatedTask );
+  vTaskStartScheduler();
+  return 0;
 }
 
-/**
-  * @brief  Inserts a delay time.
-  * @param  nTime: specifies the delay time length, in milliseconds.
-  * @retval None
-  */
-void Delay(uint32_t nTime)
-{ 
-  TimingDelay = nTime;
 
-  while(TimingDelay != 0);
-}
-
-/**
-  * @brief  Decrements the TimingDelay variable.
-  * @param  None
-  * @retval None
-  */
-void TimingDelay_Decrement(void)
-{
-  if (TimingDelay != 0x00)
-  { 
-    TimingDelay--;
-  }
-}
 
 #ifdef  USE_FULL_ASSERT
 /**
@@ -222,17 +424,3 @@ void assert_failed(uint8_t* file, uint32_t line)
 }
 #endif
 
-/**
-  * @}
-  */
-
-/**
-  * @}
-  */
-
-void SysTick_Handler(void)
-{
-  TimingDelay_Decrement();
-}
-
-/******************* (C) COPYRIGHT 2010 STMicroelectronics *****END OF FILE****/
