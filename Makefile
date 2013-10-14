@@ -23,6 +23,8 @@ PROGRAM = controller
 
 SOURCES = \
     main.c \
+    serial.c \
+    modbus.c \
     arch/startup.c \
     arch/system_stm32f10x.c \
     arch/core_cm3.c \
