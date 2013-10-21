@@ -33,7 +33,7 @@
 #include "signals.h"
 
 #define CRC16 0x8888
-#define MODBUS_SILENT_INTERVAL 10
+#define MODBUS_SILENT_INTERVAL 40000/(19200/(8*4))
 
 #define READ_HOLDINGS_REGISTERS 3
 #define WRITE_MULTIPLE_REGISTERS 16
@@ -157,7 +157,7 @@ void waitForRespons(u8 *telegram, int *telegramsize)
         break;
       }
     }
-    if(stopReceiver==0)
+    if(stopReceiver==0 && i<*telegramsize)
     {
       if(i<*telegramsize)
       {
