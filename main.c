@@ -53,7 +53,7 @@ static void AppTask( void * pvParameters )
     p->datasize=2;
     xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);
   }
-  vTaskDelay(1000);
+  vTaskDelay(5000);
   {
     xMessage *msg;
     ReadModbusRegsReq *p;
@@ -62,6 +62,7 @@ static void AppTask( void * pvParameters )
     p=(ReadModbusRegsReq *)msg->ucData;
     p->slave=0x01;
     p->addr=0x05;
+    p->datasize=2;
     xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);
   }
 }
