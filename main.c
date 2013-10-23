@@ -48,8 +48,8 @@ static void AppTask( void * pvParameters )
     msg->ucMessageID=WRITE_MODBUS_REGS;
     p=(WriteModbusRegsReq *)msg->ucData;
     p->slave=0x01;
-    p->addr=0x05;
-    memcpy(p->data, "55", 2);
+    p->addr=64;
+    memcpy(p->data, "\x00\x35\x00\x36", 4);
     p->datasize=2;
     xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);
   }
@@ -61,10 +61,12 @@ static void AppTask( void * pvParameters )
     msg->ucMessageID=READ_MODBUS_REGS;
     p=(ReadModbusRegsReq *)msg->ucData;
     p->slave=0x01;
-    p->addr=0x05;
+    p->addr=64;
     p->datasize=2;
     xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);
   }
+  while(1)
+    vTaskDelay(5000);
 }
 
 void HW_Init(void)
