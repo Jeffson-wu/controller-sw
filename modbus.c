@@ -32,8 +32,7 @@
 #include "semphr.h"
 #include "signals.h"
 
-#define CRC16 0x8888
-#define MODBUS_SILENT_INTERVAL 10
+#define MODBUS_SILENT_INTERVAL 40000/(19200/(8*4))
 
 #define READ_HOLDINGS_REGISTERS 3
 #define WRITE_MULTIPLE_REGISTERS 16
@@ -44,49 +43,25 @@ void UART_SendMsg(USART_TypeDef *uart, u8 *buffer, int len);
 
 xQueueHandle ModbusQueueHandle;
 
-static u16 gen_crc16(const u8 *data, u16 size)
+static uint16_t gen_crc16(const uint8_t *buf, int len)
 {
-    u16 out = 0;
-    int bits_read = 0, bit_flag, i;
-    u16 crc = 0;
-    /* Sanity check: */
-    if(data == 0)
-        return 0;
-    while(size > 0)
-    {
-        bit_flag = out >> 15;
-
-        /* Get next bit: */
-        out <<= 1;
-        out |= (*data >> bits_read) & 1; // item a) work from the least significant bits
-        /* Increment bit counter: */
-        bits_read++;
-        if(bits_read > 7)
-        {
-            bits_read = 0;
-            data++;
-            size--;
-        }
-        /* Cycle check: */
-        if(bit_flag)
-            out ^= CRC16;
+  uint16_t crc = 0xFFFF;
+  int pos, i;
+ 
+  for (pos = 0; pos < len; pos++) {
+    crc ^= (uint16_t)buf[pos];          // XOR byte into least sig. byte of crc
+ 
+    for (i = 8; i != 0; i--) {    // Loop over each bit
+      if ((crc & 0x0001) != 0) {      // If the LSB is set
+        crc >>= 1;                    // Shift right and XOR 0xA001
+        crc ^= 0xA001;
+      }
+      else                            // Else LSB is not set
+        crc >>= 1;                    // Just shift right
     }
-    // item b) "push out" the last 16 bits
-    for (i = 0; i < 16; ++i)
-    {
-        bit_flag = out >> 15;
-        out <<= 1;
-        if(bit_flag)
-            out ^= CRC16;
-    }
-    // item c) reverse the bits
-    i = 0x8000;
-    int j = 0x0001;
-    for (; i != 0; i >>=1, j <<= 1)
-    {
-        if (i & out) crc |= j;
-    }
-    return crc;
+  }
+  // Note, this number has low and high bytes swapped, so use it accordingly (or swap bytes)
+  return crc;  
 }
 
 static bool handleModbusTelegram(u8 *telegram, u16 size)
@@ -157,7 +132,7 @@ void waitForRespons(u8 *telegram, int *telegramsize)
         break;
       }
     }
-    if(stopReceiver==0)
+    if(stopReceiver==0 && i<*telegramsize)
     {
       if(i<*telegramsize)
       {
@@ -174,28 +149,32 @@ void waitForRespons(u8 *telegram, int *telegramsize)
   *telegramsize=i;
 }
 
-static bool ModbusReadRegs(u8 slave, u16 addr, u16 datasize)
+static u8 ModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer)
 {
   u16 crc;
   u8 telegram[255];
   int telegramsize=255;
   telegram[0]=slave;
   telegram[1]=READ_HOLDINGS_REGISTERS;
-  telegram[2]=addr & 0x00FF;
-  telegram[3]=(addr & 0xFF00)>>8;
-  telegram[4]=datasize & 0x00FF;
-  telegram[5]=(datasize & 0xFF00)>>8;
+  telegram[2]=(addr & 0xFF00)>>8;
+  telegram[3]=addr & 0x00FF;
+  telegram[4]=(datasize & 0xFF00)>>8;
+  telegram[5]=datasize & 0x00FF;
   crc = gen_crc16(&telegram[0], 6);
   memcpy(&(telegram[6]), &crc, (size_t)2);
   UART_SendMsg(usedUart, telegram, 6+2);
   waitForRespons(telegram, &telegramsize);
-  if(telegramsize==0)
+  if(telegramsize-5<=0)
   {
-    return FALSE;
+    return 0;
   }
   else
   {
-    return TRUE;
+     if(buffer)
+     {
+       memcpy(buffer, &telegram[3], telegramsize-5);
+     }
+     return telegramsize-5;
   }
 }
 
@@ -206,16 +185,15 @@ static bool ModbusWriteRegs(u8 slave, u16 addr, u8 *data, u16 datasize)
   int telegramsize=255;
   telegram[0]=slave;
   telegram[1]=WRITE_MULTIPLE_REGISTERS;/*write multiple regs*/
-  telegram[2]=addr & 0x00FF;
-  telegram[3]=(addr & 0xFF00)>>8;
-  telegram[4]=datasize & 0x00FF;
-  telegram[5]=(datasize & 0xFF00)>>8;
-  telegram[6]=(datasize*2) & 0x00FF;
-  telegram[7]=((datasize*2) & 0xFF00)>>8;
-  memcpy(&telegram[8], data, datasize*2);
-  crc = gen_crc16(&telegram[0], 8+datasize*2);
-  memcpy(&(telegram[8+datasize*2]), &crc, 2);
-  UART_SendMsg(usedUart, telegram, 8+datasize*2+2);
+  telegram[2]=(addr & 0xFF00)>>8;
+  telegram[3]=addr & 0x00FF;
+  telegram[4]=(datasize & 0xFF00)>>8;
+  telegram[5]=datasize & 0x00FF;
+  telegram[6]=datasize*2;
+  memcpy(&telegram[7], data, datasize*2);
+  crc = gen_crc16(&telegram[0], 7+datasize*2);
+  memcpy(&(telegram[7+datasize*2]), &crc, 2);
+  UART_SendMsg(usedUart, telegram, 7+datasize*2+2);
   waitForRespons(telegram, &telegramsize);
   if(telegramsize==0)
   {
@@ -249,7 +227,7 @@ void ModbusTask( void * pvParameters )
         {
           ReadModbusRegsReq *p;
           p=(ReadModbusRegsReq *)(msg->ucData);
-          ModbusReadRegs(p->slave, p->addr, p->datasize);
+          ModbusReadRegs(p->slave, p->addr, p->datasize, 0);
         }
         default:
         break;
@@ -266,6 +244,16 @@ void ModbusTask( void * pvParameters )
 void Modbus_init(USART_TypeDef *uart)
 {
   usedUart=uart;
+}
+
+u8 DebugModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer)
+{
+   return ModbusReadRegs(slave, addr, datasize, buffer);
+}
+
+bool DebugModbusWriteRegs(u8 slave, u16 addr, u8 *data, u16 datasize)
+{
+   return ModbusWriteRegs(slave, addr, data, datasize);
 }
 
 

@@ -14,8 +14,8 @@ CC = $(TARGET)gcc
 OBJCOPY = $(TARGET)objcopy
 
 INCLUDES = -I ./include -I ./board -I ./arch -I ./freertos/include -I ./ -I ./freertos/portable/GCC/ARM_CM3 
-CFLAGS = -g -O0 -c -mcpu=cortex-m3 -mthumb -DSTM32F1XX -DUSE_STDPERIPH_DRIVER $(INCLUDES)
-LDFLAGS = -T arch/stm32_flash.ld -mcpu=cortex-m3 -mthumb -nostartfiles -nostdlib -nodefaultlibs -Wl,--gc-section
+CFLAGS = -g -O0 -c -mcpu=cortex-m3 -mthumb -D__START=main -D__STARTUP_CLEAR_BSS -DSTM32F1XX -DUSE_STDPERIPH_DRIVER $(INCLUDES)
+LDFLAGS = -T arch/stm32f1x.ld -mcpu=cortex-m3 -mthumb -nostartfiles -nostdlib -nodefaultlibs -Wl,--gc-section
 LIBS = -lc -lgcc
 OBJECTS_DIR = obj
 DEPENDS_DIR = dep
@@ -26,7 +26,8 @@ SOURCES = \
     serial.c \
     modbus.c \
     pwm.c \
-    arch/startup.c \
+    ads1148.c \
+    arch/startup.S \
     arch/system_stm32f10x.c \
     arch/core_cm3.c \
     board/stm3210c-eval.c \
@@ -61,8 +62,10 @@ SOURCES = \
     freertos/portable/GCC/ARM_CM3/port.c \
     freertos/portable/MemMang/heap_1.c 
 
-OBJECTS = $(patsubst %,$(OBJECTS_DIR)/%,$(SOURCES:%.c=%.o))
-DEPENDS = $(patsubst %,$(DEPENDS_DIR)/%,$(SOURCES:%.c=%.d))
+OBJS = $(patsubst %,$(OBJECTS_DIR)/%,$(SOURCES:%.c=%.o))
+OBJECTS = $(OBJS:%.S=%.o)
+DEPS = $(patsubst %,$(DEPENDS_DIR)/%,$(SOURCES:%.c=%.d))
+DEPENDS = $(DEPS:%.S=%.d)
 
 all: $(SOURCES) $(PROGRAM) $(PROGRAM).hex
 
@@ -76,6 +79,15 @@ $(PROGRAM).hex: $(PROGRAM)
 
 $(OBJECTS_DIR)/%.o: %.c
 	@echo "Compiling $<"
+	@mkdir -p $(OBJECTS_DIR)/$(*D)
+	@mkdir -p $(DEPENDS_DIR)/$(*D)
+	@$(CC) $(CFLAGS) -Wp,-MD,$(DEPENDS_DIR)/$*.d -o $@ $<
+	@sed -e 's,^$*\.o,$@,' < $(DEPENDS_DIR)/$*.d > $(DEPENDS_DIR)/$*.P
+	@rm $(DEPENDS_DIR)/$*.d
+	@mv $(DEPENDS_DIR)/$*.P $(DEPENDS_DIR)/$*.d
+
+$(OBJECTS_DIR)/%.o: %.S
+	@echo "Assembling $<"
 	@mkdir -p $(OBJECTS_DIR)/$(*D)
 	@mkdir -p $(DEPENDS_DIR)/$(*D)
 	@$(CC) $(CFLAGS) -Wp,-MD,$(DEPENDS_DIR)/$*.d -o $@ $<
