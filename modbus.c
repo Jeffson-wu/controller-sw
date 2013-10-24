@@ -149,7 +149,7 @@ void waitForRespons(u8 *telegram, int *telegramsize)
   *telegramsize=i;
 }
 
-static bool ModbusReadRegs(u8 slave, u16 addr, u16 datasize)
+static u8 ModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer)
 {
   u16 crc;
   u8 telegram[255];
@@ -164,13 +164,17 @@ static bool ModbusReadRegs(u8 slave, u16 addr, u16 datasize)
   memcpy(&(telegram[6]), &crc, (size_t)2);
   UART_SendMsg(usedUart, telegram, 6+2);
   waitForRespons(telegram, &telegramsize);
-  if(telegramsize==0)
+  if(telegramsize-5<=0)
   {
-    return FALSE;
+    return 0;
   }
   else
   {
-    return TRUE;
+     if(buffer)
+     {
+       memcpy(buffer, &telegram[3], telegramsize-5);
+     }
+     return telegramsize-5;
   }
 }
 
@@ -223,7 +227,7 @@ void ModbusTask( void * pvParameters )
         {
           ReadModbusRegsReq *p;
           p=(ReadModbusRegsReq *)(msg->ucData);
-          ModbusReadRegs(p->slave, p->addr, p->datasize);
+          ModbusReadRegs(p->slave, p->addr, p->datasize, 0);
         }
         default:
         break;
@@ -240,6 +244,16 @@ void ModbusTask( void * pvParameters )
 void Modbus_init(USART_TypeDef *uart)
 {
   usedUart=uart;
+}
+
+u8 DebugModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer)
+{
+   return ModbusReadRegs(slave, addr, datasize, buffer);
+}
+
+bool DebugModbusWriteRegs(u8 slave, u16 addr, u8 *data, u16 datasize)
+{
+   return ModbusWriteRegs(slave, addr, data, datasize);
 }
 
 
