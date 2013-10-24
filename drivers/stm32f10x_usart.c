@@ -278,7 +278,7 @@ void USART_Init(USART_TypeDef* USARTx, USART_InitTypeDef* USART_InitStruct)
 void USART_StructInit(USART_InitTypeDef* USART_InitStruct)
 {
   /* USART_InitStruct members default value */
-  USART_InitStruct->USART_BaudRate = 9600;
+  USART_InitStruct->USART_BaudRate = 19200;
   USART_InitStruct->USART_WordLength = USART_WordLength_8b;
   USART_InitStruct->USART_StopBits = USART_StopBits_1;
   USART_InitStruct->USART_Parity = USART_Parity_No ;
