@@ -31,13 +31,20 @@
 #include "queue.h"
 #include "semphr.h"
 #include "signals.h"
-
+#include "pwm.h"
+#include "timers.h"
+#include "stm32f10x_rcc.h"
 #define QUEUESIZE 10
 
 xQueueHandle ModbusQueueHandle;
 xSemaphoreHandle xSemaphore = NULL;
 
 void ModbusTask( void * pvParameters );
+
+
+
+
+
 
 static void AppTask( void * pvParameters )
 {
@@ -64,7 +71,105 @@ static void AppTask( void * pvParameters )
     p->addr=0x05;
     xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);
   }
+  while(1)
+  {
+  }
 }
+
+
+void HeartBeat_Pinconfig()
+{
+/*HeartBeatLED PC9 to test*/
+GPIO_InitTypeDef GPIO_InitStructure;
+/* Enable the GPIO_LED Clock */
+RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOC, ENABLE);
+
+/* Configure the GPIO_LED pin */
+GPIO_InitStructure.GPIO_Pin = GPIO_Pin_9;
+GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+GPIO_Init(GPIOC, &GPIO_InitStructure);
+GPIO_SetBits(GPIOC,GPIO_Pin_9);
+}
+#if 1
+void set_clock()
+{
+  RCC_ClocksTypeDef CLOCKS;
+  GPIO_InitTypeDef GPIO_InitStructure;
+  
+  RCC_HSEConfig(RCC_HSE_ON);
+  RCC_WaitForHSEStartUp();
+  RCC_PLLCmd(DISABLE);
+  RCC_PLL2Cmd(DISABLE);
+  
+  /*Make system clock 72MHz expecting that oscillator is 25MHz ((((25MHz /5) * 9)/5)*8))*/
+
+  RCC_PLLConfig(RCC_PLLSource_PREDIV1,RCC_PLLMul_8);
+  RCC_PREDIV1Config(RCC_PREDIV1_Source_PLL2,RCC_PREDIV1_Div5);
+  RCC_PLL2Config(RCC_PLL2Mul_9);
+  RCC_PREDIV2Config(RCC_PREDIV2_Div5);
+  RCC_SYSCLKConfig(RCC_SYSCLKSource_PLLCLK);
+  RCC_PLLCmd(ENABLE);
+  RCC_PLL2Cmd(ENABLE);
+
+  /*Debug output on PA8 to measure actual clock*/
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA, ENABLE);
+  
+  /* Configure the GPIO_LED pin */
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_8;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_Init(GPIOA, &GPIO_InitStructure);
+  GPIO_SetBits(GPIOA,GPIO_Pin_8);
+  
+  RCC_MCOConfig(RCC_MCO_SYSCLK);
+  
+  RCC_GetClocksFreq(&CLOCKS);
+  CLOCKS.SYSCLK_Frequency;
+
+
+#if 0	/* Enable LSE (Low Speed External Oscillation) */
+	  RCC_LSEConfig(RCC_LSE_ON);
+	  
+	  /* Check the LSE Status */
+	  while(1)
+	  {
+		if(LSE_Delay < LSE_FAIL_FLAG)
+		{
+		  /* check whether LSE is ready, with 4 seconds timeout */
+		  Delay (500);
+		  LSE_Delay += 0x10;
+		  if(RCC_GetFlagStatus(RCC_FLAG_LSERDY) != RESET)
+		  {
+			/* Set flag: LSE PASS */
+			LSE_Delay |= LSE_PASS_FLAG;
+			/* Turn Off Led4 */
+			STM32vldiscovery_LEDOff(LED4);
+			/* Disable LSE */
+			RCC_LSEConfig(RCC_LSE_OFF);
+			break;
+		  } 	   
+		}
+		
+		/* LSE_FAIL_FLAG = 0x80 */	
+		else if(LSE_Delay >= LSE_FAIL_FLAG)
+		{		   
+		  if(RCC_GetFlagStatus(RCC_FLAG_LSERDY) == RESET)
+		  {
+			/* Set flag: LSE FAIL */
+			LSE_Delay |= LSE_FAIL_FLAG;
+			/* Turn On Led4 */
+			STM32vldiscovery_LEDOn(LED4);
+		  } 	   
+		  /* Disable LSE */
+		  RCC_LSEConfig(RCC_LSE_OFF);
+		  break;
+		}
+	  }
+
+#endif
+}
+#endif
 
 void HW_Init(void)
 {
@@ -76,6 +181,10 @@ void HW_Init(void)
   RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART2, ENABLE);
   RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA1, ENABLE);
 
+  
+  RCC->CR |= RCC_CR_HSEBYP | RCC_CR_HSEON;
+  RCC->CFGR |= RCC_CFGR_SW_HSE;
+
   GPIO_InitStructure.GPIO_Pin = GPIO_Pin_5;
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
   GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
@@ -83,6 +192,56 @@ void HW_Init(void)
   GPIO_InitStructure.GPIO_Pin = GPIO_Pin_6;
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
   GPIO_Init(GPIOD, &GPIO_InitStructure);
+
+
+  /*HeartBeatLED PC9 to test*/
+  /* Enable the GPIO_LED Clock */
+
+  
+
+
+
+
+
+  
+  /* TIM Configuration */
+  PWM_PinConfig();
+  HeartBeat_Pinconfig();
+
+}
+
+void vHeartBeat_LEDToggle(xTimerHandle pxTimer )
+{
+  GPIOC->ODR ^= GPIO_Pin_9;
+}
+
+
+void ConfigOSTimer ()
+{
+  xTimerHandle xTimer;
+  int x = 10;
+  xTimer= xTimerCreate(	  "HeartbeatTimer",		   // Just a text name, not used by the kernel.
+					  ( 100 * x ),	   // The timer period in ticks.
+   		     		  pdTRUE,		  // The timers will auto-reload themselves when they expire.
+  					  ( void * ) x, 	// Assign each timer a unique id equal to its array index.
+  					  vHeartBeat_LEDToggle	 // Each timer calls the same callback when it expires.
+  					  );
+	
+  if( xTimer == NULL )
+  {
+	  // The timer was not created.
+  }
+  else
+  {
+	  // Start the timer.  No block time is specified, and even if one was
+	  // it would be ignored because the scheduler has not yet been
+	  // started.
+	  if( xTimerStart( xTimer, 0 ) != pdPASS )
+	  {
+		  // The timer could not be set into the Active state.
+	  }
+  }
+
 }
 
 /**
@@ -95,17 +254,29 @@ int main(void)
   int result;
   xTaskHandle pvCreatedTask;
   xTaskHandle modbusCreatedTask;
+  xTaskHandle systemtestCreatedTask;
+  set_clock();
 
   HW_Init();
+  PWM_Init(500000,250000);
   UART_Init(USART2);
   Modbus_init(USART2);
+  PWM_Set(50,TopHeaterCtrlPWM);
+  PWM_Set(50,FANctrlPWM);
+  PWM_Set(50,PeltierCtrlPWM1);
+  PWM_Set(70,PeltierCtrlPWM2);
+  PWM_Set(50,PeltierCtrlPWM3);
+  ConfigOSTimer();
 
+  
+  //HeartBeatLEDTimer();
   xSemaphore = xSemaphoreCreateMutex();
   /*create queue*/
   ModbusQueueHandle=xQueueCreate( QUEUESIZE, ( unsigned portBASE_TYPE ) sizeof( void * ) );
 
   result=xTaskCreate( ModbusTask, ( const signed char * ) "Modbus task", ( unsigned short ) 200, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &modbusCreatedTask );
   result=xTaskCreate( AppTask, ( const signed char * ) "App task", ( unsigned short ) 200, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvCreatedTask );
+
   vTaskStartScheduler();
   return 0;
 }

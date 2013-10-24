@@ -228,7 +228,6 @@ portBASE_TYPE xReturn = pdFAIL;
 xTimerHandle xTimerCreate( const signed char * const pcTimerName, portTickType xTimerPeriodInTicks, unsigned portBASE_TYPE uxAutoReload, void *pvTimerID, tmrTIMER_CALLBACK pxCallbackFunction )
 {
 xTIMER *pxNewTimer;
-
 	/* Allocate the timer structure. */
 	if( xTimerPeriodInTicks == ( portTickType ) 0U )
 	{

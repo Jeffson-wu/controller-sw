@@ -102,6 +102,13 @@
 #define configCHECK_FOR_STACK_OVERFLOW	0
 #define configUSE_RECURSIVE_MUTEXES		1
 #define configQUEUE_REGISTRY_SIZE		0
+
+/*Use timers*/
+#define configUSE_TIMERS                1
+#define configTIMER_TASK_PRIORITY     128
+#define configTIMER_QUEUE_LENGTH       10
+#define configTIMER_TASK_STACK_DEPTH   50
+
 /*#define configGENERATE_RUN_TIME_STATS	0*/
 
 /* Set the following definitions to 1 to include the API function, or zero
