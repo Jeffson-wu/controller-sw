@@ -73,6 +73,7 @@ static void AppTask( void * pvParameters )
     xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);
   }
   while(1)
+  {
     vTaskDelay(5000);
   }
 }
