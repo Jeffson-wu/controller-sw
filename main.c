@@ -41,11 +41,6 @@ xSemaphoreHandle xSemaphore = NULL;
 
 void ModbusTask( void * pvParameters );
 
-
-
-
-
-
 static void AppTask( void * pvParameters )
 {
   {
