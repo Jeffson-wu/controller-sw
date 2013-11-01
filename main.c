@@ -37,10 +37,13 @@
 #define QUEUESIZE 10
 
 xQueueHandle ModbusQueueHandle;
+xQueueHandle TubeSequencerQueueHandle;
+
 xSemaphoreHandle xSemaphore = NULL;
 
 void ModbusTask( void * pvParameters );
 
+void TubeSequencerTask( void * pvParameter);
 
 
 
