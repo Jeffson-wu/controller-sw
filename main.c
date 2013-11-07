@@ -194,6 +194,18 @@ void HW_Init(void)
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
   GPIO_Init(GPIOD, &GPIO_InitStructure);
 
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_3;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_Init(GPIOD, &GPIO_InitStructure);
+  GPIO_ResetBits(GPIOD,GPIO_Pin_3);
+
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_4;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_Init(GPIOD, &GPIO_InitStructure);
+  GPIO_ResetBits(GPIOD,GPIO_Pin_4);
+
   /* Configure USART3 for GDI (debug) interface */
   RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
   RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART3, ENABLE);

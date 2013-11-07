@@ -114,16 +114,19 @@ void UART_Init(USART_TypeDef *uart, void (*recvCallback)())
   GPIO_Init(GPIOD, &GPIO_InitStructure);
   GPIO_ResetBits(GPIOD,GPIO_Pin_4);
 
-  NVIC_InitStructure.NVIC_IRQChannel = USART2_IRQn;
-  NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 1;
-  NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1;
-  NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
-  NVIC_Init(&NVIC_InitStructure);
+  if(uart==USART2)
+  {
+    NVIC_InitStructure.NVIC_IRQChannel = USART2_IRQn;
+    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 1;
+    NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1;
+    NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+    NVIC_Init(&NVIC_InitStructure);
+  }
 
   USART_ITConfig(uart, USART_IT_RXNE, ENABLE);
 }
 
-void UART2_RX_Handler(void)
+void UART2_Handler(void)
 {
    if (USART_GetITStatus(USART2, USART_IT_RXNE) && receiveDataCB)
    {
