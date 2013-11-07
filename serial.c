@@ -92,7 +92,6 @@ void UART2_TX_Handler(void)
 
 void UART_Init(USART_TypeDef *uart, void (*recvCallback)())
 {
-  GPIO_InitTypeDef GPIO_InitStructure;
   USART_InitTypeDef USART_InitStruct;
   NVIC_InitTypeDef NVIC_InitStructure;
 
@@ -101,18 +100,6 @@ void UART_Init(USART_TypeDef *uart, void (*recvCallback)())
   USART_StructInit(&USART_InitStruct);
   USART_Init(uart, &USART_InitStruct);
   USART_Cmd(uart, ENABLE);
-
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_3;
-  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
-  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-  GPIO_Init(GPIOD, &GPIO_InitStructure);
-  GPIO_ResetBits(GPIOD,GPIO_Pin_3);
-
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_4;
-  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
-  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-  GPIO_Init(GPIOD, &GPIO_InitStructure);
-  GPIO_ResetBits(GPIOD,GPIO_Pin_4);
 
   if(uart==USART2)
   {
