@@ -195,15 +195,6 @@ void HW_Init(void)
   GPIO_InitStructure.GPIO_Pin = GPIO_Pin_6;
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
   GPIO_Init(GPIOD, &GPIO_InitStructure);
-<<<<<<< HEAD
-#if 0
-  // STM32-H107 board
-  RCC_APB2PeriphClockCmd (RCC_APB2Periph_GPIOC, ENABLE);
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_6 /*| GPIO_Pin_7*/;
-  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
-  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
-  GPIO_Init(GPIOC, &GPIO_InitStructure);
-#endif
   
   /*HeartBeatLED PC9 to test*/
   /* Enable the GPIO_LED Clock */
