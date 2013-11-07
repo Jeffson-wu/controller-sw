@@ -31,12 +31,18 @@
 #include "semphr.h"
 #include "string.h"
 
+static void (*receiveDataCB)()=0;
+
 void UART_SendMsg(USART_TypeDef *uart, u8 *buffer, int len)
 {
     DMA_InitTypeDef         DMA_InitStructure;
     NVIC_InitTypeDef NVIC_InitStructure;
     /*rework KSKS*/
     static char txBuffer[260];
+    /*rework KSKS made to suspend the dma interrupt to the character is transmitted*/
+    len+=2;
+    GPIO_SetBits(GPIOD,GPIO_Pin_3);
+    GPIO_SetBits(GPIOD,GPIO_Pin_4);
     if(len > 255)
     {
       DMA_InitStructure.DMA_BufferSize = 255;
@@ -52,7 +58,7 @@ void UART_SendMsg(USART_TypeDef *uart, u8 *buffer, int len)
     DMA_InitStructure.DMA_DIR = DMA_DIR_PeripheralDST;
     DMA_InitStructure.DMA_PeripheralInc = DMA_PeripheralInc_Disable;
     DMA_InitStructure.DMA_MemoryInc = DMA_MemoryInc_Enable;
-    DMA_InitStructure.DMA_PeripheralDataSize = DMA_PeripheralDataSize_Byte;
+    DMA_InitStructure.DMA_PeripheralDataSize = DMA_PeripheralDataSize_HalfWord;
     DMA_InitStructure.DMA_MemoryDataSize = DMA_PeripheralDataSize_Byte;
     DMA_InitStructure.DMA_Mode = DMA_Mode_Normal;
     DMA_InitStructure.DMA_Priority = DMA_Priority_Medium;
@@ -64,6 +70,7 @@ void UART_SendMsg(USART_TypeDef *uart, u8 *buffer, int len)
     NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1;
     NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
     NVIC_Init(&NVIC_InitStructure);
+
     DMA_ITConfig(DMA1_Channel7, DMA_IT_TC, ENABLE);
 
     USART_DMACmd(uart, USART_DMAReq_Tx, ENABLE);
@@ -74,14 +81,49 @@ void UART_SendMsg(USART_TypeDef *uart, u8 *buffer, int len)
 
 void UART2_TX_Handler(void)
 {
-    DMA_ClearITPendingBit(DMA1_IT_TC7);
+   if(DMA_GetITStatus(DMA1_IT_TC7)==SET)
+   {
+     GPIO_ResetBits(GPIOD,GPIO_Pin_3);
+     GPIO_ResetBits(GPIOD,GPIO_Pin_4);
+     DMA_ClearITPendingBit(DMA1_IT_TC7);
+   }
+   portEND_SWITCHING_ISR( pdTRUE);
 }
 
-void UART_Init(USART_TypeDef *uart)
+void UART_Init(USART_TypeDef *uart, void (*recvCallback)())
 {
   USART_InitTypeDef USART_InitStruct;
+  NVIC_InitTypeDef NVIC_InitStructure;
+
+  receiveDataCB=recvCallback;
+
   USART_StructInit(&USART_InitStruct);
   USART_Init(uart, &USART_InitStruct);
   USART_Cmd(uart, ENABLE);
+
+  if(uart==USART2)
+  {
+    NVIC_InitStructure.NVIC_IRQChannel = USART2_IRQn;
+    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 1;
+    NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1;
+    NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+    NVIC_Init(&NVIC_InitStructure);
+  }
+
+  USART_ITConfig(uart, USART_IT_RXNE, ENABLE);
 }
+
+void UART2_Handler(void)
+{
+   if (USART_GetITStatus(USART2, USART_IT_RXNE) && receiveDataCB)
+   {
+     receiveDataCB();
+   }
+   USART_ClearITPendingBit(USART2,0xFFFF);
+   portEND_SWITCHING_ISR( pdTRUE);
+}
+
+
+
+
 

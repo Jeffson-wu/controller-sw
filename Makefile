@@ -25,6 +25,7 @@ SOURCES = \
     main.c \
     serial.c \
     modbus.c \
+    gdi.c \
     pwm.c \
     ads1148.c \
 	cooleandlidtask.c \
@@ -61,7 +62,7 @@ SOURCES = \
     freertos/tasks.c \
     freertos/timers.c \
     freertos/portable/GCC/ARM_CM3/port.c \
-    freertos/portable/MemMang/heap_1.c 
+    freertos/portable/MemMang/heap_4.c 
 
 OBJS = $(patsubst %,$(OBJECTS_DIR)/%,$(SOURCES:%.c=%.o))
 OBJECTS = $(OBJS:%.S=%.o)
