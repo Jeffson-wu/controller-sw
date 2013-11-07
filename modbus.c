@@ -33,7 +33,7 @@
 #include "signals.h"
 #include "timers.h"
 
-#define MODBUS_SILENT_INTERVAL 100*40000/(19200/(8*4))
+#define MODBUS_SILENT_INTERVAL 40000/(19200/(8*4))
 
 #define READ_HOLDINGS_REGISTERS 3
 #define WRITE_MULTIPLE_REGISTERS 16
