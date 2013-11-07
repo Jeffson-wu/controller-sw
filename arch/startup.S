@@ -124,7 +124,7 @@ __isr_vector:
     .long    Default_Handler           /* 35: SPI1 */
     .long    Default_Handler           /* 36: SPI2 */
     .long    Default_Handler           /* 37: USART1 */
-    .long    UART2_RX_Handler          /* 38: USART2 */
+    .long    UART2_Handler          /* 38: USART2 */
     .long    Default_Handler           /* 39: USART3 */
     .long    ADS_Handler           /* 40: EXTI15_10 */
     .long    Default_Handler           /* 41: RTC_Alarm */
