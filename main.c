@@ -41,6 +41,10 @@ xSemaphoreHandle xSemaphore = NULL;
 
 void ModbusTask( void * pvParameters );
 
+void gdi_task(void *pvParameters);
+
+
+
 static void AppTask( void * pvParameters )
 {
   {
@@ -168,6 +172,7 @@ void set_clock()
 }
 #endif
 
+
 void HW_Init(void)
 {
   /*Setup for UART*/
@@ -177,7 +182,6 @@ void HW_Init(void)
   AFIO->MAPR |= AFIO_MAPR_USART2_REMAP;
   RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART2, ENABLE);
   RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA1, ENABLE);
-
   
   RCC->CR |= RCC_CR_HSEBYP | RCC_CR_HSEON;
   RCC->CFGR |= RCC_CFGR_SW_HSE;
@@ -190,16 +194,26 @@ void HW_Init(void)
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
   GPIO_Init(GPIOD, &GPIO_InitStructure);
 
+  /* Configure USART3 for GDI (debug) interface */
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
+  RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART3, ENABLE);
+
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_Init(GPIOB, &GPIO_InitStructure);
+
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_11;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
+  GPIO_Init(GPIOB, &GPIO_InitStructure);
+
 
   /*HeartBeatLED PC9 to test*/
   /* Enable the GPIO_LED Clock */
 
+
+
   
-
-
-
-
-
   
   /* TIM Configuration */
   PWM_PinConfig();
@@ -251,12 +265,14 @@ int main(void)
   int result;
   xTaskHandle pvCreatedTask;
   xTaskHandle modbusCreatedTask;
+  xTaskHandle gdiCreatedTask;
   xTaskHandle systemtestCreatedTask;
   set_clock();
 
   HW_Init();
   PWM_Init(500000,250000);
   UART_Init(USART2);
+  UART_Init(USART3);
   Modbus_init(USART2);
   PWM_Set(50,TopHeaterCtrlPWM);
   PWM_Set(50,FANctrlPWM);
@@ -265,14 +281,15 @@ int main(void)
   PWM_Set(50,PeltierCtrlPWM3);
   ConfigOSTimer();
 
-  
   //HeartBeatLEDTimer();
   xSemaphore = xSemaphoreCreateMutex();
   /*create queue*/
   ModbusQueueHandle=xQueueCreate( QUEUESIZE, ( unsigned portBASE_TYPE ) sizeof( void * ) );
 
   result=xTaskCreate( ModbusTask, ( const signed char * ) "Modbus task", ( unsigned short ) 200, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &modbusCreatedTask );
-  result=xTaskCreate( AppTask, ( const signed char * ) "App task", ( unsigned short ) 200, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvCreatedTask );
+  //result=xTaskCreate( AppTask, ( const signed char * ) "App task", ( unsigned short ) 200, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvCreatedTask );
+  result=xTaskCreate( gdi_task, ( const signed char * ) "Debug task", ( unsigned short ) 200, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &gdiCreatedTask );
+  	
 
   vTaskStartScheduler();
   return 0;
