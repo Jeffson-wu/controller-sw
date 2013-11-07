@@ -34,12 +34,14 @@
 #include "pwm.h"
 #include "timers.h"
 #include "stm32f10x_rcc.h"
+#include "cooleandlidtask.h"
 #define QUEUESIZE 10
 
 xQueueHandle ModbusQueueHandle;
 xSemaphoreHandle xSemaphore = NULL;
 
 void ModbusTask( void * pvParameters );
+void CooleAndLidTask( void * pvParameters );
 
 
 
@@ -194,22 +196,20 @@ void HW_Init(void)
   GPIO_InitStructure.GPIO_Pin = GPIO_Pin_6;
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
   GPIO_Init(GPIOD, &GPIO_InitStructure);
-
-
+#if 0
+  // STM32-H107 board
+  RCC_APB2PeriphClockCmd (RCC_APB2Periph_GPIOC, ENABLE);
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_6 /*| GPIO_Pin_7*/;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
+  GPIO_Init(GPIOC, &GPIO_InitStructure);
+#endif
+  
   /*HeartBeatLED PC9 to test*/
   /* Enable the GPIO_LED Clock */
-
-  
-
-
-
-
-
-  
+  HeartBeat_Pinconfig();
   /* TIM Configuration */
   PWM_PinConfig();
-  HeartBeat_Pinconfig();
-
 }
 
 void vHeartBeat_LEDToggle(xTimerHandle pxTimer )
@@ -257,6 +257,7 @@ int main(void)
   xTaskHandle pvCreatedTask;
   xTaskHandle modbusCreatedTask;
   xTaskHandle systemtestCreatedTask;
+  xTaskHandle pvCooleAndLidTask;
   set_clock();
 
   HW_Init();
@@ -277,8 +278,8 @@ int main(void)
   ModbusQueueHandle=xQueueCreate( QUEUESIZE, ( unsigned portBASE_TYPE ) sizeof( void * ) );
 
   result=xTaskCreate( ModbusTask, ( const signed char * ) "Modbus task", ( unsigned short ) 200, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &modbusCreatedTask );
-  result=xTaskCreate( AppTask, ( const signed char * ) "App task", ( unsigned short ) 200, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvCreatedTask );
-
+  result=xTaskCreate( AppTask, ( const signed char * ) "App task", ( unsigned short ) 100, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvCreatedTask );
+  result=xTaskCreate( CooleAndLidTask, (const signed char *) "CooleAndLid task", 100, NULL, ( (unsigned portBASE_TYPE) 3 ) | portPRIVILEGE_BIT, &pvCooleAndLidTask );
   vTaskStartScheduler();
   return 0;
 }
