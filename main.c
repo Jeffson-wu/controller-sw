@@ -36,7 +36,7 @@
 #include "stm32f10x_rcc.h"
 #define QUEUESIZE 10
 
-xQueueHandle ModbusQueueHandle;
+extern xQueueHandle ModbusQueueHandle;
 xSemaphoreHandle xSemaphore = NULL;
 
 void ModbusTask( void * pvParameters );
@@ -271,7 +271,6 @@ int main(void)
 
   HW_Init();
   PWM_Init(500000,250000);
-  UART_Init(USART2);
   UART_Init(USART3);
   Modbus_init(USART2);
   PWM_Set(50,TopHeaterCtrlPWM);
