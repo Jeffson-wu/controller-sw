@@ -31,17 +31,24 @@
 #include "queue.h"
 #include "semphr.h"
 #include "signals.h"
+#include "timers.h"
 
-#define MODBUS_SILENT_INTERVAL 40000/(19200/(8*4))
+#define MODBUS_SILENT_INTERVAL 100*40000/(19200/(8*4))
 
 #define READ_HOLDINGS_REGISTERS 3
 #define WRITE_MULTIPLE_REGISTERS 16
 
-USART_TypeDef *usedUart;
+static USART_TypeDef *usedUart;
 
 void UART_SendMsg(USART_TypeDef *uart, u8 *buffer, int len);
 
+static  xSemaphoreHandle xSemaphore;
 xQueueHandle ModbusQueueHandle;
+static  xTimerHandle TimerHandle;
+
+static  uint8_t *recvBuffer;
+static int NOFRecvChars=0;
+static int recvBufferSize;
 
 static uint16_t gen_crc16(const uint8_t *buf, int len)
 {
@@ -105,8 +112,63 @@ static bool handleModbusTelegram(u8 *telegram, u16 size)
     return result;
 }
 
-void waitForRespons(u8 *telegram, int *telegramsize)
+void timeoutCB(xTimerHandle handle)
 {
+  static counter=0;
+  if(recvBuffer && (NOFRecvChars!=0 || counter>10))
+  {
+    counter=0;
+    /*Stop updating recvBuffer*/
+    recvBuffer=0;
+    /*unlock mutex to continue in modbus task*/
+    xSemaphoreGive( xSemaphore );
+  }
+  else
+  {
+     counter++;
+  }
+}
+
+void recieveChar(void)
+{
+  /*restart timer*/
+  xTimerResetFromISR(TimerHandle,pdFALSE);
+  while(USART_GetITStatus(USART2, USART_IT_RXNE))
+  {
+    if(recvBuffer && NOFRecvChars<recvBufferSize)
+    {
+      recvBuffer[NOFRecvChars]=USART_ReceiveData(usedUart);
+      NOFRecvChars++;
+    }
+    else
+    {
+      USART_ReceiveData(usedUart);
+    }
+  }
+}
+
+void waitForRespons(u8 *telegram, int *telegramSize)
+{
+  /*start timer*/
+  xTimerReset( TimerHandle, 0 );
+  NOFRecvChars=0;
+  recvBuffer=telegram;
+  recvBufferSize=*telegramSize;
+
+  /*wait for mutex*/
+  xSemaphoreTake( xSemaphore, portMAX_DELAY );
+
+  /*handle modbus telegram*/
+  if(NOFRecvChars)
+  {
+    *telegramSize=NOFRecvChars;
+  }
+  else
+  {
+    *telegramSize=0;
+  }
+  return;
+  #if 0
   int i=0;
   int stopReceiver=0;
   
@@ -147,6 +209,7 @@ void waitForRespons(u8 *telegram, int *telegramsize)
     }
   }
   *telegramsize=i;
+  #endif
 }
 
 static u8 ModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer)
@@ -244,6 +307,12 @@ void ModbusTask( void * pvParameters )
 void Modbus_init(USART_TypeDef *uart)
 {
   usedUart=uart;
+  TimerHandle=xTimerCreate("Modbus timer", MODBUS_SILENT_INTERVAL, pdTRUE, NULL, timeoutCB);
+  xTimerStart( TimerHandle, 0 );
+  xSemaphore = xSemaphoreCreateMutex();
+  xSemaphoreTake( xSemaphore, portMAX_DELAY );
+  UART_Init(USART2, recieveChar);
+
 }
 
 u8 DebugModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer)
