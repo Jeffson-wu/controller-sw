@@ -5,8 +5,10 @@ enum
 {
   FIRST_MSG,
   WRITE_MODBUS_REGS,
-  READ_MODBUS_REGS,
-  TIMER_EXPIRED,
+  WRITE_MODBUS_REGS_RES,
+   TIMER_EXPIRED,
+   READ_MODBUS_REGS,
+  READ_MODBUS_REGS_RES,
   START_TUBE,
   DATA_FROM_TUBE,
   LAST_MSG
@@ -23,6 +25,7 @@ typedef struct
   u8 slave;
   u16 addr;
   u16 datasize;
+  xQueueHandle reply; 
   u8 data[1];
 }WriteModbusRegsReq;
 
@@ -31,6 +34,7 @@ typedef struct
   u8 slave;
   u16 addr;
   u16 datasize;
+  xQueueHandle reply; 
 }ReadModbusRegsReq;
 
 #endif

@@ -37,6 +37,10 @@ void UART_SendMsg(USART_TypeDef *uart, u8 *buffer, int len)
     NVIC_InitTypeDef NVIC_InitStructure;
     /*rework KSKS*/
     static char txBuffer[260];
+    /*rework KSKS made to suspend the dma interrupt to the character is transmitted*/
+    len+=2;
+    GPIO_SetBits(GPIOD,GPIO_Pin_3);
+    GPIO_SetBits(GPIOD,GPIO_Pin_4);
     if(len > 255)
     {
       DMA_InitStructure.DMA_BufferSize = 255;
@@ -52,7 +56,7 @@ void UART_SendMsg(USART_TypeDef *uart, u8 *buffer, int len)
     DMA_InitStructure.DMA_DIR = DMA_DIR_PeripheralDST;
     DMA_InitStructure.DMA_PeripheralInc = DMA_PeripheralInc_Disable;
     DMA_InitStructure.DMA_MemoryInc = DMA_MemoryInc_Enable;
-    DMA_InitStructure.DMA_PeripheralDataSize = DMA_PeripheralDataSize_Byte;
+    DMA_InitStructure.DMA_PeripheralDataSize = DMA_PeripheralDataSize_HalfWord;
     DMA_InitStructure.DMA_MemoryDataSize = DMA_PeripheralDataSize_Byte;
     DMA_InitStructure.DMA_Mode = DMA_Mode_Normal;
     DMA_InitStructure.DMA_Priority = DMA_Priority_Medium;
@@ -74,14 +78,32 @@ void UART_SendMsg(USART_TypeDef *uart, u8 *buffer, int len)
 
 void UART2_TX_Handler(void)
 {
-    DMA_ClearITPendingBit(DMA1_IT_TC7);
+    if(DMA_GetITStatus(DMA1_IT_TC7)==SET)
+    {
+      GPIO_ResetBits(GPIOD,GPIO_Pin_3);
+      GPIO_ResetBits(GPIOD,GPIO_Pin_4);
+      DMA_ClearITPendingBit(DMA1_IT_TC7);
+    }
 }
 
 void UART_Init(USART_TypeDef *uart)
 {
+  GPIO_InitTypeDef GPIO_InitStructure;
   USART_InitTypeDef USART_InitStruct;
   USART_StructInit(&USART_InitStruct);
   USART_Init(uart, &USART_InitStruct);
   USART_Cmd(uart, ENABLE);
+
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_3;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_Init(GPIOD, &GPIO_InitStructure);
+  GPIO_ResetBits(GPIOD,GPIO_Pin_3);
+
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_4;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_Init(GPIOD, &GPIO_InitStructure);
+  GPIO_ResetBits(GPIOD,GPIO_Pin_4);
 }
 

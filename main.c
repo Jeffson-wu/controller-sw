@@ -44,11 +44,6 @@ xSemaphoreHandle xSemaphore = NULL;
 void ModbusTask( void * pvParameters );
 
 void TubeSequencerTask( void * pvParameter);
-
-
-
-
-
 static void AppTask( void * pvParameters )
 {
   {
