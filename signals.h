@@ -37,7 +37,24 @@ typedef struct
   u8 slave;
   u16 addr;
   u16 datasize;
+  bool resultOk;
+}WriteModbusRegsRes;
+
+typedef struct
+{
+  u8 slave;
+  u16 addr;
+  u16 datasize;
   xQueueHandle reply; 
 }ReadModbusRegsReq;
+
+typedef struct
+{
+  u8 slave;
+  u16 addr;
+  u16 datasize;
+  bool resultOk;
+  u8 data[1];
+}ReadModbusRegsRes;
 
 #endif

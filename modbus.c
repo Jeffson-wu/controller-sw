@@ -28,19 +28,27 @@
 #include "stm32f10x_dma.h"
 #include "FreeRTOS.h"
 #include "task.h"
+#include "queue.h"
 #include "semphr.h"
 #include "signals.h"
+#include "timers.h"
 
 #define MODBUS_SILENT_INTERVAL 40000/(19200/(8*4))
 
 #define READ_HOLDINGS_REGISTERS 3
 #define WRITE_MULTIPLE_REGISTERS 16
 
-USART_TypeDef *usedUart;
+static USART_TypeDef *usedUart;
 
 void UART_SendMsg(USART_TypeDef *uart, u8 *buffer, int len);
 
-extern xQueueHandle ModbusQueueHandle;
+static  xSemaphoreHandle xSemaphore;
+xQueueHandle ModbusQueueHandle;
+static  xTimerHandle TimerHandle;
+
+static  uint8_t *recvBuffer;
+static int NOFRecvChars=0;
+static int recvBufferSize;
 
 static uint16_t gen_crc16(const uint8_t *buf, int len)
 {
@@ -104,8 +112,63 @@ static bool handleModbusTelegram(u8 *telegram, u16 size)
     return result;
 }
 
-void waitForRespons(u8 *telegram, int *telegramsize)
+void timeoutCB(xTimerHandle handle)
 {
+  static counter=0;
+  if(recvBuffer && (NOFRecvChars!=0 || counter>10))
+  {
+    counter=0;
+    /*Stop updating recvBuffer*/
+    recvBuffer=0;
+    /*unlock mutex to continue in modbus task*/
+    xSemaphoreGive( xSemaphore );
+  }
+  else
+  {
+     counter++;
+  }
+}
+
+void recieveChar(void)
+{
+  /*restart timer*/
+  xTimerResetFromISR(TimerHandle,pdFALSE);
+  while(USART_GetITStatus(USART2, USART_IT_RXNE))
+  {
+    if(recvBuffer && NOFRecvChars<recvBufferSize)
+    {
+      recvBuffer[NOFRecvChars]=USART_ReceiveData(usedUart);
+      NOFRecvChars++;
+    }
+    else
+    {
+      USART_ReceiveData(usedUart);
+    }
+  }
+}
+
+void waitForRespons(u8 *telegram, int *telegramSize)
+{
+  /*start timer*/
+  xTimerReset( TimerHandle, 0 );
+  NOFRecvChars=0;
+  recvBuffer=telegram;
+  recvBufferSize=*telegramSize;
+
+  /*wait for mutex*/
+  xSemaphoreTake( xSemaphore, portMAX_DELAY );
+
+  /*handle modbus telegram*/
+  if(NOFRecvChars)
+  {
+    *telegramSize=NOFRecvChars;
+  }
+  else
+  {
+    *telegramSize=0;
+  }
+  return;
+  #if 0
   int i=0;
   int stopReceiver=0;
   
@@ -146,6 +209,7 @@ void waitForRespons(u8 *telegram, int *telegramsize)
     }
   }
   *telegramsize=i;
+  #endif
 }
 
 static u8 ModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer)
@@ -163,6 +227,7 @@ static u8 ModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer)
   memcpy(&(telegram[6]), &crc, (size_t)2);
   UART_SendMsg(usedUart, telegram, 6+2);
   waitForRespons(telegram, &telegramsize);
+  memcpy(buffer, telegram, datasize>telegramsize?telegramsize:datasize);
   if(telegramsize-5<=0)
   {
     return 0;
@@ -208,6 +273,7 @@ void ModbusTask( void * pvParameters )
 {
   short usData;
   xMessage *msg;
+  xMessage *msgout;
   while(1)
   {
     /*wait for queue msg*/
@@ -218,15 +284,43 @@ void ModbusTask( void * pvParameters )
         case WRITE_MODBUS_REGS:
         {
           WriteModbusRegsReq *p;
+          WriteModbusRegsRes *po;
           p=(WriteModbusRegsReq *)(msg->ucData);
-          ModbusWriteRegs(p->slave, p->addr, p->data, p->datasize);
+          if(p->reply)
+          {
+            msgout=pvPortMalloc(sizeof(xMessage)+sizeof(WriteModbusRegsRes));
+            po=(WriteModbusRegsRes *)(msgout->ucData);
+            po->slave=p->slave;
+            po->datasize=p->datasize;
+            po->addr=p->addr;
+            po->resultOk=ModbusWriteRegs(p->slave, p->addr, p->data, p->datasize);
+            xQueueSend(p->reply, &msgout, portMAX_DELAY);
+          }
+          else
+          {
+            ModbusWriteRegs(p->slave, p->addr, p->data, p->datasize);
+          }
         }
         break;
         case READ_MODBUS_REGS:
         {
           ReadModbusRegsReq *p;
+          ReadModbusRegsRes *po;
           p=(ReadModbusRegsReq *)(msg->ucData);
-          ModbusReadRegs(p->slave, p->addr, p->datasize, 0);
+          if(p->reply)
+          {
+            msgout=pvPortMalloc(sizeof(xMessage)+sizeof(ReadModbusRegsRes)+p->datasize);
+            po=(ReadModbusRegsRes *)(msgout->ucData);
+            po->slave=p->slave;
+            po->addr=p->addr;
+            po->datasize=p->datasize;
+            po->resultOk=FALSE;
+            if(ModbusReadRegs(p->slave, p->addr, p->datasize, po->data))
+            {
+              po->resultOk=TRUE;
+            }
+            xQueueSend(p->reply, &msgout, portMAX_DELAY);
+          }
         }
         default:
         break;
@@ -234,15 +328,18 @@ void ModbusTask( void * pvParameters )
       /*dealloc the msg*/
       vPortFree(msg);
     }
-
-    /*call msg handler*/
-  
   }
 }
 
 void Modbus_init(USART_TypeDef *uart)
 {
   usedUart=uart;
+  TimerHandle=xTimerCreate("Modbus timer", MODBUS_SILENT_INTERVAL, pdTRUE, NULL, timeoutCB);
+  xTimerStart( TimerHandle, 0 );
+  xSemaphore = xSemaphoreCreateMutex();
+  xSemaphoreTake( xSemaphore, portMAX_DELAY );
+  UART_Init(USART2, recieveChar);
+
 }
 
 u8 DebugModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer)
