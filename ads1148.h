@@ -48,9 +48,9 @@
 #define ADS_CALIB_SYSGCAL 1
 #define ADS_CALIB_SELFOCAL 2
 
-#define ADS_START_PIN GPIO_Pin_10 //PC2
+#define ADS_START_PIN GPIO_Pin_2 //PC2
 #define ADS_RESET_PIN GPIO_Pin_1 //PC1
-#define ADS_DRDY_PIN GPIO_Pin_10 // PB10
+#define ADS_DRDY_PIN GPIO_Pin_10 //PB10
 #define ADS_EXTI_LINE EXTI_Line10
 #define ADS_DRDY_PINSOURCE GPIO_PinSource10
 #define ADS_EXTI_PORTSOURCE GPIO_PortSourceGPIOB
@@ -111,25 +111,26 @@
 /* Exported functions ------------------------------------------------------- */
 
 // Set up as we use it.
-void ads1148Init(void);
+extern void ads1148Init(void);
 // Get state of DRDY
-uint8_t adsGetDrdy(void);
+extern uint8_t adsGetDrdy(void);
 // Start conversion on one of the four channels
-void adsStart(const uint8_t ch);
+extern void adsStart(const uint8_t ch);
 // Read last conversion
-void adsRead(int16_t * value);
+extern void adsRead(int16_t * value);
 // Start sequential convertion all four ch.
-void adsStartSeq(void);
+extern void adsStartSeq(void);
 // Re-start conversion
-void adsContiniueSeq(void);
-// Stop sequential convertion.
-void adsStoptSeq(void);
-// Retrieve latest value from all ADC channels.
-void adsGetLatest(int16_t * ch0value, int16_t * ch1value, int16_t * ch2value, int16_t * ch3value);
+extern void adsContiniueSeq(void);
 
-/* to do - int32_t - int16_t ? */
-int16_t deciDegree2code(int16_t deciDegree);
-int16_t code2deciDegree(int16_t code);
+extern void adsTimerCallback(xTimerHandle xTimer);
+// Stop sequential convertion.
+extern void adsStoptSeq(void);
+// Retrieve latest value from all ADC channels.
+extern void adsGetLatest(int16_t * ch0value, int16_t * ch1value, int16_t * ch2value, int16_t * ch3value);
+
+extern void adsConfigConversionTimer(tmrTIMER_CALLBACK convStartFn);
+
 
 #endif /* __ADS1148_H */
 

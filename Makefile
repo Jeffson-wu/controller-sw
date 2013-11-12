@@ -28,6 +28,7 @@ SOURCES = \
     gdi.c \
     pwm.c \
     ads1148.c \
+	cooleandlidtask.c \
     arch/startup.S \
     arch/system_stm32f10x.c \
     arch/core_cm3.c \
