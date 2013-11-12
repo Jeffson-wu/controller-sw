@@ -119,7 +119,7 @@ void ADS_GPIOInit(void)
   GPIO_InitTypeDef  GPIO_InitStructure;
   
   /* Enable the GPIOB Clock */
-  RCC_AHBPeriphClockCmd(RCC_APB2Periph_GPIOB | RCC_APB2Periph_GPIOC, ENABLE);
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB | RCC_APB2Periph_GPIOC, ENABLE);
 
   /* Configure the ADS_DRDY pin */
   GPIO_InitStructure.GPIO_Pin = ADS_DRDY_PIN;

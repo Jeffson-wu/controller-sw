@@ -18,6 +18,8 @@
 #include "signals.h"
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
+
 
 
 
@@ -45,7 +47,7 @@
 
 #define tube_status 0x12
 
-#define NUM_TIMERS 1 /*There should be 1 for each tube*/
+#define NUM_TIMERS 16 /*There should be 1 for each tube*/
 
  /* An array to hold handles to the created timers. */
  xTimerHandle xTimers[ NUM_TIMERS ];
@@ -56,10 +58,11 @@
 /* Private variables ---------------------------------------------------------*/
 typedef enum
 {
-IDLE,
-SET_TEMPERATURE,
-HOLD_TEMPERATURE,
-NOT_INITIALIZED
+TUBE_INIT,
+TUBE_IDLE,
+TUBE_WAIT_TEMP, /*Wait until desired temperature are reached*/
+TUBE_WAIT_TIME, /*Wait the specified time in the sequence*/
+TUBE_NOT_INITIALIZED
 }TubeStates;
 
 
@@ -81,7 +84,9 @@ Melting,
 Annealing,
 Extension,
 Incubation,
-Loop
+LoopStart,
+LoopEnd,
+End
 }TubeStageTypeDef;
 
 typedef struct
@@ -178,6 +183,14 @@ long x = TubeNum;
 }
 
 
+
+StopTubeTimer(long TubeNum)
+{
+
+  xTimerStop( xTimers[ TubeNum ], 0 );
+
+}
+
 void heaterIrqInit(void)
 {
   EXTI_InitTypeDef EXTI_InitStructure;
@@ -245,6 +258,7 @@ void WriteTubeHeaterReg(u8 tube, u16 reg, u16 *data, u16 datasize)
     xMessage *msg;
     WriteModbusRegsReq *p;
     msg=pvPortMalloc(sizeof(xMessage)+sizeof(WriteModbusRegsReq)+datasize);
+#if 0
     msg->ucMessageID=WRITE_MODBUS_REGS;
     p=(WriteModbusRegsReq *)msg->ucData;
     p->slave=tube;
@@ -252,7 +266,16 @@ void WriteTubeHeaterReg(u8 tube, u16 reg, u16 *data, u16 datasize)
     memcpy(p->data, data, datasize);
     p->datasize=datasize;
     xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);
+#else
+msg->ucMessageID=READ_MODBUS_REGS_RES;
+p=(WriteModbusRegsReq *)msg->ucData;
+p->slave=tube;
+p->addr=reg;
+memcpy(p->data, data, datasize);
+p->datasize=datasize;
+xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
 
+#endif
 }
 
 
@@ -334,7 +357,7 @@ HeaterEventHandler(ExtiGpioTypeDef Heater)
   switch (Heater)
   {
   case Heater1:
-   // ReadTubeHeaterReg(tube1,tube_status,1);
+    ReadTubeHeaterReg(tube1,tube_status,1);
    // ReadTubeHeaterReg(tube2,tube_status,1);
   break;
   case Heater4:
@@ -385,12 +408,16 @@ void TubeSequencerTask( void * pvParameter)
 {
 short usData;
 xMessage *msg;
-long TimerId;
-StageCmdTypeDef TubeTemp[2]={{50,10,Melting},{95,30,Annealing}};
+long TimerId,TubeId;
+StageCmdTypeDef TubeTemp[]={{50,10,Melting},{95,30,Annealing},{0,0,End}};
 long *p;
+WriteModbusRegsReq *preg;
+
+TubeStates TubeStage[]={TUBE_NOT_INITIALIZED};
+int TubeSeqNum = 0;
 
 
-StartTubeTimer(1,10);
+//StartTubeTimer(1,10);
 
 while(1)
 {
@@ -399,14 +426,53 @@ while(1)
   {
 	switch(msg->ucMessageID)
 	{
-	  case TIMER_EXPIRED:
-		TimerId = *((long *)(msg->ucData));
-	  break;
-	  case START_TUBE:
-  	    WriteTubeHeaterReg(tube1,SET_TUBE_TEMP,&TubeTemp[1].temp,sizeof(TubeTemp[1].temp));
- 	  break;
-	  default:
-	  break;
+    case START_TUBE_SEQ:
+      TubeId = *((long *)(msg->ucData));
+	  if(TubeTemp[TubeSeqNum].stage != End)
+	  {
+        WriteTubeHeaterReg(TubeId,SET_TUBE_TEMP,&TubeTemp[TubeSeqNum].temp,sizeof(TubeTemp[TubeSeqNum].temp));
+		TubeStage[TubeId] = TUBE_WAIT_TEMP;
+//	  }else if(TubeTemp[TubeSeqNum].stage != LoopStart)
+//	  {
+//	    TubeLoop[TubeId].LoopSeq = TubeSeqNum;
+//        TubeLoop[TubeId].Iterations = TubeTemp[TubeSeqNum].time;
+//	    TubeSeqNum++; /*Going to next sequence*/
+//        msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
+//        msg->ucMessageID=START_TUBE_SEQ;
+//        p=(long *)msg->ucData;
+//        *p=TubeId;
+//        xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
+	  }else
+	  {
+		TubeStage[TubeId] = TUBE_IDLE;
+	  }
+ 	break;
+	case READ_MODBUS_REGS_RES:
+		preg=(WriteModbusRegsReq *)msg->ucData;
+        TubeId = preg->slave;
+        /*reg = p->addr;*/
+	  if(TubeStage[TubeId] == TUBE_WAIT_TEMP) /*The heater has signalled an IRQ and here the status of the tube is read*/
+	  {
+ 	    StartTubeTimer(TubeId,TubeTemp[TubeSeqNum].time);
+	    TubeStage[TubeId] = TUBE_WAIT_TIME;
+	  }
+	break;
+	case TIMER_EXPIRED:                       /*Waiting time for tube ended*/
+	  TubeId = *((long *)(msg->ucData));
+	  GPIOC->ODR ^= GPIO_Pin_9;
+	  TubeSeqNum++; /*Going to next sequence*/
+	  msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
+	  msg->ucMessageID=START_TUBE_SEQ;
+	  p=(long *)msg->ucData;
+	  *p=TubeId;
+	  xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
+	break;
+    case WRITE_MODBUS_REGS_RES:
+      TubeId = *((long *)(msg->ucData));
+	  
+	break;
+	default:
+	break;
 	};
 	/*dealloc the msg*/
 	vPortFree(msg);
@@ -434,12 +500,12 @@ void vTimerCallback( xTimerHandle pxTimer )
 
 	/* Do not use a block time if calling a timer API function from a
 	timer callback function, as doing so could cause a deadlock! */
-	xTimerStop( pxTimer, 0 );
+//	xTimerStop( pxTimer, 0 );
     msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
     msg->ucMessageID=TIMER_EXPIRED;
     p=(long *)msg->ucData;
 	*p=lArrayIndex;
-    //xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
+    xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
 }
 
 /**

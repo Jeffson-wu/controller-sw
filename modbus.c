@@ -28,7 +28,6 @@
 #include "stm32f10x_dma.h"
 #include "FreeRTOS.h"
 #include "task.h"
-#include "queue.h"
 #include "semphr.h"
 #include "signals.h"
 
@@ -41,7 +40,7 @@ USART_TypeDef *usedUart;
 
 void UART_SendMsg(USART_TypeDef *uart, u8 *buffer, int len);
 
-xQueueHandle ModbusQueueHandle;
+extern xQueueHandle ModbusQueueHandle;
 
 static uint16_t gen_crc16(const uint8_t *buf, int len)
 {

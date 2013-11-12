@@ -197,13 +197,7 @@ void HW_Init(void)
   /*HeartBeatLED PC9 to test*/
   /* Enable the GPIO_LED Clock */
 
-  
-
-
-
-
-
-  
+ 
   /* TIM Configuration */
   PWM_PinConfig();
   HeartBeat_Pinconfig();
@@ -255,6 +249,10 @@ int main(void)
   xTaskHandle pvCreatedTask;
   xTaskHandle modbusCreatedTask;
   xTaskHandle systemtestCreatedTask;
+  xMessage *msg;
+  long *p;
+  long TubeId;
+  
   set_clock();
 
   HW_Init();
@@ -266,18 +264,33 @@ int main(void)
   PWM_Set(50,PeltierCtrlPWM1);
   PWM_Set(70,PeltierCtrlPWM2);
   PWM_Set(50,PeltierCtrlPWM3);
-  ConfigOSTimer();
+  //ConfigOSTimer();
+
+//  StartTubeTimer(2,2);
 
   
   //HeartBeatLEDTimer();
   xSemaphore = xSemaphoreCreateMutex();
   /*create queue*/
   ModbusQueueHandle=xQueueCreate( QUEUESIZE, ( unsigned portBASE_TYPE ) sizeof( void * ) );
+  TubeSequencerQueueHandle=xQueueCreate( QUEUESIZE, ( unsigned portBASE_TYPE ) sizeof( void * ) );
 
   result=xTaskCreate( ModbusTask, ( const signed char * ) "Modbus task", ( unsigned short ) 200, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &modbusCreatedTask );
-  result=xTaskCreate( AppTask, ( const signed char * ) "App task", ( unsigned short ) 200, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvCreatedTask );
+  result=xTaskCreate( TubeSequencerTask, ( const signed char * ) "TubeSeq task", ( unsigned short ) 200, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvCreatedTask );
+
+  TubeId = 1;
+  msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
+  msg->ucMessageID=START_TUBE_SEQ;
+  p=(long *)msg->ucData;
+  *p=TubeId;
+  xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
+
+
+
 
   vTaskStartScheduler();
+
+  
   return 0;
 }
 
