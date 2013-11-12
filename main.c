@@ -57,6 +57,7 @@ static void AppTask( void * pvParameters )
     p->addr=64;
     memcpy(p->data, "\x00\x35\x00\x36", 4);
     p->datasize=2;
+    p->reply=0;
     xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);
   }
   vTaskDelay(5000);
@@ -69,6 +70,7 @@ static void AppTask( void * pvParameters )
     p->slave=0x01;
     p->addr=64;
     p->datasize=2;
+    p->reply=0;
     xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);
   }
   while(1)
