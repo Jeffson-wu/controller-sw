@@ -81,6 +81,7 @@ void UART_SendMsg(USART_TypeDef *uart, u8 *buffer, int len)
      int i=0;
      while(i<len)
      {
+       while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
        USART_SendData(uart,*(buffer+i));
        i++;
      }
