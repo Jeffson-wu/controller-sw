@@ -216,6 +216,7 @@ void HW_Init(void)
   GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
   GPIO_Init(GPIOD, &GPIO_InitStructure);
   GPIO_ResetBits(GPIOD,GPIO_Pin_4);
+#if 0
   /* Configure USART3 for GDI (debug) interface */
   RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
   RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART3, ENABLE);
@@ -228,7 +229,22 @@ void HW_Init(void)
   GPIO_InitStructure.GPIO_Pin = GPIO_Pin_11;
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
   GPIO_Init(GPIOB, &GPIO_InitStructure);
+#else
+/* Configure USART1 for GDI (debug) interface */
+RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA, ENABLE);
+RCC_APB2PeriphClockCmd(RCC_APB2Periph_USART1, ENABLE);
 
+GPIO_InitStructure.GPIO_Pin = GPIO_Pin_9;
+GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
+GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+GPIO_Init(GPIOA, &GPIO_InitStructure);
+
+GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10;
+GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
+GPIO_Init(GPIOA, &GPIO_InitStructure);
+
+
+#endif
   /* TIM Configuration */
   PWM_PinConfig();
 }
@@ -282,12 +298,13 @@ int main(void)
   xTaskHandle pvCooleAndLidTask;
   long *p;
   long TubeId;
+  xMessage *msg;
   
   set_clock();
 
   HW_Init();
   PWM_Init(500000,250000);
-  UART_Init(USART3);
+  UART_Init(USART1);/*GDI init*/
   Modbus_init(USART2);
   PWM_Set(50,TopHeaterCtrlPWM);
   PWM_Set(50,FANctrlPWM);

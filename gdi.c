@@ -28,7 +28,7 @@
 #define CHAR_ENTER 13
 #define CHAR_BACKSPACE '\b'
 char *command_prefix = "at@gdi:";
-USART_TypeDef *uart = USART3;
+USART_TypeDef *uart = USART1;
 u32 test_variable= 9876543;
 
 
@@ -133,13 +133,18 @@ void gdi_send_data_response(char * response, u8 status)
 
 void gdi_send_msg_response(char * response)
 {
+	char i;
 	char message[strlen(response)+5];
 	strcpy(message, "\r\n");
 	strcat(message, response);
 	strcat(message, "\r\n");
-	while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
-	UART_SendMsg(uart, message , strlen(message));
-	while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
+	for(i=0;i<strlen(message);i++)
+	{
+     	while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
+//     	UART_SendMsg(uart, message , strlen(message));
+		USART_SendData(uart, *(message+i));
+//     	while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
+	}
 }
 
 

@@ -9,9 +9,6 @@
 #include "stm32f10x_gpio.h"
 //#include "stm32f10x_misc.h"
 #include "stm32f10x_tim.h"
-#include "sequencer.h"
-#include "ads1148.h"
-
 #include "stm32f10x.h"
 #include "FreeRTOS.h"
 #include "timers.h"
@@ -19,6 +16,13 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+
+#include "sequencer.h"
+#include "ads1148.h"
+
+
+
+
 
 
 
@@ -143,7 +147,7 @@ void vTimerCallback( xTimerHandle pxTimer );
 void ExtIrqDisable(ExtiGpioTypeDef heater);
 void ExtIrqEnable(ExtiGpioTypeDef heater);
 
-
+extern void gdi_send_msg_response(char * response);
 
 /* Private functions ---------------------------------------------------------*/
 void StartTubeTimer( long TubeNum, long time  )
@@ -412,7 +416,8 @@ long TimerId,TubeId;
 StageCmdTypeDef TubeTemp[]={{50,10,Melting},{95,30,Annealing},{0,0,End}};
 long *p;
 WriteModbusRegsReq *preg;
-
+char buf[50];
+uint16_t data = '7';
 TubeStates TubeStage[]={TUBE_NOT_INITIALIZED};
 int TubeSeqNum = 0;
 
@@ -424,6 +429,10 @@ while(1)
   /*wait for queue msg*/
   if( xQueueReceive( TubeSequencerQueueHandle, &msg, portMAX_DELAY) == pdPASS )
   {
+  
+
+  sprintf(buf,"TubeSequencerTask[%d]TUBE_ST[%d]",msg->ucMessageID,TubeStage[*((long *)(msg->ucData))]);
+  gdi_send_msg_response(buf);
 	switch(msg->ucMessageID)
 	{
     case START_TUBE_SEQ:

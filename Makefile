@@ -15,8 +15,8 @@ OBJCOPY = $(TARGET)objcopy
 
 INCLUDES = -I ./include -I ./board -I ./arch -I ./freertos/include -I ./ -I ./freertos/portable/GCC/ARM_CM3 
 CFLAGS = -g -O0 -c -mcpu=cortex-m3 -mthumb -D__START=main -D__STARTUP_CLEAR_BSS -DSTM32F1XX -DUSE_STDPERIPH_DRIVER $(INCLUDES)
-LDFLAGS = -T arch/stm32f1x.ld -mcpu=cortex-m3 -mthumb -nostartfiles -nostdlib -nodefaultlibs -Wl,--gc-section
-LIBS = -lc -lgcc
+LDFLAGS = -T arch/stm32f1x.ld -mcpu=cortex-m3 -mthumb -nostartfiles -Wl,--gc-section
+LIBS = -lc -lgcc -lnosys
 OBJECTS_DIR = obj
 DEPENDS_DIR = dep
 PROGRAM = controller
