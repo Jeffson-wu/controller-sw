@@ -324,16 +324,12 @@ int main(void)
   result=xTaskCreate( CooleAndLidTask, (const signed char *) "CooleAndLid task", 100, NULL, ( (unsigned portBASE_TYPE) 3 ) | portPRIVILEGE_BIT, &pvCooleAndLidTask );
   result=xTaskCreate( gdi_task, ( const signed char * ) "Debug task", ( unsigned short ) 200, NULL, ( ( unsigned portBASE_TYPE ) 1 ) | portPRIVILEGE_BIT, &gdiCreatedTask );
   result=xTaskCreate( TubeSequencerTask, ( const signed char * ) "TubeSeq task", ( unsigned short ) 200, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvCreatedTask );
-
   TubeId = 1;
   msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
   msg->ucMessageID=START_TUBE_SEQ;
   p=(long *)msg->ucData;
   *p=TubeId;
   xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
-
-
-
   	
   vTaskStartScheduler();
 
