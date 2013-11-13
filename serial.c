@@ -35,47 +35,56 @@ static void (*receiveDataCB)()=0;
 
 void UART_SendMsg(USART_TypeDef *uart, u8 *buffer, int len)
 {
-    DMA_InitTypeDef         DMA_InitStructure;
-    NVIC_InitTypeDef NVIC_InitStructure;
-    /*rework KSKS*/
-    static char txBuffer[260];
-    /*rework KSKS made to suspend the dma interrupt to the character is transmitted*/
-    len+=2;
-    GPIO_SetBits(GPIOD,GPIO_Pin_3);
-    GPIO_SetBits(GPIOD,GPIO_Pin_4);
-    if(len > 255)
-    {
-      DMA_InitStructure.DMA_BufferSize = 255;
-    }
-    else
-    {
-      DMA_InitStructure.DMA_BufferSize = len;
-    }
-    memcpy(txBuffer, buffer, DMA_InitStructure.DMA_BufferSize);
-    DMA_DeInit(DMA1_Channel7);
-    DMA_InitStructure.DMA_PeripheralBaseAddr = (uint32_t) & uart->DR;
-    DMA_InitStructure.DMA_MemoryBaseAddr = (uint32_t)txBuffer;
-    DMA_InitStructure.DMA_DIR = DMA_DIR_PeripheralDST;
-    DMA_InitStructure.DMA_PeripheralInc = DMA_PeripheralInc_Disable;
-    DMA_InitStructure.DMA_MemoryInc = DMA_MemoryInc_Enable;
-    DMA_InitStructure.DMA_PeripheralDataSize = DMA_PeripheralDataSize_HalfWord;
-    DMA_InitStructure.DMA_MemoryDataSize = DMA_PeripheralDataSize_Byte;
-    DMA_InitStructure.DMA_Mode = DMA_Mode_Normal;
-    DMA_InitStructure.DMA_Priority = DMA_Priority_Medium;
-    DMA_InitStructure.DMA_M2M = DMA_M2M_Disable;
-    DMA_Init(DMA1_Channel7, &DMA_InitStructure);
-
-    NVIC_InitStructure.NVIC_IRQChannel = DMA1_Channel7_IRQn;
-    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 1;
-    NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1;
-    NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
-    NVIC_Init(&NVIC_InitStructure);
-
-    DMA_ITConfig(DMA1_Channel7, DMA_IT_TC, ENABLE);
-
-    USART_DMACmd(uart, USART_DMAReq_Tx, ENABLE);
-    USART_ClearFlag(uart, USART_FLAG_TC);
-    DMA_Cmd(DMA1_Channel7, ENABLE);
+   if(uart==USART2)
+   {
+     /*UART2 is used for RS485 communication*/
+     DMA_InitTypeDef         DMA_InitStructure;
+     NVIC_InitTypeDef NVIC_InitStructure;
+     len+=2;
+     GPIO_SetBits(GPIOD,GPIO_Pin_3);
+     GPIO_SetBits(GPIOD,GPIO_Pin_4);
+     if(len > 255)
+     {
+       DMA_InitStructure.DMA_BufferSize = 255;
+     }
+     else
+     {
+       DMA_InitStructure.DMA_BufferSize = len;
+     }
+     DMA_DeInit(DMA1_Channel7);
+     DMA_InitStructure.DMA_PeripheralBaseAddr = (uint32_t) & uart->DR;
+     DMA_InitStructure.DMA_MemoryBaseAddr = (uint32_t)buffer;
+     DMA_InitStructure.DMA_DIR = DMA_DIR_PeripheralDST;
+     DMA_InitStructure.DMA_PeripheralInc = DMA_PeripheralInc_Disable;
+     DMA_InitStructure.DMA_MemoryInc = DMA_MemoryInc_Enable;
+     DMA_InitStructure.DMA_PeripheralDataSize = DMA_PeripheralDataSize_HalfWord;
+     DMA_InitStructure.DMA_MemoryDataSize = DMA_PeripheralDataSize_Byte;
+     DMA_InitStructure.DMA_Mode = DMA_Mode_Normal;
+     DMA_InitStructure.DMA_Priority = DMA_Priority_Medium;
+     DMA_InitStructure.DMA_M2M = DMA_M2M_Disable;
+     DMA_Init(DMA1_Channel7, &DMA_InitStructure);
+ 
+     NVIC_InitStructure.NVIC_IRQChannel = DMA1_Channel7_IRQn;
+     NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 1;
+     NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1;
+     NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+     NVIC_Init(&NVIC_InitStructure);
+  
+     DMA_ITConfig(DMA1_Channel7, DMA_IT_TC, ENABLE);
+ 
+     USART_DMACmd(uart, USART_DMAReq_Tx, ENABLE);
+     USART_ClearFlag(uart, USART_FLAG_TC);
+     DMA_Cmd(DMA1_Channel7, ENABLE);
+   }
+   else
+   {
+     int i=0;
+     while(i<len)
+     {
+       USART_SendData(uart,*(buffer+i));
+       i++;
+     }
+   }
 }
 
 
@@ -122,8 +131,5 @@ void UART2_Handler(void)
    USART_ClearITPendingBit(USART2,0xFFFF);
    portEND_SWITCHING_ISR( pdTRUE);
 }
-
-
-
 
 
