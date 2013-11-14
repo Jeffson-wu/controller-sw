@@ -27,14 +27,153 @@
 #include "semphr.h"
 #include "signals.h"
 #include "ads1148.h"
+#include "pid.h"
+#include "pwm.h"
 
+/*-----------------------------------------------------------*/
+
+typedef enum {
+  CTRL_OPEN_LOOP_STATE,
+  CTRL_CLOSED_LOOP_STATE,
+  nCTRL_STATES
+} controllerState_t;
+
+typedef enum {
+  PELTIER_1,
+  PELTIER_2,
+  PELTIER_3,
+  nPELTIER
+} peltierID_t;
+
+typedef struct {
+  uint16_t          *pwmVal;
+  int16_t           *adcVal;
+  controllerState_t  state;
+  int16_t            pv;
+  pidData_t          pid;
+} regulatorData_t;
+
+typedef struct PELTIER_DATA{
+  peltierID_t     peltierID;
+  int16_t         setpoint;
+  regulatorData_t regulator;
+} peltierData_t;
+
+typedef struct LID_DATA{
+  int16_t         setpoint;
+  regulatorData_t regulator;
+} lidData_t;
+
+/*-----------------------------------------------------------*/
+// command queue
+xQueueHandle CooleAndLidQueueHandle;
+
+// Parameters for ADC
+static int16_t adcCh[4] = {0, 0, 0, 0};
+
+// Parameters for PWM
+static uint16_t pwmCh[5] = {32767, 32767, 32767, 32767, 50};
+
+static peltierData_t peltierData[3] = {
+  {PELTIER_1, /*setpoint*/-6000,{&pwmCh[0], &adcCh[0], CTRL_OPEN_LOOP_STATE}},
+  {PELTIER_2, /*setpoint*/4340, {&pwmCh[1], &adcCh[1], CTRL_OPEN_LOOP_STATE}},
+  {PELTIER_3, /*setpoint*/4340, {&pwmCh[2], &adcCh[2], CTRL_OPEN_LOOP_STATE}}
+};
+
+static lidData_t lidData = 
+  {           /*setpoint*/4340, {&pwmCh[3], &adcCh[3], CTRL_OPEN_LOOP_STATE}};
+
+
+/* ---------------------------------------------------------------------------*/
+/* Peltier handling */
+/* ---------------------------------------------------------------------------*/
+void initPeltier(peltierData_t *ppeltierData, int16_t kp, int16_t ki, int16_t kd)
+{
+  pid_Init(kp, ki , kd, &ppeltierData->regulator.pid);
+  pid_SetSetPoint(ppeltierData->setpoint, &ppeltierData->regulator.pid);
+}
+
+peltier(peltierData_t *peltierData){
+  int r;
+  int16_t ov;
+  regulatorData_t *reg;
+
+  reg = &peltierData->regulator;
+
+  reg->pv = *reg->adcVal;
+  switch (reg->state) {
+    case CTRL_OPEN_LOOP_STATE:
+    {
+      int16_t error = (reg->pid.setPoint - reg->pv);
+      if (error > 1000) {
+        *reg->pwmVal = 0;
+      } else {
+        reg->state = CTRL_CLOSED_LOOP_STATE;
+      }
+    }
+    break;
+    case CTRL_CLOSED_LOOP_STATE:
+    {
+      ov = pid_Controller(reg->pv, &peltierData->regulator.pid);
+      *reg->pwmVal = 16384-(ov/2);
+    }
+    break;
+  }
+}
+
+/* ---------------------------------------------------------------------------*/
+
+/* ---------------------------------------------------------------------------*/
+/* Lid handling */
+/* ---------------------------------------------------------------------------*/
+void initLid(lidData_t *plidData, int16_t kp, int16_t ki, int16_t kd)
+{
+  pid_Init(kp, ki , kd, &plidData->regulator.pid);
+  pid_SetSetPoint(plidData->setpoint, &plidData->regulator.pid);
+}
+
+lid(lidData_t *lidData)
+{
+  int16_t ov;
+
+  regulatorData_t *reg;
+  reg = &lidData->regulator;
+  
+  reg->pv = *reg->adcVal;
+  switch (reg->state) {
+    case CTRL_OPEN_LOOP_STATE:
+    {
+      int16_t error = (reg->pid.setPoint - reg->pv);
+      if (error > 1000) {
+        *reg->pwmVal = 0;
+      } else {
+        reg->state = CTRL_CLOSED_LOOP_STATE;
+      }
+    } 
+    break;
+    case CTRL_CLOSED_LOOP_STATE:
+    {
+      ov = pid_Controller(reg->pv, &lidData->regulator.pid);
+      *reg->pwmVal = 16384-(ov/2);
+    }
+    break;
+  }
+
+}
+/* ---------------------------------------------------------------------------*/
+/* Fan handling */
+/* ---------------------------------------------------------------------------*/
+
+/*-----------------------------------------------------------*/
 void CooleAndLidTask( void * pvParameters )
 {
   xSemaphoreHandle xADSSemaphore = NULL;
-  int state = 0;
-  uint32_t offsetcal;
-  uint32_t fullscalecal;
-  int16_t  ch0value, ch1value, ch2value, ch3value;
+  short usData;
+  xMessage *msg;
+  int i; //iterator
+#ifdef DEBUG
+  char str[20];
+#endif
 
   /* Create ADC synchrinization semaphore and let the ADC ISR know about it */
   vSemaphoreCreateBinary(xADSSemaphore);
@@ -47,6 +186,10 @@ void CooleAndLidTask( void * pvParameters )
   adsStartSeq();
   adsIrqEnable();
   adsConfigConversionTimer(&adsTimerCallback);
+  initPeltier(&peltierData[0], K_P*SCALING_FACTOR, K_I*SCALING_FACTOR, K_D*SCALING_FACTOR); 
+  initPeltier(&peltierData[1], K_P*SCALING_FACTOR, K_I*SCALING_FACTOR, K_D*SCALING_FACTOR); 
+  initPeltier(&peltierData[2], K_P*SCALING_FACTOR, K_I*SCALING_FACTOR, K_D*SCALING_FACTOR); 
+  initLid(&lidData, K_P*SCALING_FACTOR, K_I*SCALING_FACTOR, K_D*SCALING_FACTOR);
 
   while(1)
   {
@@ -54,21 +197,62 @@ void CooleAndLidTask( void * pvParameters )
     /* The control task is synchronized to the ADC interrupt by semaphore */
     /* wait indefinitely for the semaphore to become free i.e. the ISR frees it. */
     xSemaphoreTake(xADSSemaphore, portMAX_DELAY);
+    /* The semaphore is given when the ADC is done */
+    /* Read lastest ADC samples into buffer */
+    adsGetLatest(&adcCh[0], &adcCh[1], &adcCh[2], &adcCh[3]);
 
-    adsGetLatest(&ch0value, &ch1value, &ch2value, &ch3value);
-
-    if(0 == state)
+    for(i = 0; i < 3; i ++)
     {
-      GPIO_SetBits(GPIOC, GPIO_Pin_6);
-      state = 1;      
+      peltier(&peltierData[i]);
     }
-    else
-    {
-      GPIO_ResetBits(GPIOC, GPIO_Pin_6);
-      state = 0;
-    }
-    //vTaskDelay(500);
+    peltier(&peltierData[0]);
+    lid(&lidData);
 
+#ifdef DEBUG
+    /* Debugging the feedback value */
+    sprintf(str, "I=%d, O=%d", adcCh[0], pwmCh[2]);
+    gdi_send_msg_response(str);
+#endif
+
+    // Fan ctrl ??
+    
+    PWM_Set(pwmCh[0], PeltierCtrlPWM1);
+    PWM_Set(pwmCh[1], PeltierCtrlPWM2);
+    PWM_Set(pwmCh[2], PeltierCtrlPWM3);
+    PWM_Set(pwmCh[3], TopHeaterCtrlPWM);
+    PWM_Set(pwmCh[4], FANctrlPWM);
+    
+    if( xQueueReceive( CooleAndLidQueueHandle, &msg, /*Do not block*/ 0) == pdPASS )
+    {
+      switch(msg->ucMessageID)
+      {
+        case SET_FAN:
+        {
+          SetCooleAndLidReq *p;
+          p=(SetCooleAndLidReq *)(msg->ucData);
+          pwmCh[4] = p->value;
+        }
+        break;
+        case SET_COOLE_TEMP:
+        {
+          SetCooleAndLidReq *p;
+          p=(SetCooleAndLidReq *)(msg->ucData);
+          peltierData[0].setpoint = peltierData[1].setpoint = peltierData[2].setpoint = p->value;
+        }
+        break;
+        case SET_LID_TEMP:
+        {
+          SetCooleAndLidReq *p;
+          p=(SetCooleAndLidReq *)(msg->ucData);
+          lidData.setpoint = p->value;
+        }
+        break;
+        default:
+        break; //ignore message
+      }      
+      vPortFree(msg);
+    }
+      
   }
   // We are not supposed to end, but if so kill this task.
   vTaskDelete(NULL);
