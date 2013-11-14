@@ -300,6 +300,7 @@ int main(void)
   xTaskHandle gdiCreatedTask;
   xTaskHandle systemtestCreatedTask;
   xTaskHandle pvCooleAndLidTask;
+
   long *p;
   long TubeId;
   xMessage *msg;
@@ -314,11 +315,11 @@ int main(void)
   UART_Init(USART1);
 #endif
   Modbus_init(USART2);
-  PWM_Set(0,TopHeaterCtrlPWM);
+  PWM_Set(32767,TopHeaterCtrlPWM);
   PWM_Set(50,FANctrlPWM);
-  PWM_Set(0,PeltierCtrlPWM1);
-  PWM_Set(0,PeltierCtrlPWM2);
-  PWM_Set(0,PeltierCtrlPWM3);
+  PWM_Set(32767,PeltierCtrlPWM1);
+  PWM_Set(32767,PeltierCtrlPWM2);
+  PWM_Set(32767,PeltierCtrlPWM3);
   ConfigOSTimer();
 
   //HeartBeatLEDTimer();
@@ -330,18 +331,19 @@ int main(void)
 
   result=xTaskCreate( ModbusTask, ( const signed char * ) "Modbus task", ( unsigned short ) 200, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &modbusCreatedTask );
   result=xTaskCreate( AppTask, ( const signed char * ) "App task", ( unsigned short ) 100, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvCreatedTask );
+  result=xTaskCreate( gdi_task, ( const signed char * ) "Debug task", ( unsigned short ) 200, NULL, ( ( unsigned portBASE_TYPE ) 1 ) | portPRIVILEGE_BIT, &gdiCreatedTask );
 #ifndef GDI_ON_USART3
   result=xTaskCreate( CooleAndLidTask, (const signed char *) "CooleAndLid task", 200, NULL, ( (unsigned portBASE_TYPE) 13 ) | portPRIVILEGE_BIT, &pvCooleAndLidTask );
 #endif
-#endif
   result=xTaskCreate( TubeSequencerTask, ( const signed char * ) "TubeSeq task", ( unsigned short ) 200, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvCreatedTask );
+
   TubeId = 1;
   msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
   msg->ucMessageID=START_TUBE_SEQ;
   p=(long *)msg->ucData;
   *p=TubeId;
   xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
-  	
+
   vTaskStartScheduler();
   return 0;
 }
