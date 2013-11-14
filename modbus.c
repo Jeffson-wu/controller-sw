@@ -227,6 +227,7 @@ static u8 ModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer)
   memcpy(&(telegram[6]), &crc, (size_t)2);
   UART_SendMsg(usedUart, telegram, 6+2);
   waitForRespons(telegram, &telegramsize);
+  memcpy(buffer, telegram, datasize>telegramsize?telegramsize:datasize);
   if(telegramsize-5<=0)
   {
     return 0;
@@ -272,6 +273,7 @@ void ModbusTask( void * pvParameters )
 {
   short usData;
   xMessage *msg;
+  xMessage *msgout;
   while(1)
   {
     /*wait for queue msg*/
@@ -282,15 +284,43 @@ void ModbusTask( void * pvParameters )
         case WRITE_MODBUS_REGS:
         {
           WriteModbusRegsReq *p;
+          WriteModbusRegsRes *po;
           p=(WriteModbusRegsReq *)(msg->ucData);
-          ModbusWriteRegs(p->slave, p->addr, p->data, p->datasize);
+          if(p->reply)
+          {
+            msgout=pvPortMalloc(sizeof(xMessage)+sizeof(WriteModbusRegsRes));
+            po=(WriteModbusRegsRes *)(msgout->ucData);
+            po->slave=p->slave;
+            po->datasize=p->datasize;
+            po->addr=p->addr;
+            po->resultOk=ModbusWriteRegs(p->slave, p->addr, p->data, p->datasize);
+            xQueueSend(p->reply, &msgout, portMAX_DELAY);
+          }
+          else
+          {
+            ModbusWriteRegs(p->slave, p->addr, p->data, p->datasize);
+          }
         }
         break;
         case READ_MODBUS_REGS:
         {
           ReadModbusRegsReq *p;
+          ReadModbusRegsRes *po;
           p=(ReadModbusRegsReq *)(msg->ucData);
-          ModbusReadRegs(p->slave, p->addr, p->datasize, 0);
+          if(p->reply)
+          {
+            msgout=pvPortMalloc(sizeof(xMessage)+sizeof(ReadModbusRegsRes)+p->datasize);
+            po=(ReadModbusRegsRes *)(msgout->ucData);
+            po->slave=p->slave;
+            po->addr=p->addr;
+            po->datasize=p->datasize;
+            po->resultOk=FALSE;
+            if(ModbusReadRegs(p->slave, p->addr, p->datasize, po->data))
+            {
+              po->resultOk=TRUE;
+            }
+            xQueueSend(p->reply, &msgout, portMAX_DELAY);
+          }
         }
         default:
         break;
@@ -298,9 +328,6 @@ void ModbusTask( void * pvParameters )
       /*dealloc the msg*/
       vPortFree(msg);
     }
-
-    /*call msg handler*/
-  
   }
 }
 

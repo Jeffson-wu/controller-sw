@@ -1,13 +1,19 @@
 #ifndef __SIGNALS_H
 #define __SIGNALS_H
 
+#include "queue.h"
+
 enum
 {
   FIRST_MSG,
   WRITE_MODBUS_REGS,
   WRITE_MODBUS_REGS_RES,
+  TIMER_EXPIRED,
+  START_TUBE_SEQ,
   READ_MODBUS_REGS,
   READ_MODBUS_REGS_RES,
+  START_TUBE,
+  DATA_FROM_TUBE,
   SET_FAN,
   SET_FAN_RES,
   SET_COOLE_TEMP,
@@ -37,6 +43,14 @@ typedef struct
   u8 slave;
   u16 addr;
   u16 datasize;
+  bool resultOk;
+}WriteModbusRegsRes;
+
+typedef struct
+{
+  u8 slave;
+  u16 addr;
+  u16 datasize;
   xQueueHandle reply; 
 }ReadModbusRegsReq;
 
@@ -44,5 +58,14 @@ typedef struct
 {
   s16 value;
 } SetCooleAndLidReq;
+
+typedef struct
+{
+  u8 slave;
+  u16 addr;
+  u16 datasize;
+  bool resultOk;
+  u8 data[1];
+}ReadModbusRegsRes;
 
 #endif

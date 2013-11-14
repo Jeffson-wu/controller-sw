@@ -93,10 +93,10 @@ __isr_vector:
     .long    Default_Handler            /* 4: FLASH */
     .long    Default_Handler            /* 5: RCC */
     .long    Default_Handler            /* 6: EXTI0 */
-    .long    Default_Handler            /* 7: EXTI1 */
-    .long    Default_Handler            /* 8: EXTI2 */
-    .long    Default_Handler            /* 9: EXTI3 */
-    .long    Default_Handler            /* 10: EXTI4 */
+    .long    EXTI_Handler            /* 7: EXTI1 */
+    .long    EXTI_Handler            /* 8: EXTI2 */
+    .long    EXTI_Handler            /* 9: EXTI3 */
+    .long    EXTI_Handler            /* 10: EXTI4 */
     .long    Default_Handler            /* 11: DMA1_Channel1 */
     .long    Default_Handler            /* 12: DMA1_Channel2 */
     .long    Default_Handler            /* 13: DMA1_Channel3 */
@@ -109,7 +109,7 @@ __isr_vector:
     .long    Default_Handler           /* 20: CAN1_RX0 */
     .long    Default_Handler           /* 21: CAN1_RX1 */
     .long    Default_Handler           /* 22: CAN1_SCE */
-    .long    Default_Handler           /* 23: EXTI9_5 */
+    .long    EXTI_Handler           /* 23: EXTI9_5 */
     .long    Default_Handler           /* 24: TIM1_BRK */
     .long    Default_Handler           /* 25: TIM1_UP */
     .long    Default_Handler           /* 26: TIM1_TRG_COM */
@@ -126,7 +126,7 @@ __isr_vector:
     .long    Default_Handler           /* 37: USART1 */
     .long    UART2_Handler          /* 38: USART2 */
     .long    Default_Handler           /* 39: USART3 */
-    .long    ADS_Handler           /* 40: EXTI15_10 */
+    .long    EXTI_Handler           /* 40: EXTI15_10 */
     .long    Default_Handler           /* 41: RTC_Alarm */
     .long    Default_Handler           /* 42: OTG_FS_WKUP */
     .long    0                        /* 43: reserved */

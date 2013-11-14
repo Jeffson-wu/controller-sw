@@ -41,7 +41,9 @@
 //also in gdi.c
 
 extern xQueueHandle ModbusQueueHandle;
+xQueueHandle TubeSequencerQueueHandle;
 extern xQueueHandle CooleAndLidQueueHandle;
+
 xSemaphoreHandle xSemaphore = NULL;
 
 void ModbusTask( void * pvParameters );
@@ -51,6 +53,7 @@ void gdi_task(void *pvParameters);
 
 
 
+void TubeSequencerTask( void * pvParameter);
 static void AppTask( void * pvParameters )
 {
   {
@@ -63,6 +66,7 @@ static void AppTask( void * pvParameters )
     p->addr=64;
     memcpy(p->data, "\x00\x35\x00\x36", 4);
     p->datasize=2;
+    p->reply=0;
     xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);
   }
   vTaskDelay(5000);
@@ -75,6 +79,7 @@ static void AppTask( void * pvParameters )
     p->slave=0x01;
     p->addr=64;
     p->datasize=2;
+    p->reply=0;
     xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);
   }
   while(1)
@@ -295,6 +300,10 @@ int main(void)
   xTaskHandle gdiCreatedTask;
   xTaskHandle systemtestCreatedTask;
   xTaskHandle pvCooleAndLidTask;
+  long *p;
+  long TubeId;
+  xMessage *msg;
+  
   set_clock();
 
   HW_Init();
@@ -317,13 +326,21 @@ int main(void)
   /*create queue*/
   ModbusQueueHandle=xQueueCreate( QUEUESIZE, ( unsigned portBASE_TYPE ) sizeof( void * ) );
   CooleAndLidQueueHandle=xQueueCreate( QUEUESIZE, ( unsigned portBASE_TYPE ) sizeof( void * ) );
+  TubeSequencerQueueHandle=xQueueCreate( QUEUESIZE, ( unsigned portBASE_TYPE ) sizeof( void * ) );
 
   result=xTaskCreate( ModbusTask, ( const signed char * ) "Modbus task", ( unsigned short ) 200, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &modbusCreatedTask );
   result=xTaskCreate( AppTask, ( const signed char * ) "App task", ( unsigned short ) 100, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvCreatedTask );
 #ifndef GDI_ON_USART3
   result=xTaskCreate( CooleAndLidTask, (const signed char *) "CooleAndLid task", 200, NULL, ( (unsigned portBASE_TYPE) 13 ) | portPRIVILEGE_BIT, &pvCooleAndLidTask );
 #endif
-  result=xTaskCreate( gdi_task, ( const signed char * ) "Debug task", ( unsigned short ) 200, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &gdiCreatedTask );
+#endif
+  result=xTaskCreate( TubeSequencerTask, ( const signed char * ) "TubeSeq task", ( unsigned short ) 200, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvCreatedTask );
+  TubeId = 1;
+  msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
+  msg->ucMessageID=START_TUBE_SEQ;
+  p=(long *)msg->ucData;
+  *p=TubeId;
+  xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
   	
   vTaskStartScheduler();
   return 0;

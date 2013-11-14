@@ -143,34 +143,22 @@ void gdi_send_data_response(char * response, u8 status)
 }
 
 
-#if 1 // DEBUG
-void gdi_send_msg_response(char * response) 
-{ 
-  char i; 
-  char message[strlen(response)+5]; 
-  strcpy(message, "\r\n"); 
-  strcat(message, response); 
-  strcat(message, "\r\n"); 
-  for(i=0;i<strlen(message);i++) 
-  { 
-  while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET); 
-  //      UART_SendMsg(uart, message , strlen(message)); 
-          USART_SendData(uart, *(message+i)); 
-  //      while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET); 
-  } 
-}
-#else
 void gdi_send_msg_response(char * response)
 {
+	char i;
 	char message[strlen(response)+5];
 	strcpy(message, "\r\n");
 	strcat(message, response);
 	strcat(message, "\r\n");
-	while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
-	UART_SendMsg(uart, message , strlen(message));
-	while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
+	for(i=0;i<strlen(message);i++)
+	{
+     	while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
+//     	UART_SendMsg(uart, message , strlen(message));
+		USART_SendData(uart, *(message+i));
+//     	while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
+	}
 }
-#endif
+
 
 u8 gdi_get_command_type(char *command)
 {
