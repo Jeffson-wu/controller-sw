@@ -28,7 +28,7 @@
 #define CHAR_ENTER 13
 #define CHAR_BACKSPACE '\b'
 char *command_prefix = "at@gdi:";
-USART_TypeDef *uart = USART1;
+USART_TypeDef *uart = USART3;
 u32 test_variable= 9876543;
 
 
