@@ -304,7 +304,7 @@ int main(void)
 
   HW_Init();
   PWM_Init(500000,250000);
-  UART_Init(USART1);/*GDI init*/
+  UART_Init(USART3);/*GDI init*/
   Modbus_init(USART2);
   PWM_Set(50,TopHeaterCtrlPWM);
   PWM_Set(50,FANctrlPWM);
@@ -318,7 +318,7 @@ int main(void)
   /*create queue*/
   ModbusQueueHandle=xQueueCreate( QUEUESIZE, ( unsigned portBASE_TYPE ) sizeof( void * ) );
   TubeSequencerQueueHandle=xQueueCreate( QUEUESIZE, ( unsigned portBASE_TYPE ) sizeof( void * ) );
-
+  heaterIrqInit();
   result=xTaskCreate( ModbusTask, ( const signed char * ) "Modbus task", ( unsigned short ) 200, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &modbusCreatedTask );
   result=xTaskCreate( AppTask, ( const signed char * ) "App task", ( unsigned short ) 100, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvCreatedTask );
   result=xTaskCreate( CooleAndLidTask, (const signed char *) "CooleAndLid task", 100, NULL, ( (unsigned portBASE_TYPE) 3 ) | portPRIVILEGE_BIT, &pvCooleAndLidTask );
