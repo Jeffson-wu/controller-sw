@@ -33,7 +33,8 @@
 #include "signals.h"
 #include "timers.h"
 
-#define MODBUS_SILENT_INTERVAL 40000/(19200/(8*4))
+#define MODBUS_SILENT_INTERVAL (40000/(19200/(8*4)))
+#define MODBUS_TIMEOUT 100
 
 #define READ_HOLDINGS_REGISTERS 3
 #define WRITE_MULTIPLE_REGISTERS 16
@@ -46,7 +47,7 @@ static  xSemaphoreHandle xSemaphore;
 xQueueHandle ModbusQueueHandle;
 static  xTimerHandle TimerHandle;
 
-static  uint8_t *recvBuffer;
+static  uint8_t *recvBuffer=0;
 static int NOFRecvChars=0;
 static int recvBufferSize;
 
@@ -114,8 +115,8 @@ static bool handleModbusTelegram(u8 *telegram, u16 size)
 
 void timeoutCB(xTimerHandle handle)
 {
-  static counter=0;
-  if(recvBuffer && (NOFRecvChars!=0 || counter>10))
+  static int counter=0;
+  if(recvBuffer && (NOFRecvChars!=0 || counter>MODBUS_TIMEOUT))
   {
     counter=0;
     /*Stop updating recvBuffer*/
@@ -125,7 +126,10 @@ void timeoutCB(xTimerHandle handle)
   }
   else
   {
-     counter++;
+     if(recvBuffer)
+     {
+       counter++;
+     }
   }
 }
 
@@ -167,6 +171,7 @@ void waitForRespons(u8 *telegram, int *telegramSize)
   {
     *telegramSize=0;
   }
+  recvBuffer=0;
   return;
   #if 0
   int i=0;
@@ -320,6 +325,10 @@ void ModbusTask( void * pvParameters )
               po->resultOk=TRUE;
             }
             xQueueSend(p->reply, &msgout, portMAX_DELAY);
+          }
+          else
+          {
+            ModbusReadRegs(p->slave, p->addr, p->datasize, 0);
           }
         }
         default:
