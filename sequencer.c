@@ -22,6 +22,18 @@
 
 
 
+const char *  signals_txt[] = {
+  "FIRST_MSG",
+  "WRITE_MODBUS_REGS",
+  "WRITE_MODBUS_REGS_RES",
+  "TIMER_EXPIRED",
+  "START_TUBE_SEQ",
+  "READ_MODBUS_REGS",
+  "READ_MODBUS_REGS_RES",
+  "START_TUBE",
+  "DATA_FROM_TUBE",
+  "LAST_MSG"
+};
 
 
 
@@ -36,8 +48,20 @@
 
 
 
+#define DEBUG
+#ifdef DEBUG
+/*#define DEBUG_PRINT(fmt, args...)    fprintf(stderr, fmt, ## args)*/
+#define DEBUG_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_response(buf);
+#else
+#define DEBUG_PRINTF(fmt, args...)    /* Don't do anything in release builds */
+#endif
 
-
+#ifdef DEBUG_IF
+/*#define DEBUG_PRINT(fmt, args...)    fprintf(stderr, fmt, ## args)*/
+#define DEBUG_IF_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_response(buf);
+#else
+#define DEBUG_IF_PRINTF(fmt, args...)    /* Don't do anything in release builds */
+#endif
 
 
 
@@ -47,19 +71,24 @@
 #define tube2 0x02
 
 #define SET_TUBE_TEMP 0x01
+#define SET_TUBE_IDLE 0x02
 
 
 #define tube_status 0x12
 
-#define NUM_TIMERS 16 /*There should be 1 for each tube*/
+#define nTubes     16     /*Number of tubes to use*/
+#define NUM_TIMERS nTubes /*There should be 1 for each tube*/
 
  /* An array to hold handles to the created timers. */
  xTimerHandle xTimers[ NUM_TIMERS ];
 
  /* An array to hold a count of the number of times each timer expires. */
  long lExpireCounters[ NUM_TIMERS ] = { 0 };
+ 
+ char buf[50]; /*buffer for debug printf*/
 
 /* Private variables ---------------------------------------------------------*/
+#if 1 
 typedef enum
 {
 TUBE_INIT,
@@ -68,8 +97,62 @@ TUBE_WAIT_TEMP, /*Wait until desired temperature are reached*/
 TUBE_WAIT_TIME, /*Wait the specified time in the sequence*/
 TUBE_NOT_INITIALIZED
 }TubeStates;
+const char *  tube_states[] = {
+"TUBE_INIT",
+"TUBE_IDLE",
+"TUBE_WAIT_TEMP", /*Wait until desired temperature are reached*/
+"TUBE_WAIT_TIME", /*Wait the specified time in the sequence*/
+"TUBE_NOT_INITIALIZED"
+};
+
+typedef struct
+{
+TubeStates state;
+uint16_t LoopStart;
+uint16_t LoopIterations;
+int TubeSeqNum;
+}Tubeloop_t;
+
+#else
+
+// Now in one and only one .c file, redefine the ENUM macros and reinclude
+//  the numbers.h file to build a string table
+#undef ENUM_BEGIN
+#undef ENUM
+#undef ENUM_END
+#define ENUM_BEGIN(typ) const char * typ ## _name_table [] = {
+#define ENUM(nam) #nam
+#define ENUM_END(typ) };
+#undef NUMBERS_H_INCLUDED   // whatever you need to do to enable reinclusion
+#include "numbers.h"
+#endif
 
 
+#if 0
+
+
+// Now you can do exactly what you want to do, with no retyping, and for any
+//  number of enumerated types defined with the ENUM macro family
+//  Your code follows;
+char num_str[10];
+int process_numbers_str(Numbers num) {
+  switch(num) {
+    case ONE:
+    case TWO:
+    case THREE:
+    {
+      strcpy(num_str, Numbers_name_table[num]); // eg TWO -> "TWO"
+    } break;
+    default:
+      return 0; //no match
+  return 1;
+}
+
+// Sweet no ? After being frustrated by this for years, I finally came up
+//  with this solution for my most recent project and plan to reuse the idea
+//  forever
+
+#endif
 
 typedef enum
 {
@@ -91,14 +174,17 @@ Incubation,
 LoopStart,
 LoopEnd,
 End
-}TubeStageTypeDef;
+}TubestateTypeDef;
 
 typedef struct
 {
 uint16_t temp; /*Settemp in 0.1 degrees*/
 uint16_t time; /*time in secs*/
-TubeStageTypeDef stage;    /*Current stage:[M]elting(1), [A]nnealing(2), [E]xtension(3) or [I]ncubation(4) */
-}StageCmdTypeDef;
+TubestateTypeDef stage;    /*Current stage:[M]elting(1), [A]nnealing(2), [E]xtension(3) or [I]ncubation(4) */
+}stateCmdTypeDef;
+
+
+
 
 typedef struct
 {
@@ -150,26 +236,35 @@ void ExtIrqEnable(ExtiGpioTypeDef heater);
 extern void gdi_send_msg_response(char * response);
 
 /* Private functions ---------------------------------------------------------*/
+void InitTubeTimers()
+{
+	long x;
+
+	/* Create then start some timers.  Starting the timers before the RTOS scheduler
+	has been started means the timers will start running immediately that
+	the RTOS scheduler starts. */
+	for(x=0;x<NUM_TIMERS;x++)
+	{
+		xTimers[ x ] = xTimerCreate
+				 (	/* Just a text name, not used by the RTOS kernel. */
+					"TubeTimer",
+					/* The timer period in ticks. */
+					( 1000 * 1 ),
+					/* The timers will auto-reload themselves when they expire. */
+					pdTRUE,
+					/* Assign each timer a unique id equal to its array index. */
+					( void * ) x,
+					/* Each timer calls the same callback when it expires. */
+					vTimerCallback
+				  );
+	}
+}
 void StartTubeTimer( long TubeNum, long time  )
 {
 long x = TubeNum;
-
- /* Create then start some timers.  Starting the timers before the RTOS scheduler
- has been started means the timers will start running immediately that
- the RTOS scheduler starts. */
-     xTimers[ x ] = xTimerCreate
-	          (  /* Just a text name, not used by the RTOS kernel. */
-                 "TubeTimer",
-                 /* The timer period in ticks. */
-                 ( 1000 * time ),
-                 /* The timers will auto-reload themselves when they expire. */
-                 pdTRUE,
-                 /* Assign each timer a unique id equal to its array index. */
-                 ( void * ) x,
-                 /* Each timer calls the same callback when it expires. */
-                 vTimerCallback
-               );
-
+ DEBUG_IF_PRINTF("Tube[%d]StartTubeTimer Time[%d]",TubeNum,time);
+/*time in mSec*/
+#if 1
      if( xTimers[ x ] == NULL )
      {
          /* The timer was not created. */
@@ -179,11 +274,16 @@ long x = TubeNum;
          /* Start the timer.  No block time is specified, and even if one was
          it would be ignored because the RTOS scheduler has not yet been
          started. */
+         
+		 if(xTimerChangePeriod( xTimers[ x ],1 * time,100)!= pdPASS )
+	 	{
+	 	}
          if( xTimerStart( xTimers[ x ], 0 ) != pdPASS )
          {
              /* The timer could not be set into the Active state. */
          }
      }
+#endif
 }
 
 
@@ -191,8 +291,14 @@ long x = TubeNum;
 StopTubeTimer(long TubeNum)
 {
 
-  xTimerStop( xTimers[ TubeNum ], 0 );
-
+  if( xTimers[ TubeNum ] == NULL )
+	   {
+		   /* The timer was not created. */
+	   }
+	   else
+	   {
+		  xTimerStop( xTimers[ TubeNum ], 0 );
+	   }
 }
 
 void heaterIrqInit(void)
@@ -262,22 +368,31 @@ void WriteTubeHeaterReg(u8 tube, u16 reg, u16 *data, u16 datasize)
     xMessage *msg;
     WriteModbusRegsReq *p;
     msg=pvPortMalloc(sizeof(xMessage)+sizeof(WriteModbusRegsReq)+datasize);
+
+if(reg == SET_TUBE_IDLE)
+{
+  DEBUG_IF_PRINTF("Tube[%d] MODBUS WRITE_REG[SET_TUBE_IDLE] ",tube);
+}
+else
+{
 #if 0
-    msg->ucMessageID=WRITE_MODBUS_REGS;
-    p=(WriteModbusRegsReq *)msg->ucData;
-    p->slave=tube;
-    p->addr=reg;
-    memcpy(p->data, data, datasize);
-    p->datasize=datasize;
-    xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);
+		msg->ucMessageID=WRITE_MODBUS_REGS;
+		p=(WriteModbusRegsReq *)msg->ucData;
+		p->slave=tube;
+		p->addr=reg;
+		memcpy(p->data, data, datasize);
+		p->datasize=datasize;
+		xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);
 #else
-msg->ucMessageID=READ_MODBUS_REGS_RES;
-p=(WriteModbusRegsReq *)msg->ucData;
-p->slave=tube;
-p->addr=reg;
-memcpy(p->data, data, datasize);
-p->datasize=datasize;
-xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
+	msg->ucMessageID=READ_MODBUS_REGS_RES;
+	p=(WriteModbusRegsReq *)msg->ucData;
+	p->slave=tube;
+	p->addr=reg;
+	memcpy(p->data, data, datasize);
+	p->datasize=datasize;
+	xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
+    DEBUG_IF_PRINTF("Tube[%d] MODBUS WRITE_REG[SET_TUBE_TEMP]Temp[%d]",tube,*data);
+}
 
 #endif
 }
@@ -310,6 +425,7 @@ p = (long *)msg->ucData;
 *p = 52;
 //xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
 
+DEBUG_IF_PRINTF("Tube[%d]MODBUS READ_REG[tube_status] ",tube);
 
 xQueueSendFromISR(TubeSequencerQueueHandle,&msg,&xHigherPriorityTaskWoken);
 if( xHigherPriorityTaskWoken )
@@ -398,7 +514,7 @@ ExtiGpioTypeDef ExtiGpio = Heater1;
   {
     if (SET == EXTI_GetFlagStatus(gpio_EXTI_CNF[ExtiGpio].EXTI_LINE))
     {
-		//	 HeaterEventHandler(ExtiGpio);
+	  HeaterEventHandler(ExtiGpio);
  	  EXTI_ClearITPendingBit(gpio_EXTI_CNF[ExtiGpio].EXTI_LINE);
 	}
   ExtiGpio++;
@@ -411,76 +527,102 @@ ExtiGpioTypeDef ExtiGpio = Heater1;
 void TubeSequencerTask( void * pvParameter)
 {
 short usData;
-xMessage *msg;
+xMessage *msg,*new_msg;
 long TimerId,TubeId;
-StageCmdTypeDef TubeTemp[]={{50,10,Melting},{95,30,Annealing},{0,0,End}};
+signed portBASE_TYPE xEntryTimeSet = pdFALSE;
+stateCmdTypeDef TubeSeq[nTubes][5]={{{50,10000,Melting},{0,3,LoopStart},{95,5000,Annealing},{0,0,LoopEnd},{0,0,End}},
+ 	                                 {{50,10000,Melting},{0,3,LoopStart},{95,5000,Annealing},{0,0,LoopEnd},{0,0,End}}};
 long *p;
 WriteModbusRegsReq *preg;
-char buf[50];
-uint16_t data = '7';
-TubeStates TubeStage[]={TUBE_NOT_INITIALIZED};
-int TubeSeqNum = 0;
+Tubeloop_t Tube[nTubes]= {TUBE_NOT_INITIALIZED};
+//int TubeSeqNum = 0;
 
-
-//StartTubeTimer(1,10);
+InitTubeTimers();
 
 while(1)
 {
   /*wait for queue msg*/
   if( xQueueReceive( TubeSequencerQueueHandle, &msg, portMAX_DELAY) == pdPASS )
   {
-  
+	//DEBUG_PRINTF("@Tube[%d] TubeSeq[%s]State[%s]",TubeId,signals_txt[msg->ucMessageID],tube_states[Tube[TubeId].state]);
 
-  sprintf(buf,"TubeSequencerTask[%d]TUBE_ST[%d]",msg->ucMessageID,TubeStage[*((long *)(msg->ucData))]);
-  gdi_send_msg_response(buf);
 	switch(msg->ucMessageID)
 	{
     case START_TUBE_SEQ:
       TubeId = *((long *)(msg->ucData));
-	  if(TubeTemp[TubeSeqNum].stage != End)
+	  //DEBUG_PRINTF("-->Tube[%d]@%s TubeSeq[%s]",TubeId,tube_states[Tube[TubeId].state],signals_txt[msg->ucMessageID]);
+	  if(TubeSeq[TubeId][Tube[TubeId].TubeSeqNum].stage == LoopStart)/*{3,0,LoopStart}*/
 	  {
-        WriteTubeHeaterReg(TubeId,SET_TUBE_TEMP,&TubeTemp[TubeSeqNum].temp,sizeof(TubeTemp[TubeSeqNum].temp));
-		TubeStage[TubeId] = TUBE_WAIT_TEMP;
-//	  }else if(TubeTemp[TubeSeqNum].stage != LoopStart)
-//	  {
-//	    TubeLoop[TubeId].LoopSeq = TubeSeqNum;
-//        TubeLoop[TubeId].Iterations = TubeTemp[TubeSeqNum].time;
-//	    TubeSeqNum++; /*Going to next sequence*/
-//        msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
-//        msg->ucMessageID=START_TUBE_SEQ;
-//        p=(long *)msg->ucData;
-//        *p=TubeId;
-//        xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
+	    Tube[TubeId].LoopStart = Tube[TubeId].TubeSeqNum+1;/*Loop from next entry*/
+        Tube[TubeId].LoopIterations = TubeSeq[TubeId][Tube[TubeId].TubeSeqNum].time;
+		DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s] *** LOOPSTART @StarID[%d] Iterations[%d] ***",TubeId,tube_states[Tube[TubeId].state],signals_txt[msg->ucMessageID],Tube[TubeId].TubeSeqNum,Tube[TubeId].LoopIterations);
+	    Tube[TubeId].TubeSeqNum++; /*Going to next sequence*/
+        new_msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
+        new_msg->ucMessageID=START_TUBE_SEQ;
+        p=(long *)new_msg->ucData;
+        *p=TubeId;
+        assert_param(pdPASS == xQueueSend(TubeSequencerQueueHandle, &send_msg, portMAX_DELAY));
+
+		
+	}else if(TubeSeq[TubeId][Tube[TubeId].TubeSeqNum].stage == LoopEnd)/*{3,0,LoopStart}*/
+	{
+		Tube[TubeId].LoopIterations--;
+
+	  if(Tube[TubeId].LoopIterations > 0) /*Finished looping ?*/
+	  {
+	    Tube[TubeId].TubeSeqNum=Tube[TubeId].LoopStart; /*Jump back to start of loop*/
+		DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s]*** LOOP @Iterations left[%d] ***",TubeId,tube_states[Tube[TubeId].state],signals_txt[msg->ucMessageID],Tube[TubeId].LoopIterations);
 	  }else
 	  {
-		TubeStage[TubeId] = TUBE_IDLE;
+		  Tube[TubeId].TubeSeqNum++;/*Finished looping go to next sequence*/
+		  DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s]***LOOP END***",TubeId,tube_states[Tube[TubeId].state],signals_txt[msg->ucMessageID]);
+	  }
+	  new_msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
+	  new_msg->ucMessageID=START_TUBE_SEQ;
+	  p=(long *)send_msg->ucData;
+	  *p=TubeId;
+	  xQueueSend(TubeSequencerQueueHandle, &new_msg, portMAX_DELAY);
+	  }else if(TubeSeq[TubeId][Tube[TubeId].TubeSeqNum].stage == End)
+	  {
+		Tube[TubeId].state = TUBE_IDLE;
+		DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s] END OF SEQUENCE FOR TUBE",TubeId,tube_states[Tube[TubeId].state],signals_txt[msg->ucMessageID]);
+        WriteTubeHeaterReg(TubeId,SET_TUBE_IDLE,&TubeSeq[TubeId][Tube[TubeId].TubeSeqNum].temp,sizeof(TubeSeq[TubeId][Tube[TubeId].TubeSeqNum].temp));
+		Tube[TubeId].TubeSeqNum = 0;
+	  } else if(TubeSeq[TubeId][Tube[TubeId].TubeSeqNum].stage == Melting||Annealing||Extension||Incubation)
+	  {
+ 	    DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s] Seq Active set new temp %d",TubeId,tube_states[Tube[TubeId].state],signals_txt[msg->ucMessageID],TubeSeq[TubeId][Tube[TubeId].TubeSeqNum].temp);
+		WriteTubeHeaterReg(TubeId,SET_TUBE_TEMP,&TubeSeq[TubeId][Tube[TubeId].TubeSeqNum].temp,sizeof(TubeSeq[TubeId][Tube[TubeId].TubeSeqNum].temp));
+		Tube[TubeId].state = TUBE_WAIT_TEMP;
 	  }
  	break;
 	case READ_MODBUS_REGS_RES:
 		preg=(WriteModbusRegsReq *)msg->ucData;
         TubeId = preg->slave;
         /*reg = p->addr;*/
-	  if(TubeStage[TubeId] == TUBE_WAIT_TEMP) /*The heater has signalled an IRQ and here the status of the tube is read*/
+	  if(Tube[TubeId].state == TUBE_WAIT_TEMP) /*The heater has signalled an IRQ and here the status of the tube is read*/
 	  {
- 	    StartTubeTimer(TubeId,TubeTemp[TubeSeqNum].time);
-	    TubeStage[TubeId] = TUBE_WAIT_TIME;
+	    DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s] TEMP reached start timer %d",TubeId,tube_states[Tube[TubeId].state],signals_txt[msg->ucMessageID],TubeSeq[TubeId][Tube[TubeId].TubeSeqNum].time/1000);
+ 	    StartTubeTimer(TubeId,TubeSeq[TubeId][Tube[TubeId].TubeSeqNum].time);
+	    Tube[TubeId].state = TUBE_WAIT_TIME;
 	  }
 	break;
 	case TIMER_EXPIRED:                       /*Waiting time for tube ended*/
 	  TubeId = *((long *)(msg->ucData));
-	  GPIOC->ODR ^= GPIO_Pin_9;
-	  TubeSeqNum++; /*Going to next sequence*/
-	  msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
-	  msg->ucMessageID=START_TUBE_SEQ;
-	  p=(long *)msg->ucData;
+	  DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s]",TubeId,tube_states[Tube[TubeId].state],signals_txt[msg->ucMessageID]);
+	  Tube[TubeId].TubeSeqNum++; /*Going to next sequence*/
+	  new_msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
+	  new_msg->ucMessageID=START_TUBE_SEQ;
+	  p=(long *)new_msg->ucData;
 	  *p=TubeId;
+	//  DEBUG_PRINTF("@Tube[%d] TIMER_EXPIRED ",TubeId);
 	  xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
 	break;
     case WRITE_MODBUS_REGS_RES:
       TubeId = *((long *)(msg->ucData));
-	  
+	  DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s]",TubeId,tube_states[Tube[TubeId].state],signals_txt[msg->ucMessageID]);
 	break;
 	default:
+	  DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s]State[%s]",0xFF,tube_states[Tube[0].state],signals_txt[msg->ucMessageID]);
 	break;
 	};
 	/*dealloc the msg*/
@@ -500,6 +642,7 @@ void vTimerCallback( xTimerHandle pxTimer )
 	long lArrayIndex;
 	xMessage *msg;
     long *p;
+	portBASE_TYPE taskWoken = pdFALSE;
 
 	/* Optionally do something if the pxTimer parameter is NULL. */
 	configASSERT( pxTimer );
@@ -509,18 +652,22 @@ void vTimerCallback( xTimerHandle pxTimer )
 
 	/* Do not use a block time if calling a timer API function from a
 	timer callback function, as doing so could cause a deadlock! */
+	xTimerStopFromISR(pxTimer,&taskWoken);
+    if( taskWoken != pdFALSE )
+    {
+          // Call the interrupt safe yield function here (actual function
+          // depends on the FreeRTOS port being used.
+    }
 //	xTimerStop( pxTimer, 0 );
     msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
     msg->ucMessageID=TIMER_EXPIRED;
     p=(long *)msg->ucData;
 	*p=lArrayIndex;
+	
+	DEBUG_IF_PRINTF("Tube[%d] TIMER_EXPIRED ",lArrayIndex);
     xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
+
 }
 
-/**
-  * @}
-  */
 
-/*******END OF FILE****/
 
-                                                                                                                                                                                
