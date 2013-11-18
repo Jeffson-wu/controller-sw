@@ -30,6 +30,7 @@ SOURCES = \
     ads1148.c \
     sequencer.c \
 	cooleandlidtask.c \
+	pid.c \
     arch/startup.S \
     arch/system_stm32f10x.c \
     arch/core_cm3.c \
