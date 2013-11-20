@@ -501,12 +501,17 @@ ExtiGpioTypeDef ExtiGpio = Heater1;
     {
     //ADS_Handler();
     }
+	if(GPIO_ReadInputDataBit(GPIOC,gpio_EXTI_CNF[Heater4].PINSOURCE) == Bit_RESET)
+  	{
+    	HeaterEventHandler(Heater4);
+	}
     EXTI_ClearITPendingBit(ADS_EXTI_LINE);
   }
+      
 #endif
-  for(i=0; i<nExtiGpio; i++)
-  {
-    if(SET == EXTI_GetFlagStatus(gpio_EXTI_CNF[i].EXTI_LINE))
+  while(ExtiGpio < nExtiGpio) /*Always starts at HEater1 since */
+  	{
+	if (SET == EXTI_GetFlagStatus(gpio_EXTI_CNF[ExtiGpio].EXTI_LINE))
     {
 	  HeaterEventHandler(ExtiGpio);
  	  EXTI_ClearITPendingBit(gpio_EXTI_CNF[ExtiGpio].EXTI_LINE);
