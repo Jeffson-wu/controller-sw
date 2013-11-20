@@ -28,6 +28,7 @@ const char *  signals_txt[] = {
   "WRITE_MODBUS_REGS_RES",
   "TIMER_EXPIRED",
   "START_TUBE_SEQ",
+  "NEXT_TUBE_STATE",
   "READ_MODBUS_REGS",
   "READ_MODBUS_REGS_RES",
   "START_TUBE",
@@ -88,7 +89,7 @@ const char *  signals_txt[] = {
  char buf[50]; /*buffer for debug printf*/
 
 /* Private variables ---------------------------------------------------------*/
-#if 1 
+ 
 typedef enum
 {
 TUBE_INIT,
@@ -110,49 +111,10 @@ typedef struct
 TubeStates state;
 uint16_t LoopStart;
 uint16_t LoopIterations;
-int TubeSeqNum;
+int SeqIdx;
 }Tubeloop_t;
 
-#else
 
-// Now in one and only one .c file, redefine the ENUM macros and reinclude
-//  the numbers.h file to build a string table
-#undef ENUM_BEGIN
-#undef ENUM
-#undef ENUM_END
-#define ENUM_BEGIN(typ) const char * typ ## _name_table [] = {
-#define ENUM(nam) #nam
-#define ENUM_END(typ) };
-#undef NUMBERS_H_INCLUDED   // whatever you need to do to enable reinclusion
-#include "numbers.h"
-#endif
-
-
-#if 0
-
-
-// Now you can do exactly what you want to do, with no retyping, and for any
-//  number of enumerated types defined with the ENUM macro family
-//  Your code follows;
-char num_str[10];
-int process_numbers_str(Numbers num) {
-  switch(num) {
-    case ONE:
-    case TWO:
-    case THREE:
-    {
-      strcpy(num_str, Numbers_name_table[num]); // eg TWO -> "TWO"
-    } break;
-    default:
-      return 0; //no match
-  return 1;
-}
-
-// Sweet no ? After being frustrated by this for years, I finally came up
-//  with this solution for my most recent project and plan to reuse the idea
-//  forever
-
-#endif
 
 typedef enum
 {
@@ -180,7 +142,7 @@ typedef struct
 {
 uint16_t temp; /*Settemp in 0.1 degrees*/
 uint16_t time; /*time in secs*/
-TubestateTypeDef stage;    /*Current stage:[M]elting(1), [A]nnealing(2), [E]xtension(3) or [I]ncubation(4) */
+TubestateTypeDef state;    /*Current stage:[M]elting(1), [A]nnealing(2), [E]xtension(3) or [I]ncubation(4) */
 }stateCmdTypeDef;
 
 
@@ -220,6 +182,41 @@ gpio_extint_t gpio_EXTI_CNF[nExtiGpio+1]={
 {GPIO_PinSource2 ,GPIO_PortSourceGPIOD,EXTI_Line2, EXTI2_IRQn},/*Heater7*/
 {GPIO_PinSource13,GPIO_PortSourceGPIOC,EXTI_Line13,EXTI15_10_IRQn},/*Heater8*/
 {0xFF,0,EXTI0_IRQn}};/*Termination*/
+
+stateCmdTypeDef TubeSeq[nTubes][5]={{{500,10000,Melting},{0,3,LoopStart},{950,5000,Annealing},{0,0,LoopEnd},{0,0,End}},
+                                	{{500, 9000,Melting},{0,12,LoopStart},{940,200,Annealing},{0,0,LoopEnd},{0,0,End}},
+                                 	{{500, 9000,Melting},{0,12,LoopStart},{940,200,Annealing},{0,0,LoopEnd},{0,0,End}},
+                                    {{500, 9000,Melting},{0,12,LoopStart},{940,200,Annealing},{0,0,LoopEnd},{0,0,End}},
+                                    {{500, 9000,Melting},{0,12,LoopStart},{940,200,Annealing},{0,0,LoopEnd},{0,0,End}},
+                                	{{500, 9000,Melting},{0,12,LoopStart},{940,200,Annealing},{0,0,LoopEnd},{0,0,End}},
+                                 	{{500, 9000,Melting},{0,12,LoopStart},{940,200,Annealing},{0,0,LoopEnd},{0,0,End}},
+                                    {{500, 9000,Melting},{0,12,LoopStart},{940,200,Annealing},{0,0,LoopEnd},{0,0,End}},
+                                    {{500, 9000,Melting},{0,12,LoopStart},{940,200,Annealing},{0,0,LoopEnd},{0,0,End}},
+                                    {{500, 9000,Melting},{0,12,LoopStart},{940,200,Annealing},{0,0,LoopEnd},{0,0,End}},
+                                    {{500, 9000,Melting},{0,12,LoopStart},{940,200,Annealing},{0,0,LoopEnd},{0,0,End}},
+                                    {{500, 9000,Melting},{0,12,LoopStart},{940,200,Annealing},{0,0,LoopEnd},{0,0,End}},
+                                    {{500, 9000,Melting},{0,12,LoopStart},{940,200,Annealing},{0,0,LoopEnd},{0,0,End}},
+                                    {{500, 9000,Melting},{0,12,LoopStart},{940,200,Annealing},{0,0,LoopEnd},{0,0,End}},
+                                    {{500, 9000,Melting},{0,12,LoopStart},{940,200,Annealing},{0,0,LoopEnd},{0,0,End}},
+                                    {{500, 8000,Melting},{0,2,LoopStart},{930,3000,Annealing},{0,0,LoopEnd},{0,0,End}}};
+
+Tubeloop_t Tube[nTubes]= {{TUBE_IDLE,0,0,0},
+	                      {TUBE_IDLE,0,0,0},
+                          {TUBE_IDLE,0,0,0},
+                          {TUBE_IDLE,0,0,0},
+                          {TUBE_IDLE,0,0,0},
+                          {TUBE_IDLE,0,0,0},
+                          {TUBE_IDLE,0,0,0},
+                          {TUBE_IDLE,0,0,0},
+                          {TUBE_IDLE,0,0,0},
+                          {TUBE_IDLE,0,0,0},
+                          {TUBE_IDLE,0,0,0},
+                          {TUBE_IDLE,0,0,0},
+                          {TUBE_IDLE,0,0,0},
+                          {TUBE_IDLE,0,0,0},
+                          {TUBE_IDLE,0,0,0},
+                          {TUBE_IDLE,0,0,0}};
+
 
 
 extern xQueueHandle ModbusQueueHandle;
@@ -391,7 +388,7 @@ else
 	memcpy(p->data, data, datasize);
 	p->datasize=datasize;
 	xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
-    DEBUG_IF_PRINTF("Tube[%d] MODBUS WRITE_REG[SET_TUBE_TEMP]Temp[%d]",tube,*data);
+    DEBUG_IF_PRINTF("Tube[%d] MODBUS WRITE_REG[SET_TUBE_TEMP]Temp[%d°C]",tube,*data);
 }
 
 #endif
@@ -521,7 +518,64 @@ ExtiGpioTypeDef ExtiGpio = Heater1;
   }
 }
 
+void TubeStateHandler(long TubeId,xMessage *msg)
+{
 
+  xMessage *new_msg;
+  long *p;
+  stateCmdTypeDef *TSeq = &TubeSeq[TubeId][Tube[TubeId].SeqIdx];
+  Tubeloop_t *T = &Tube[TubeId];
+
+  switch (TSeq->state)
+  {
+  case LoopStart:/*{3,0,LoopStart}*/
+    T->LoopStart = T->SeqIdx+1;/*Loop from next entry*/
+    T->LoopIterations = TSeq->time;
+	DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s] *** LOOPSTART @StarID[%d] Iterations[%d] ***",TubeId,tube_states[T->state],signals_txt[msg->ucMessageID],T->SeqIdx,T->LoopIterations);
+    T->SeqIdx++; /*Going to next sequence*/
+    new_msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
+    new_msg->ucMessageID=NEXT_TUBE_STATE;
+    p=(long *)new_msg->ucData;
+    *p=TubeId;
+    assert_param(pdPASS == xQueueSend(TubeSequencerQueueHandle, &new_msg, portMAX_DELAY));
+  break;
+  case LoopEnd: 
+	T->LoopIterations--;
+    if(T->LoopIterations > 0) /*Finished looping ?*/
+    {
+      T->SeqIdx=T->LoopStart; /*Jump back to start of loop*/
+      DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s]*** LOOP @Iterations left[%d]",TubeId,tube_states[T->state],signals_txt[msg->ucMessageID],T->LoopIterations);
+    }else
+    {
+  	  T->SeqIdx++;/*Finished looping go to next sequence*/
+  	  DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s]***LOOP END***",TubeId,tube_states[T->state],signals_txt[msg->ucMessageID]);
+    }
+    new_msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
+    new_msg->ucMessageID=NEXT_TUBE_STATE;
+    p=(long *)new_msg->ucData;
+    *p=TubeId;
+    xQueueSend(TubeSequencerQueueHandle, &new_msg, portMAX_DELAY);
+  break;
+  case End:
+	T->state = TUBE_IDLE;
+	DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s] END OF SEQUENCE FOR TUBE",TubeId,tube_states[T->state],signals_txt[msg->ucMessageID]);
+    WriteTubeHeaterReg(TubeId,SET_TUBE_IDLE,&TSeq->temp,sizeof(TSeq->temp));
+	T->SeqIdx = 0;
+  break;
+  case Melting:
+  case Annealing:
+  case Extension:
+  case Incubation:
+    DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s] Seq Active set new temp %d.%02dC",TubeId,tube_states[T->state],signals_txt[msg->ucMessageID],TSeq->temp/10,TSeq->temp%10);/*ASCII 155 norm 167*/
+	WriteTubeHeaterReg(TubeId,SET_TUBE_TEMP,&TSeq->temp,sizeof(TSeq->temp));
+	T->state = TUBE_WAIT_TEMP;
+  break;
+  default:
+  break;
+}
+
+
+}
 
 
 void TubeSequencerTask( void * pvParameter)
@@ -530,12 +584,8 @@ short usData;
 xMessage *msg,*new_msg;
 long TimerId,TubeId;
 signed portBASE_TYPE xEntryTimeSet = pdFALSE;
-stateCmdTypeDef TubeSeq[nTubes][5]={{{50,10000,Melting},{0,3,LoopStart},{95,5000,Annealing},{0,0,LoopEnd},{0,0,End}},
- 	                                 {{50,10000,Melting},{0,3,LoopStart},{95,5000,Annealing},{0,0,LoopEnd},{0,0,End}}};
 long *p;
 WriteModbusRegsReq *preg;
-Tubeloop_t Tube[nTubes]= {TUBE_NOT_INITIALIZED};
-//int TubeSeqNum = 0;
 
 InitTubeTimers();
 
@@ -545,55 +595,22 @@ while(1)
   if( xQueueReceive( TubeSequencerQueueHandle, &msg, portMAX_DELAY) == pdPASS )
   {
 	//DEBUG_PRINTF("@Tube[%d] TubeSeq[%s]State[%s]",TubeId,signals_txt[msg->ucMessageID],tube_states[Tube[TubeId].state]);
-
 	switch(msg->ucMessageID)
 	{
-    case START_TUBE_SEQ:
+	case START_TUBE_SEQ:
+		TubeId = *((long *)(msg->ucData));
+		if((Tube[TubeId].state == TUBE_IDLE) && (Tube[TubeId].SeqIdx==0))
+		{
+		  TubeStateHandler(TubeId,msg);
+		}else
+		{
+	      DEBUG_PRINTF("Tube[%d]@%s FAILED TO START TUBE SEQUENCE ",TubeId,tube_states[Tube[TubeId].state]);
+		}
+	break;
+    case NEXT_TUBE_STATE:
       TubeId = *((long *)(msg->ucData));
+	  TubeStateHandler(TubeId,msg);
 	  //DEBUG_PRINTF("-->Tube[%d]@%s TubeSeq[%s]",TubeId,tube_states[Tube[TubeId].state],signals_txt[msg->ucMessageID]);
-	  if(TubeSeq[TubeId][Tube[TubeId].TubeSeqNum].stage == LoopStart)/*{3,0,LoopStart}*/
-	  {
-	    Tube[TubeId].LoopStart = Tube[TubeId].TubeSeqNum+1;/*Loop from next entry*/
-        Tube[TubeId].LoopIterations = TubeSeq[TubeId][Tube[TubeId].TubeSeqNum].time;
-		DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s] *** LOOPSTART @StarID[%d] Iterations[%d] ***",TubeId,tube_states[Tube[TubeId].state],signals_txt[msg->ucMessageID],Tube[TubeId].TubeSeqNum,Tube[TubeId].LoopIterations);
-	    Tube[TubeId].TubeSeqNum++; /*Going to next sequence*/
-        new_msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
-        new_msg->ucMessageID=START_TUBE_SEQ;
-        p=(long *)new_msg->ucData;
-        *p=TubeId;
-        assert_param(pdPASS == xQueueSend(TubeSequencerQueueHandle, &send_msg, portMAX_DELAY));
-
-		
-	}else if(TubeSeq[TubeId][Tube[TubeId].TubeSeqNum].stage == LoopEnd)/*{3,0,LoopStart}*/
-	{
-		Tube[TubeId].LoopIterations--;
-
-	  if(Tube[TubeId].LoopIterations > 0) /*Finished looping ?*/
-	  {
-	    Tube[TubeId].TubeSeqNum=Tube[TubeId].LoopStart; /*Jump back to start of loop*/
-		DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s]*** LOOP @Iterations left[%d] ***",TubeId,tube_states[Tube[TubeId].state],signals_txt[msg->ucMessageID],Tube[TubeId].LoopIterations);
-	  }else
-	  {
-		  Tube[TubeId].TubeSeqNum++;/*Finished looping go to next sequence*/
-		  DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s]***LOOP END***",TubeId,tube_states[Tube[TubeId].state],signals_txt[msg->ucMessageID]);
-	  }
-	  new_msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
-	  new_msg->ucMessageID=START_TUBE_SEQ;
-	  p=(long *)send_msg->ucData;
-	  *p=TubeId;
-	  xQueueSend(TubeSequencerQueueHandle, &new_msg, portMAX_DELAY);
-	  }else if(TubeSeq[TubeId][Tube[TubeId].TubeSeqNum].stage == End)
-	  {
-		Tube[TubeId].state = TUBE_IDLE;
-		DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s] END OF SEQUENCE FOR TUBE",TubeId,tube_states[Tube[TubeId].state],signals_txt[msg->ucMessageID]);
-        WriteTubeHeaterReg(TubeId,SET_TUBE_IDLE,&TubeSeq[TubeId][Tube[TubeId].TubeSeqNum].temp,sizeof(TubeSeq[TubeId][Tube[TubeId].TubeSeqNum].temp));
-		Tube[TubeId].TubeSeqNum = 0;
-	  } else if(TubeSeq[TubeId][Tube[TubeId].TubeSeqNum].stage == Melting||Annealing||Extension||Incubation)
-	  {
- 	    DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s] Seq Active set new temp %d",TubeId,tube_states[Tube[TubeId].state],signals_txt[msg->ucMessageID],TubeSeq[TubeId][Tube[TubeId].TubeSeqNum].temp);
-		WriteTubeHeaterReg(TubeId,SET_TUBE_TEMP,&TubeSeq[TubeId][Tube[TubeId].TubeSeqNum].temp,sizeof(TubeSeq[TubeId][Tube[TubeId].TubeSeqNum].temp));
-		Tube[TubeId].state = TUBE_WAIT_TEMP;
-	  }
  	break;
 	case READ_MODBUS_REGS_RES:
 		preg=(WriteModbusRegsReq *)msg->ucData;
@@ -601,28 +618,28 @@ while(1)
         /*reg = p->addr;*/
 	  if(Tube[TubeId].state == TUBE_WAIT_TEMP) /*The heater has signalled an IRQ and here the status of the tube is read*/
 	  {
-	    DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s] TEMP reached start timer %d",TubeId,tube_states[Tube[TubeId].state],signals_txt[msg->ucMessageID],TubeSeq[TubeId][Tube[TubeId].TubeSeqNum].time/1000);
- 	    StartTubeTimer(TubeId,TubeSeq[TubeId][Tube[TubeId].TubeSeqNum].time);
+	    DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s] TEMP reached start timer %d.%02d Sec",TubeId,tube_states[Tube[TubeId].state],signals_txt[msg->ucMessageID],TubeSeq[TubeId][Tube[TubeId].SeqIdx].time/1000,TubeSeq[TubeId][Tube[TubeId].SeqIdx].time%1000);
+ 	    StartTubeTimer(TubeId,TubeSeq[TubeId][Tube[TubeId].SeqIdx].time);
 	    Tube[TubeId].state = TUBE_WAIT_TIME;
 	  }
 	break;
 	case TIMER_EXPIRED:                       /*Waiting time for tube ended*/
 	  TubeId = *((long *)(msg->ucData));
 	  DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s]",TubeId,tube_states[Tube[TubeId].state],signals_txt[msg->ucMessageID]);
-	  Tube[TubeId].TubeSeqNum++; /*Going to next sequence*/
+	  Tube[TubeId].SeqIdx++; /*Going to next sequence*/
 	  new_msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
-	  new_msg->ucMessageID=START_TUBE_SEQ;
+	  new_msg->ucMessageID=NEXT_TUBE_STATE;
 	  p=(long *)new_msg->ucData;
 	  *p=TubeId;
 	//  DEBUG_PRINTF("@Tube[%d] TIMER_EXPIRED ",TubeId);
-	  xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
+	  xQueueSend(TubeSequencerQueueHandle, &new_msg, portMAX_DELAY);
 	break;
     case WRITE_MODBUS_REGS_RES:
       TubeId = *((long *)(msg->ucData));
 	  DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s]",TubeId,tube_states[Tube[TubeId].state],signals_txt[msg->ucMessageID]);
 	break;
 	default:
-	  DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s]State[%s]",0xFF,tube_states[Tube[0].state],signals_txt[msg->ucMessageID]);
+	  DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s]State[%s] ***UNHANDLED STATE***",0xFF,tube_states[Tube[0].state],signals_txt[msg->ucMessageID]);
 	break;
 	};
 	/*dealloc the msg*/

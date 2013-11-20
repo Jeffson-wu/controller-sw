@@ -13,6 +13,14 @@
 
 
 
+// The macros are defined in a more fundamental .h file (say defs.h);
+#define ENUM_BEGIN(typ) enum {
+#define ENUM(nam) nam
+#define ENUM_END(typ) }typ;
+
+
+
+
 extern void Heater_PinConfig(void);
 extern void heaterIrqInit(void);
 

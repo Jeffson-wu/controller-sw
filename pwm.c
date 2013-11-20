@@ -115,12 +115,12 @@ void PWM_Init(uint32_t TIM3_pwm_freq, uint32_t TIM4_pwm_freq)
   /* TIM4 counter enable */
   TIM_Cmd(TIM4, ENABLE);
 
-
+/*Only needed for TIMER  1, 8, 15, 16 or 17  as they have the break and dead-time module on the output */
   /* TIM3 Main Output Enable */
-  TIM_CtrlPWMOutputs(TIM3, ENABLE);
+  //TIM_CtrlPWMOutputs(TIM3, ENABLE);
 
   /* TIM4 Main Output Enable */
-  TIM_CtrlPWMOutputs(TIM4, ENABLE);
+  //TIM_CtrlPWMOutputs(TIM4, ENABLE);
 }
 
 
