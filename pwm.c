@@ -139,11 +139,12 @@ void PWM_Set(uint16_t pwm_width,PWMPort_t pwm_port)
 /*    Compute CCRx value to generate a duty cycle at pwm_width%  for channel x 
        The Timer pulse is calculated as follows:
 	- ChannelxPulse = DutyCycle * (TIM1_Period - 1) / 100
+  - ChannelxPulse = DutyCycle * (TIM1_Period - 1) / 32768
 */
   switch (pwm_port)
   {
     case TopHeaterCtrlPWM:
-	  ChannelPulse = (uint16_t) (((uint32_t) pwm_width * (TimerPeriod_TIM4 - 1)) / 100);
+	  ChannelPulse = (uint16_t) (((uint32_t) pwm_width * (TimerPeriod_TIM4 - 1)) / 32768);
       TIM_SetCompare3(TIM4,ChannelPulse);
     break;
     case FANctrlPWM:
@@ -151,15 +152,15 @@ void PWM_Set(uint16_t pwm_width,PWMPort_t pwm_port)
       TIM_SetCompare4(TIM4,ChannelPulse);
     break;
     case PeltierCtrlPWM1:
-      ChannelPulse = (uint16_t) (((uint32_t) pwm_width * (TimerPeriod_TIM3 - 1)) / 100);
+      ChannelPulse = (uint16_t) (((uint32_t) pwm_width * (TimerPeriod_TIM3 - 1)) / 32768);
       TIM_SetCompare1(TIM3,ChannelPulse);
     break;
     case PeltierCtrlPWM2:
- 	  ChannelPulse = (uint16_t) (((uint32_t) pwm_width * (TimerPeriod_TIM3 - 1)) / 100);
+ 	  ChannelPulse = (uint16_t) (((uint32_t) pwm_width * (TimerPeriod_TIM3 - 1)) / 32768);
 	  TIM_SetCompare2(TIM3,ChannelPulse);
     break;
     case PeltierCtrlPWM3:
-      ChannelPulse = (uint16_t) (((uint32_t) pwm_width * (TimerPeriod_TIM3 - 1)) / 100);
+      ChannelPulse = (uint16_t) (((uint32_t) pwm_width * (TimerPeriod_TIM3 - 1)) / 32768);
 	  TIM_SetCompare3(TIM3,ChannelPulse);
     break;	
     default:

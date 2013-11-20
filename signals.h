@@ -15,6 +15,12 @@ enum
   READ_MODBUS_REGS_RES,
   START_TUBE,
   DATA_FROM_TUBE,
+  SET_FAN,
+  SET_FAN_RES,
+  SET_COOLE_TEMP,
+  SET_COOLE_TEMP_RES,
+  SET_LID_TEMP,
+  SET_LID_TEMP_RES,
   LAST_MSG
 };
 
@@ -50,6 +56,11 @@ typedef struct
   u16 datasize;
   xQueueHandle reply; 
 }ReadModbusRegsReq;
+
+typedef struct
+{
+  s16 value;
+} SetCooleAndLidReq;
 
 typedef struct
 {

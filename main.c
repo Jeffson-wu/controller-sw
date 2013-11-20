@@ -37,8 +37,12 @@
 #include "cooleandlidtask.h"
 #define QUEUESIZE 10
 
+//#define GDI_ON_USART3
+//also in gdi.c
+
 extern xQueueHandle ModbusQueueHandle;
 xQueueHandle TubeSequencerQueueHandle;
+extern xQueueHandle CooleAndLidQueueHandle;
 
 xSemaphoreHandle xSemaphore = NULL;
 
@@ -216,7 +220,8 @@ void HW_Init(void)
   GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
   GPIO_Init(GPIOD, &GPIO_InitStructure);
   GPIO_ResetBits(GPIOD,GPIO_Pin_4);
-#if 0
+
+#ifdef GDI_ON_USART3
   /* Configure USART3 for GDI (debug) interface */
   RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
   RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART3, ENABLE);
@@ -230,21 +235,20 @@ void HW_Init(void)
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
   GPIO_Init(GPIOB, &GPIO_InitStructure);
 #else
-/* Configure USART1 for GDI (debug) interface */
-RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA, ENABLE);
-RCC_APB2PeriphClockCmd(RCC_APB2Periph_USART1, ENABLE);
+  /* Configure USART1 for GDI (debug) interface */
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA, ENABLE);
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_USART1, ENABLE);
 
-GPIO_InitStructure.GPIO_Pin = GPIO_Pin_9;
-GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
-GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-GPIO_Init(GPIOA, &GPIO_InitStructure);
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_9;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_Init(GPIOA, &GPIO_InitStructure);
 
-GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10;
-GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
-GPIO_Init(GPIOA, &GPIO_InitStructure);
-
-
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
+  GPIO_Init(GPIOA, &GPIO_InitStructure);
 #endif
+
   /* TIM Configuration */
   PWM_PinConfig();
 }
@@ -296,6 +300,7 @@ int main(void)
   xTaskHandle gdiCreatedTask;
   xTaskHandle systemtestCreatedTask;
   xTaskHandle pvCooleAndLidTask;
+
   long *p;
   long TubeId;
   xMessage *msg;
@@ -303,29 +308,33 @@ int main(void)
   set_clock();
 
   HW_Init();
-  PWM_Init(500000,250000);
-  UART_Init(USART1);/*GDI init*/
+  PWM_Init(1500,1500);
+#ifdef GDI_ON_USART3
+  UART_Init(USART3);
+#else
+  UART_Init(USART1);
+#endif
   Modbus_init(USART2);
-  PWM_Set(50,TopHeaterCtrlPWM);
+  PWM_Set(32767,TopHeaterCtrlPWM);
   PWM_Set(50,FANctrlPWM);
-  PWM_Set(50,PeltierCtrlPWM1);
-  PWM_Set(70,PeltierCtrlPWM2);
-  PWM_Set(50,PeltierCtrlPWM3);
+  PWM_Set(32767,PeltierCtrlPWM1);
+  PWM_Set(32767,PeltierCtrlPWM2);
+  PWM_Set(32767,PeltierCtrlPWM3);
   ConfigOSTimer();
 
   //HeartBeatLEDTimer();
   xSemaphore = xSemaphoreCreateMutex();
   /*create queue*/
   ModbusQueueHandle=xQueueCreate( QUEUESIZE, ( unsigned portBASE_TYPE ) sizeof( void * ) );
-  TubeSequencerQueueHandle=xQueueCreate( 50, ( unsigned portBASE_TYPE ) sizeof( void * ) );
-
+  CooleAndLidQueueHandle=xQueueCreate( QUEUESIZE, ( unsigned portBASE_TYPE ) sizeof( void * ) );
+  heaterIrqInit();
   result=xTaskCreate( ModbusTask, ( const signed char * ) "Modbus task", ( unsigned short ) 200, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &modbusCreatedTask );
   result=xTaskCreate( AppTask, ( const signed char * ) "App task", ( unsigned short ) 100, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvCreatedTask );
-  result=xTaskCreate( CooleAndLidTask, (const signed char *) "CooleAndLid task", 100, NULL, ( (unsigned portBASE_TYPE) 3 ) | portPRIVILEGE_BIT, &pvCooleAndLidTask );
   result=xTaskCreate( gdi_task, ( const signed char * ) "Debug task", ( unsigned short ) 200, NULL, ( ( unsigned portBASE_TYPE ) 1 ) | portPRIVILEGE_BIT, &gdiCreatedTask );
-  result=xTaskCreate( TubeSequencerTask, ( const signed char * ) "TubeSeq task", ( unsigned short ) 800, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvCreatedTask );
-
-
+#ifndef GDI_ON_USART3
+  result=xTaskCreate( CooleAndLidTask, (const signed char *) "CooleAndLid task", 200, NULL, ( (unsigned portBASE_TYPE) 13 ) | portPRIVILEGE_BIT, &pvCooleAndLidTask );
+#endif
+  result=xTaskCreate( TubeSequencerTask, ( const signed char * ) "TubeSeq task", ( unsigned short ) 200, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvCreatedTask );
   for(i=0;i<16;i++)
   {
     TubeId = i;
@@ -344,8 +353,6 @@ int main(void)
 
 
   vTaskStartScheduler();
-
-  
   return 0;
 }
 

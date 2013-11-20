@@ -25,10 +25,20 @@
 #include "semphr.h"
 #include "signals.h"
 
+//#define GDI_ON_USART3
+//also in main.c
+
 #define CHAR_ENTER 13
 #define CHAR_BACKSPACE '\b'
 char *command_prefix = "at@gdi:";
+
+extern xQueueHandle CooleAndLidQueueHandle;
+
+#ifdef GDI_ON_USART3
+USART_TypeDef *uart = USART3;
+#else
 USART_TypeDef *uart = USART1;
+#endif
 u32 test_variable= 9876543;
 
 
@@ -47,6 +57,7 @@ enum gdi_func_type
 	at,	
 	help,
 	print,
+	cooleandlid,
 	test_func,
 	modbus_read_regs,
 	modbus_write_regs,
@@ -64,7 +75,7 @@ enum gdi_newline_type
 
 typedef struct 
 {
-    	char *command_name; 
+  char *command_name; 
 	char *func_info;
 	char *func_format;
 	u8 command_index;	
@@ -73,7 +84,8 @@ typedef struct
 gdi_func_table_type gdi_func_info_table[] =
 {    
 	{"help", " Help command", "at@gdi:help()",help},		
-	{"print", " Print the debug variable values", "at@gdi:print()",print },
+  {"print", " Print the debug variable values", "at@gdi:print()",print },
+  {"cooleandlid", " Set air cooler and lid temperatures and fan speed", "at@gdi:cooleandlid(idx, setpoint)",cooleandlid },
 	{"test_func", " Test function call", "at@gdi:test_func(parameter1,parameter2)",test_func},		
 	{"modbus_read_regs", " Read register values", "at@gdi:modbus_read_regs(slave,addr,datasize)",modbus_read_regs},
 	{"modbus_write_regs", " Write register values", "at@gdi:modbus_write_regs(slave,addr,[data1,data2,..],datasize)",modbus_write_regs},
@@ -376,7 +388,30 @@ void gdi_map_to_functions()
 			gdi_print_number(test_variable,newline_both);
 			gdi_send_data_response("OK", newline_end);
 			break;	
-
+    case cooleandlid:     
+      {
+        s16 setpoint;
+        u8  fn_idx;
+        xMessage *msg;
+        SetCooleAndLidReq *p;
+        msg = pvPortMalloc(sizeof(xMessage)+sizeof(SetCooleAndLidReq)+20);
+				fn_idx   = (u8)  atoi(*(gdi_req_func_info.parameters + 0));
+				setpoint = (s16) atoi(*(gdi_req_func_info.parameters + 1));
+        if(3 > fn_idx) {
+          msg->ucMessageID = SET_COOLE_TEMP;
+        } else if(3 == fn_idx) {
+          msg->ucMessageID = SET_LID_TEMP;
+        } else if(4 == fn_idx) {
+          msg->ucMessageID = SET_FAN;
+        } else {
+        
+        }
+        p = (SetCooleAndLidReq *)msg->ucData;
+        p->value = setpoint;
+        xQueueSend(CooleAndLidQueueHandle, &msg, portMAX_DELAY);
+      }
+			gdi_send_data_response("OK", newline_end);
+      break;
 		case test_func :
 			retvalue = test_function(p);
 			gdi_send_data_response("Function return value is : ", newline_start);

@@ -75,7 +75,7 @@ const char *  signals_txt[] = {
 #define SET_TUBE_IDLE 0x02
 
 
-#define tube_status 0x12
+#define tube_status 0x1
 
 #define nTubes     16     /*Number of tubes to use*/
 #define NUM_TIMERS nTubes /*There should be 1 for each tube*/
@@ -311,7 +311,7 @@ while(p->PINSOURCE != 0xFF)
   EXTI_InitStructure.EXTI_Line = p->EXTI_LINE;
   EXTI_InitStructure.EXTI_LineCmd = ENABLE;
   EXTI_InitStructure.EXTI_Mode = EXTI_Mode_Interrupt;
-  EXTI_InitStructure.EXTI_Trigger = EXTI_Trigger_Falling;
+  EXTI_InitStructure.EXTI_Trigger = EXTI_Trigger_Rising;
 
   GPIO_EXTILineConfig(p->PORTSOURCE , p->PINSOURCE);
   EXTI_Init(&EXTI_InitStructure);
@@ -337,7 +337,7 @@ void ExtIrqDisable(ExtiGpioTypeDef heater)
   EXTI_InitStructure.EXTI_Line = gpio_EXTI_CNF[heater].EXTI_LINE;
   EXTI_InitStructure.EXTI_LineCmd = DISABLE;
   EXTI_InitStructure.EXTI_Mode = EXTI_Mode_Interrupt;
-  EXTI_InitStructure.EXTI_Trigger = EXTI_Trigger_Falling;
+  EXTI_InitStructure.EXTI_Trigger = EXTI_Trigger_Rising;
 
   EXTI_Init(&EXTI_InitStructure);
 }
@@ -351,7 +351,7 @@ void ExtIrqEnable(ExtiGpioTypeDef heater)
   EXTI_InitStructure.EXTI_Line = gpio_EXTI_CNF[heater].EXTI_LINE;
   EXTI_InitStructure.EXTI_LineCmd = ENABLE;
   EXTI_InitStructure.EXTI_Mode = EXTI_Mode_Interrupt;
-  EXTI_InitStructure.EXTI_Trigger = EXTI_Trigger_Falling;
+  EXTI_InitStructure.EXTI_Trigger = EXTI_Trigger_Rising;
 
   /* Clear any pending interrupts */
   EXTI_ClearITPendingBit(gpio_EXTI_CNF[heater].EXTI_LINE);
@@ -388,7 +388,7 @@ else
 	memcpy(p->data, data, datasize);
 	p->datasize=datasize;
 	xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
-    DEBUG_IF_PRINTF("Tube[%d] MODBUS WRITE_REG[SET_TUBE_TEMP]Temp[%d°C]",tube,*data);
+    DEBUG_IF_PRINTF("Tube[%d] MODBUS WRITE_REG[SET_TUBE_TEMP]Temp[%dï¿½C]",tube,*data);
 }
 
 #endif
@@ -398,7 +398,7 @@ else
 
 void ReadTubeHeaterReg(u8 tube, u16 reg, u16 datasize)
 {
-#if 0
+#if 1
 	{
     xMessage *msg;
     ReadModbusRegsReq *p;
@@ -408,6 +408,7 @@ void ReadTubeHeaterReg(u8 tube, u16 reg, u16 datasize)
     p->slave=tube;
     p->addr=reg;
     p->datasize=datasize;
+    p->reply=0;
     xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);
   }
 #else
@@ -474,7 +475,7 @@ HeaterEventHandler(ExtiGpioTypeDef Heater)
   switch (Heater)
   {
   case Heater1:
-    ReadTubeHeaterReg(tube1,tube_status,1);
+    ReadTubeHeaterReg(tube1,tube_status,2);
    // ReadTubeHeaterReg(tube2,tube_status,1);
   break;
   case Heater4:
@@ -500,16 +501,12 @@ ExtiGpioTypeDef ExtiGpio = Heater1;
     {
     //ADS_Handler();
     }
-    if(GPIO_ReadInputDataBit(GPIOC,gpio_EXTI_CNF[Heater4].PINSOURCE) == Bit_RESET)
-    {
-    HeaterEventHandler(Heater4);
-    }
     EXTI_ClearITPendingBit(ADS_EXTI_LINE);
   }
-  #endif
-  while(ExtiGpio < nExtiGpio)
+#endif
+  for(i=0; i<nExtiGpio; i++)
   {
-    if (SET == EXTI_GetFlagStatus(gpio_EXTI_CNF[ExtiGpio].EXTI_LINE))
+    if(SET == EXTI_GetFlagStatus(gpio_EXTI_CNF[i].EXTI_LINE))
     {
 	  HeaterEventHandler(ExtiGpio);
  	  EXTI_ClearITPendingBit(gpio_EXTI_CNF[ExtiGpio].EXTI_LINE);
@@ -685,6 +682,3 @@ void vTimerCallback( xTimerHandle pxTimer )
     xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
 
 }
-
-
-
