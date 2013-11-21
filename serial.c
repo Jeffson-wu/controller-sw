@@ -108,6 +108,7 @@ void UART_Init(USART_TypeDef *uart, void (*recvCallback)())
   receiveDataCB=recvCallback;
 
   USART_StructInit(&USART_InitStruct);
+  USART_InitStruct.USART_BaudRate=115200;
   USART_Init(uart, &USART_InitStruct);
   USART_Cmd(uart, ENABLE);
 
@@ -129,7 +130,7 @@ void UART2_Handler(void)
    {
      receiveDataCB();
    }
-   USART_ClearITPendingBit(USART2,0xFFFF);
+   USART_ClearITPendingBit(USART2,USART_IT_RXNE);
    portEND_SWITCHING_ISR( pdTRUE);
 }
 

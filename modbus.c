@@ -33,7 +33,7 @@
 #include "signals.h"
 #include "timers.h"
 
-#define MODBUS_SILENT_INTERVAL (40000/(19200/(8*4)))
+#define MODBUS_SILENT_INTERVAL (40000/(115200/(8*4)))
 #define MODBUS_TIMEOUT 100
 
 #define READ_HOLDINGS_REGISTERS 3
@@ -156,8 +156,6 @@ void waitForRespons(u8 *telegram, int *telegramSize)
   /*start timer*/
   xTimerReset( TimerHandle, 0 );
   NOFRecvChars=0;
-  recvBuffer=telegram;
-  recvBufferSize=*telegramSize;
 
   /*wait for mutex*/
   xSemaphoreTake( xSemaphore, portMAX_DELAY );
@@ -230,6 +228,8 @@ static u8 ModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer)
   telegram[5]=datasize & 0x00FF;
   crc = gen_crc16(&telegram[0], 6);
   memcpy(&(telegram[6]), &crc, (size_t)2);
+  recvBuffer=telegram;
+  recvBufferSize=telegramsize;
   UART_SendMsg(usedUart, telegram, 6+2);
   waitForRespons(telegram, &telegramsize);
   memcpy(buffer, telegram, datasize>telegramsize?telegramsize:datasize);
@@ -262,6 +262,8 @@ static bool ModbusWriteRegs(u8 slave, u16 addr, u8 *data, u16 datasize)
   memcpy(&telegram[7], data, datasize*2);
   crc = gen_crc16(&telegram[0], 7+datasize*2);
   memcpy(&(telegram[7+datasize*2]), &crc, 2);
+  recvBuffer=telegram;
+  recvBufferSize=telegramsize;
   UART_SendMsg(usedUart, telegram, 7+datasize*2+2);
   waitForRespons(telegram, &telegramsize);
   if(telegramsize==0)
@@ -294,6 +296,7 @@ void ModbusTask( void * pvParameters )
           if(p->reply)
           {
             msgout=pvPortMalloc(sizeof(xMessage)+sizeof(WriteModbusRegsRes));
+			msgout->ucMessageID=WRITE_MODBUS_REGS_RES;
             po=(WriteModbusRegsRes *)(msgout->ucData);
             po->slave=p->slave;
             po->datasize=p->datasize;
@@ -316,6 +319,7 @@ void ModbusTask( void * pvParameters )
           {
             msgout=pvPortMalloc(sizeof(xMessage)+sizeof(ReadModbusRegsRes)+p->datasize);
             po=(ReadModbusRegsRes *)(msgout->ucData);
+			msgout->ucMessageID=READ_MODBUS_REGS_RES;
             po->slave=p->slave;
             po->addr=p->addr;
             po->datasize=p->datasize;
