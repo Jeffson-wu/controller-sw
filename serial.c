@@ -40,7 +40,7 @@ void UART_SendMsg(USART_TypeDef *uart, u8 *buffer, int len)
      /*UART2 is used for RS485 communication*/
      DMA_InitTypeDef         DMA_InitStructure;
      NVIC_InitTypeDef NVIC_InitStructure;
-     len+=2;
+     len+=2;/*Delay to wait RS485 to settle*/
      GPIO_SetBits(GPIOD,GPIO_Pin_3);
      GPIO_SetBits(GPIOD,GPIO_Pin_4);
      if(len > 255)
@@ -108,7 +108,7 @@ void UART_Init(USART_TypeDef *uart, void (*recvCallback)())
   receiveDataCB=recvCallback;
 
   USART_StructInit(&USART_InitStruct);
-  USART_InitStruct.USART_BaudRate=115200;
+  USART_InitStruct.USART_BaudRate=115200;/*Remember to update frametimer in modbus.c -> MODBUS_SILENT_INTERVAL when changing baudrate*/
   USART_Init(uart, &USART_InitStruct);
   USART_Cmd(uart, ENABLE);
 
