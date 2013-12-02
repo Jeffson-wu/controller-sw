@@ -232,7 +232,7 @@ static u8 ModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer)
   recvBufferSize=telegramsize;
   UART_SendMsg(usedUart, telegram, 6+2);
   waitForRespons(telegram, &telegramsize);
-  memcpy(buffer, telegram, datasize>telegramsize?telegramsize:datasize);
+  memcpy(buffer, telegram, datasize*sizeof(u16)>telegramsize?telegramsize:datasize*sizeof(u16));
   if(telegramsize-5<=0)
   {
     return 0;
@@ -317,7 +317,7 @@ void ModbusTask( void * pvParameters )
           p=(ReadModbusRegsReq *)(msg->ucData);
           if(p->reply)
           {
-            msgout=pvPortMalloc(sizeof(xMessage)+sizeof(ReadModbusRegsRes)+p->datasize);
+            msgout=pvPortMalloc(sizeof(xMessage)+sizeof(ReadModbusRegsRes)+p->datasize*sizeof(u16));
             po=(ReadModbusRegsRes *)(msgout->ucData);
 			msgout->ucMessageID=READ_MODBUS_REGS_RES;
             po->slave=p->slave;

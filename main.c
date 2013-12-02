@@ -57,7 +57,8 @@ void TubeSequencerTask( void * pvParameter);
 static void AppTask( void * pvParameters )
 {
   {
-    xMessage *msg;
+#if 0
+	xMessage *msg;
     WriteModbusRegsReq *p;
     msg=pvPortMalloc(sizeof(xMessage)+sizeof(WriteModbusRegsReq)+20);
     msg->ucMessageID=WRITE_MODBUS_REGS;
@@ -81,6 +82,7 @@ static void AppTask( void * pvParameters )
     p->datasize=2;
     p->reply=0;
     xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);
+#endif
   }
   while(1)
   {
@@ -134,10 +136,10 @@ void set_clock()
   GPIO_Init(GPIOA, &GPIO_InitStructure);
   GPIO_SetBits(GPIOA,GPIO_Pin_8);
   
-  RCC_MCOConfig(RCC_MCO_SYSCLK);
+  //RCC_MCOConfig(RCC_MCO_SYSCLK);
   
-  RCC_GetClocksFreq(&CLOCKS);
-  CLOCKS.SYSCLK_Frequency;
+  //RCC_GetClocksFreq(&CLOCKS);
+  //CLOCKS.SYSCLK_Frequency;
 
 
 #if 0	/* Enable LSE (Low Speed External Oscillation) */
@@ -327,6 +329,8 @@ int main(void)
   /*create queue*/
   ModbusQueueHandle=xQueueCreate( QUEUESIZE, ( unsigned portBASE_TYPE ) sizeof( void * ) );
   CooleAndLidQueueHandle=xQueueCreate( QUEUESIZE, ( unsigned portBASE_TYPE ) sizeof( void * ) );
+  TubeSequencerQueueHandle=xQueueCreate( 50, ( unsigned portBASE_TYPE ) sizeof( void * ) );
+
   heaterIrqInit();
   result=xTaskCreate( ModbusTask, ( const signed char * ) "Modbus task", ( unsigned short ) 200, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &modbusCreatedTask );
   result=xTaskCreate( AppTask, ( const signed char * ) "App task", ( unsigned short ) 100, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvCreatedTask );
@@ -334,7 +338,8 @@ int main(void)
 #ifndef GDI_ON_USART3
   result=xTaskCreate( CooleAndLidTask, (const signed char *) "CooleAndLid task", 200, NULL, ( (unsigned portBASE_TYPE) 13 ) | portPRIVILEGE_BIT, &pvCooleAndLidTask );
 #endif
-  result=xTaskCreate( TubeSequencerTask, ( const signed char * ) "TubeSeq task", ( unsigned short ) 200, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvCreatedTask );
+  result=xTaskCreate( TubeSequencerTask, ( const signed char * ) "TubeSeq task", ( unsigned short ) 500, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvCreatedTask );
+#if 0
   for(i=0;i<16;i++)
   {
     TubeId = i;
@@ -344,6 +349,7 @@ int main(void)
     *p=TubeId;
     xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
   }
+#endif  
   TubeId = 0;
   msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
   msg->ucMessageID=START_TUBE_SEQ;
