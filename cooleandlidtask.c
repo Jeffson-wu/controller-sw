@@ -31,6 +31,7 @@
 #include "pwm.h"
 
 /*-----------------------------------------------------------*/
+#define DEBUG
 
 typedef enum {
   CTRL_OPEN_LOOP_STATE,
@@ -180,11 +181,22 @@ void CooleAndLidTask( void * pvParameters )
   assert_param(NULL != xADSSemaphore);
   xSemaphoreTake(xADSSemaphore, portMAX_DELAY); //Default is taken. ISR will give.
 
+#ifdef DEBUG
+  /* Debugging the feedback value */
+  gdi_send_msg_response("Hej\r\n");
+#endif
+
   adsSetIsrSemaphore(xADSSemaphore);
   /* Start convertion and let timeout handle subsequent calls to adsContiniueSequence */
-  ads1148Init();
-  adsStartSeq();
-  adsIrqEnable();
+  if(0 == ads1148Init())
+  {
+    adsStartSeq();
+    adsIrqEnable();
+  }
+  else
+  {
+    // #### Fatal error handling
+  }
   adsConfigConversionTimer(&adsTimerCallback);
   initPeltier(&peltierData[0], K_P*SCALING_FACTOR, K_I*SCALING_FACTOR, K_D*SCALING_FACTOR); 
   initPeltier(&peltierData[1], K_P*SCALING_FACTOR, K_I*SCALING_FACTOR, K_D*SCALING_FACTOR); 

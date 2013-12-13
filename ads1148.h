@@ -26,6 +26,8 @@
 
 /* BSC Burnout current, 0 = off */
 #define ADS_BCS 0
+/* BSC Burnout current, 1 => 0,5uA, 2 = 2uA, 3 => 10uA*/
+#define ADS_BCS_SENSOR_DETECT 3
 /* PGA gain is 2^ADS_PGA; E.g. ADS_PGA = 4 => x16 amplification */
 /* x16 used for 4w, and x32 for 3w (x32 => ADS_PGA = 5) */
 #define ADS_PGA 6
@@ -43,6 +45,7 @@
 #define ADS_CLKSTAT_EXTERNAL_OSC 1
 #define ADS_VREFCON 1
 #define ADS_REFSELT_REF0 0
+#define ADS_REFSELT_ONBOARD 2
 #define ADS_MUXCAL_NORMOP 0
 #define ADS_MUXCAL_OFFSET_MEASUREMENT 1
 #define ADS_MUXCAL_GAIN_MEASUREMENT 2
@@ -114,7 +117,7 @@
 /* Exported functions ------------------------------------------------------- */
 
 // Set up as we use it.
-extern void ads1148Init(void);
+extern int ads1148Init(void);
 // Get state of DRDY
 extern uint8_t adsGetDrdy(void);
 // Start conversion on one of the four channels

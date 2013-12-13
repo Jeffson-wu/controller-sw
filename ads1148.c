@@ -22,16 +22,23 @@
 #include "timers.h"
 #include "task.h"
 #include "ads1148.h"
-
+#ifdef DEBUG
+#include <stdio.h>
+#endif
 /* Private typedef -----------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
 /* Private macro -------------------------------------------------------------*/
 /* Private variables ---------------------------------------------------------*/
 static const uint8_t muxLookup[4] = {0x01, 0x13, 0x25, 0x37};
 static const uint8_t idacMuxLookup[4] = {0x01, 0x23, 0x45, 0x67};
+static const uint8_t nopbuf [4] = {0xFF, 0xFF, 0xFF, 0xFF}; // For RO operations write NOPs
 static uint8_t txbuf [4];
 static uint8_t rxbuf [4];
 __IO int16_t latestConv[4];
+
+#ifdef DEBUG
+char buf[50];
+#endif
 
 static xSemaphoreHandle ADSSemaphore = NULL;
 /* Private function prototypes -----------------------------------------------*/
@@ -57,7 +64,7 @@ void spiInit()
 
 // SPI1 Pin initialization
   /* SPI SCK, MOSI, MISO pin configuration */
-  GPIO_InitStructure.GPIO_Pin = ADS_MOSI_PIN | ADS_CLK_PIN | ADS_CS_PIN;
+  GPIO_InitStructure.GPIO_Pin = ADS_MOSI_PIN | ADS_CLK_PIN /*| ADS_CS_PIN*/;
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
   GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
   GPIO_Init(GPIOA, &GPIO_InitStructure);
@@ -121,7 +128,13 @@ void adsGPIOInit(void)
   GPIO_InitTypeDef  GPIO_InitStructure;
   
   /* Enable the GPIOB Clock */
-  RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB | RCC_APB2Periph_GPIOC, ENABLE);
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA | RCC_APB2Periph_GPIOB | RCC_APB2Periph_GPIOC, ENABLE);
+
+  /* Configure the ADS_CS pin */
+  GPIO_InitStructure.GPIO_Pin = ADS_CS_PIN;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_10MHz;
+  GPIO_Init(GPIOA, &GPIO_InitStructure);
 
   /* Configure the ADS_DRDY pin */
   GPIO_InitStructure.GPIO_Pin = ADS_DRDY_PIN;
@@ -250,49 +263,172 @@ void SSI_Delay(int n)
   }
 }
 
-/* Public functions ---------------------------------------------------------*/
-
 /* ---------------------------------------------------------------------------*/
-void ads1148Init(void)
+/* This function detects the presence of an ADS1148 by writhing an abitrary   */
+/* value to some register and then retrieving it again. If the same bit       */
+/* pattern is read back the ADS1148 is deemed present. If not an error event  */
+/* issued on the modbus and further initialization is skipped.                */
+
+// START needs to be high when this function is called
+int adsDetectHW(void)
 {
   uint8_t tx[3];
   uint8_t rx[3];
+  int ret = TRUE;
+
+  /* Switch on VREF */
+  tx[0] = ADS_WREG_Cmd | ADS_MUX1_Reg;
+  tx[1] = 0; // write 1 byte
+  tx[2] = ((ADS_CLKSTAT_INTERNAL_OSC << 7) | (ADS_VREFCON << 5) | (ADS_REFSELT_ONBOARD << 3) | ADS_MUXCAL_NORMOP );
+  spiReadWrite(rx, tx, 3);
+  
+  vTaskDelay(3); // Mockup uses 22uF => settel time 2 -3 ms
+
+  /* Write something in to a register on the ADS1148 */
+  tx[0] = ADS_WREG_Cmd | ADS_GPIOCFG_Reg;
+  tx[1] = 0; // write 1 byte
+  tx[2] = 0xA5;
+  spiReadWrite(rx, tx, 3);
+
+  /* Read back the written value from the ADS1148 */
+  tx[0] = ADS_RREG_Cmd | ADS_GPIOCFG_Reg;
+  tx[1] = 0; // read 1 byte
+  spiReadWrite(rx, tx, 2);
+  spiReadWrite(rx, nopbuf, 1);
+  
+  if (0xA5 != rx[0])
+  {
+    /* ADS failure means failure on both tubes */
+    ret = FALSE;
+#ifdef DEBUG
+    gdi_send_msg_response("ADS detect failure\r\n");
+#endif
+  }
+
+  /* Reset to analog input */
+  tx[0] = ADS_WREG_Cmd | ADS_GPIOCFG_Reg;
+  tx[1] = 0; // write 1 byte
+  tx[2] = 0;
+  spiReadWrite(rx, tx, 3);
+
+  return ret;
+}
+/* ---------------------------------------------------------------------------*/
+int adsDetectSensor(void)
+{
+#define FS 0x7F00  //32512
+  int i, j; // iterator
+  int16_t value;
+  uint8_t tx[6];
+  uint8_t rx[6];
+  int ret = TRUE;
+
+  /* Stop reading data continiously */
+  tx[0] = ADS_RDATA_Cmd;
+  spiReadWrite(rx, tx, 1);
+
+  tx[0] = ADS_WREG_Cmd | ADS_MUX0_Reg;
+  tx[1] = 3; // write 4 bytes: MUX0, VBIAS, MUX1, SYS0
+  /* MUX0  : Burnout current on 10uA  */
+  tx[2] = ( (ADS_BCS_SENSOR_DETECT << 6) | (muxLookup[0]) );
+  /* VBIAS : Vbias off */
+  tx[3] = 0;
+  /* MUX1  : Internal OSC, Internal reference always on, Onboard Vref for ADC, MUXCAL norm */
+  tx[4] = ((ADS_CLKSTAT_INTERNAL_OSC << 7) | (ADS_VREFCON << 5) | (ADS_REFSELT_ONBOARD << 3) | ADS_MUXCAL_NORMOP );
+  /* SYS0  : PGA Gain = 4 (010b = 2d), Data Output Rate = 2000SPS */
+  tx[5] = ( (2 << 4) | ADS_DOR );
+  spiReadWrite(rx, tx, 6);
+
+  vTaskDelay(3); // Mockup uses 22uF => settel time 2 - 3 ms for Vref
+
+  // for each channel
+  for(i = 0; i < 4; i++) {
+    // Set MUX
+    tx[0] = ADS_WREG_Cmd | ADS_MUX0_Reg;
+    tx[1] = 0; // write 1 byte
+    tx[2] = ( (ADS_BCS_SENSOR_DETECT << 6) | (muxLookup[i]) ); // Burnout current on 
+    //GPIO_SetBits(GPIOB, ADS_START_PIN);
+    spiReadWrite(rx, tx, 3);
+
+    while(adsGetDrdy() == Bit_SET) {} //await /DRDY
+    adsRead(&value);
+
+#ifdef DEBUG
+    sprintf(buf,"ADS sensor #%d detect: ADC val: 0x%08x", i, value);
+    gdi_send_msg_response(buf);
+#endif
+
+    if( (FS < value)/* open circuit */ /*|| (-FS > value) short circuit */) {
+      if(2 > i) {
+        //setStatusReg(INIT_HW_ERROR_TUBE1);
+      } else {
+        //setStatusReg(INIT_HW_ERROR_TUBE2);
+      }
+      ret = FALSE;
+    }
+  }
+}
+/* ---------------------------------------------------------------------------*/
+/* Public functions ----------------------------------------------------------*/
+/* ---------------------------------------------------------------------------*/
+
+int ads1148Init(void)
+{
+  uint8_t tx[3];
+  uint8_t rx[3];
+  int ret = 0;
+
   adsGPIOInit();
   GPIO_ResetBits(GPIOC, ADS_RESET_PIN);
   // Keep ADS1148 reset active for 1,1us minimun using internal osc. Spend waiting time initialasing SPI.
   spiInit();
   GPIO_SetBits(GPIOC, ADS_RESET_PIN);
-  
+  GPIO_ResetBits(GPIOA, ADS_CS_PIN); // Activate Chip Select pin
+
   // START needs to be high to enable all cmds
   // If START is deasserted only RDATA, RDATAC, SDATAC, WAKEUP and NOP can be issued.
   GPIO_SetBits(GPIOC, ADS_START_PIN);
 
-  /* Switch on VREF */
-  tx[0] = ADS_WREG_Cmd | ADS_MUX1_Reg;
-  tx[1] = 0; // write 1 byte
-  tx[2] = ((ADS_CLKSTAT_INTERNAL_OSC << 7) | (ADS_VREFCON << 5) | (ADS_REFSELT_REF0 << 3) | ADS_MUXCAL_NORMOP );
-  spiReadWrite(rx, tx, 3);
+  if(adsDetectHW())
+  {
+    adsDetectSensor();
 
-  // ######## 75Mhz / 6 cycles.
-  SSI_Delay(15000); // Mockup uses 22uF => settel time 2 -3 ms
+    /* Reset */
+    tx[0] = ADS_RESET_Cmd;
+    spiReadWrite(rx, tx, 1);
+    vTaskDelay(1);
+    
+    /* Switch on VREF */
+    tx[0] = ADS_WREG_Cmd | ADS_MUX1_Reg;
+    tx[1] = 0; // write 1 byte
+    tx[2] = ((ADS_CLKSTAT_INTERNAL_OSC << 7) | (ADS_VREFCON << 5) | (ADS_REFSELT_REF0 << 3) | ADS_MUXCAL_NORMOP );
+    spiReadWrite(rx, tx, 3);
 
-  /* MUX0 Defaults to ch 1 which is OK */
-  /* PGA Gain and Data Output Rate */
-  tx[0] = ADS_WREG_Cmd | ADS_SYS0_Reg;
-  tx[1] = 0; // write 1 byte
-  tx[2] = ( (ADS_PGA << 4) |(ADS_DOR) );
-  spiReadWrite(rx, tx, 3);
-  /* DOUT is only DOUT (DRDY is DRDY pin), IADC magnitude and IDAC routing */
-  tx[0] = ADS_WREG_Cmd | ADS_IDAC0_Reg;
-  tx[1] = 1; // write 2 byte
-  tx[2] = (ADS_IMAG) ;
-  tx[3] = ( idacMuxLookup[0] );
-  spiReadWrite(rx, tx, 4);
-  
-  /* Deassert START to stop free runing converting */
-  GPIO_ResetBits(GPIOC, ADS_START_PIN);
-  adsCalibrate();
-  adsIrqInit();
+    vTaskDelay(3); // Mockup uses 22uF => settel time 2 -3 ms
+
+    /* MUX0 Defaults to ch 1 which is OK */
+    /* PGA Gain and Data Output Rate */
+    tx[0] = ADS_WREG_Cmd | ADS_SYS0_Reg;
+    tx[1] = 0; // write 1 byte
+    tx[2] = ( (ADS_PGA << 4) |(ADS_DOR) );
+    spiReadWrite(rx, tx, 3);
+    /* DOUT is only DOUT (DRDY is DRDY pin), IADC magnitude and IDAC routing */
+    tx[0] = ADS_WREG_Cmd | ADS_IDAC0_Reg;
+    tx[1] = 1; // write 2 byte
+    tx[2] = (ADS_IMAG) ;
+    tx[3] = ( idacMuxLookup[0] );
+    spiReadWrite(rx, tx, 4);
+    
+    /* Deassert START to stop free runing converting */
+    GPIO_ResetBits(GPIOC, ADS_START_PIN);
+    adsCalibrate();
+    adsIrqInit();
+  }
+  else
+  {
+    ret = -1;
+  }
+  return ret;
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -344,6 +480,7 @@ void adsStepCalibrate(void)
   break;
   }
 }
+
 /* ---------------------------------------------------------------------------*/
 void adsReadCalib(uint32_t * offsetcal, uint32_t * fullscalecal)
 {
