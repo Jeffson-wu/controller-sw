@@ -45,6 +45,8 @@ xQueueHandle TubeSequencerQueueHandle;
 extern xQueueHandle CooleAndLidQueueHandle;
 
 xSemaphoreHandle xSemaphore = NULL;
+xTimerHandle yTimer[2];
+
 
 void ModbusTask( void * pvParameters );
 void CooleAndLidTask( void * pvParameters );
@@ -91,7 +93,7 @@ static void AppTask( void * pvParameters )
 }
 
 
-void HeartBeat_Pinconfig()
+void HeartBeat_ErrorLed_Pinconfig()
 {
 /*HeartBeatLED PC9 to test*/
 GPIO_InitTypeDef GPIO_InitStructure;
@@ -104,7 +106,34 @@ GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
 GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
 GPIO_Init(GPIOC, &GPIO_InitStructure);
 GPIO_SetBits(GPIOC,GPIO_Pin_9);
+#if 1
+/*ErrorLED PB11 to test*/
+/* Enable the GPIO_LED Clock */
+RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
+
+/* Configure the GPIO_LED pin */
+GPIO_InitStructure.GPIO_Pin = GPIO_Pin_11;
+GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+GPIO_Init(GPIOB, &GPIO_InitStructure);
+GPIO_ResetBits(GPIOB,GPIO_Pin_11);
+#endif
+/*ErrorLED PB0-1 to test*/
+/* Enable the GPIO_LED Clock */
+RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
+
+/* Configure the GPIO_LED pin */
+GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0 | GPIO_Pin_1;
+GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+GPIO_Init(GPIOB, &GPIO_InitStructure);
+GPIO_ResetBits(GPIOB,GPIO_Pin_0);/*RX LED*/
+GPIO_ResetBits(GPIOB,GPIO_Pin_1);/*TX LED*/
+
+
+
 }
+
 #if 1
 void set_clock()
 {
@@ -116,12 +145,19 @@ void set_clock()
   RCC_PLLCmd(DISABLE);
   RCC_PLL2Cmd(DISABLE);
   
-  /*Make system clock 72MHz expecting that oscillator is 25MHz ((((25MHz /5) * 9)/5)*8))*/
-
+  /*Make system clock 72MHz expecting that oscillator is 16MHz (Heater)((((16MHz /4) * 9)/4)*8))*/
+#ifndef STM32F10C_EVAL
   RCC_PLLConfig(RCC_PLLSource_PREDIV1,RCC_PLLMul_8);
-  RCC_PREDIV1Config(RCC_PREDIV1_Source_PLL2,RCC_PREDIV1_Div5);
+  RCC_PREDIV1Config(RCC_PREDIV1_Source_PLL2,RCC_PREDIV1_Div4);
   RCC_PLL2Config(RCC_PLL2Mul_9);
-  RCC_PREDIV2Config(RCC_PREDIV2_Div5);
+  RCC_PREDIV2Config(RCC_PREDIV2_Div4);
+#else
+/*Make system clock 72MHz expecting that oscillator is 25MHz (Eval board)((((25MHz /5) * 9)/5)*8))*/
+RCC_PLLConfig(RCC_PLLSource_PREDIV1,RCC_PLLMul_8);
+RCC_PREDIV1Config(RCC_PREDIV1_Source_PLL2,RCC_PREDIV1_Div5);
+RCC_PLL2Config(RCC_PLL2Mul_9);
+RCC_PREDIV2Config(RCC_PREDIV2_Div5);
+#endif
   RCC_SYSCLKConfig(RCC_SYSCLKSource_PLLCLK);
   RCC_PLLCmd(ENABLE);
   RCC_PLL2Cmd(ENABLE);
@@ -188,7 +224,8 @@ void set_clock()
 
 void HW_Init(void)
 {
-  /*Setup for UART*/
+#ifdef STM32F10C_EVAL
+  /*Setup for USART2 - MODBUS*/
   GPIO_InitTypeDef GPIO_InitStructure;
   GPIO_InitStructure.GPIO_Pin = GPIO_Pin_5;
   RCC->APB2ENR |= RCC_APB2ENR_AFIOEN | RCC_APB2Periph_GPIOD;
@@ -198,30 +235,63 @@ void HW_Init(void)
   
   RCC->CR |= RCC_CR_HSEBYP | RCC_CR_HSEON;
   RCC->CFGR |= RCC_CFGR_SW_HSE;
-
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_5;
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_5; /*TX*/
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
   GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
   GPIO_Init(GPIOD, &GPIO_InitStructure);
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_6;
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_6;/*RX*/
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
   GPIO_Init(GPIOD, &GPIO_InitStructure);
-  
-  /*HeartBeatLED PC9 to test*/
-  /* Enable the GPIO_LED Clock */
-  HeartBeat_Pinconfig();
 
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_3;
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_3;/*CTS*/
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
   GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
   GPIO_Init(GPIOD, &GPIO_InitStructure);
   GPIO_ResetBits(GPIOD,GPIO_Pin_3);
-
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_4;
+  
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_4;/*RTS*/
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
   GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
   GPIO_Init(GPIOD, &GPIO_InitStructure);
   GPIO_ResetBits(GPIOD,GPIO_Pin_4);
+
+ #else
+   /*Setup for USART2 - MODBUS*/
+  GPIO_InitTypeDef GPIO_InitStructure;
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_2;
+  RCC->APB2ENR |= RCC_APB2ENR_AFIOEN | RCC_APB2Periph_GPIOA;
+//  AFIO->MAPR |= AFIO_MAPR_USART2_REMAP;
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA, ENABLE);
+  RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART2, ENABLE);
+  RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA1, ENABLE);
+  
+  RCC->CR |= RCC_CR_HSEBYP | RCC_CR_HSEON;
+  RCC->CFGR |= RCC_CFGR_SW_HSE;
+
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_2;/*TX*/
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_Init(GPIOA, &GPIO_InitStructure);
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_3;/*RX*/
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
+  GPIO_Init(GPIOA, &GPIO_InitStructure);
+
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0;/*CTS*/
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_Init(GPIOA, &GPIO_InitStructure);
+  GPIO_ResetBits(GPIOA,GPIO_Pin_0);
+
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_1;/*RTS*/
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_Init(GPIOA, &GPIO_InitStructure);
+  GPIO_ResetBits(GPIOA,GPIO_Pin_1);
+ #endif
+  /*HeartBeatLED PC9 to test*/
+  /* Enable the GPIO_LED Clock */
+  HeartBeat_ErrorLed_Pinconfig();
+
 
 #ifdef GDI_ON_USART3
   /* Configure USART3 for GDI (debug) interface */
@@ -255,6 +325,25 @@ void HW_Init(void)
   PWM_PinConfig();
 }
 
+void ErrorOn()
+{
+	if( xTimerStart(yTimer[1], 0 ) != pdPASS );
+
+}
+
+void ErrorOff()
+{
+	if( xTimerStop( yTimer[1], 0 ) != pdPASS );
+
+}
+
+
+void vError_LEDToggle(xTimerHandle pxTimer )
+{
+  GPIOB->ODR ^= GPIO_Pin_11;
+}
+
+
 void vHeartBeat_LEDToggle(xTimerHandle pxTimer )
 {
   GPIOC->ODR ^= GPIO_Pin_9;
@@ -263,16 +352,25 @@ void vHeartBeat_LEDToggle(xTimerHandle pxTimer )
 
 void ConfigOSTimer ()
 {
-  xTimerHandle xTimer;
-  int x = 10;
-  xTimer= xTimerCreate(	  "HeartbeatTimer",		   // Just a text name, not used by the kernel.
+  int y = 2;
+  int x= 10;
+  int i = 0;
+  yTimer[0]= xTimerCreate(	  "HeartbeatTimer",		   // Just a text name, not used by the kernel.
 					  ( 100 * x ),	   // The timer period in ticks.
    		     		  pdTRUE,		  // The timers will auto-reload themselves when they expire.
-  					  ( void * ) x, 	// Assign each timer a unique id equal to its array index.
+  					  ( void * ) 100, 	// Assign each timer a unique id equal to its array index.
   					  vHeartBeat_LEDToggle	 // Each timer calls the same callback when it expires.
   					  );
-	
-  if( xTimer == NULL )
+  yTimer[1]= xTimerCreate(	  "HeartbeatTimer",		   // Just a text name, not used by the kernel.
+					  ( 100 * y ),	   // The timer period in ticks.
+   		     		  pdTRUE,		  // The timers will auto-reload themselves when they expire.
+  					  ( void * ) 101, 	// Assign each timer a unique id equal to its array index.
+  					  vError_LEDToggle	 // Each timer calls the same callback when it expires.
+  					  );
+
+for (i=0;i<1;i++)/*Only start Heartbeat timer, error timer will be started when needed to flash errorled*/
+{
+ if( yTimer[i] == NULL )
   {
 	  // The timer was not created.
   }
@@ -281,12 +379,12 @@ void ConfigOSTimer ()
 	  // Start the timer.  No block time is specified, and even if one was
 	  // it would be ignored because the scheduler has not yet been
 	  // started.
-	  if( xTimerStart( xTimer, 0 ) != pdPASS )
+	  if( xTimerStart(yTimer[i], 0 ) != pdPASS )
 	  {
 		  // The timer could not be set into the Active state.
 	  }
   }
-
+}
 }
 
 /**
@@ -317,11 +415,11 @@ int main(void)
   UART_Init(USART1);
 #endif
   Modbus_init(USART2);
-  PWM_Set(32767,TopHeaterCtrlPWM);
+  PWM_Set(16384,TopHeaterCtrlPWM);
   PWM_Set(50,FANctrlPWM);
-  PWM_Set(32767,PeltierCtrlPWM1);
-  PWM_Set(32767,PeltierCtrlPWM2);
-  PWM_Set(32767,PeltierCtrlPWM3);
+  PWM_Set(8192,PeltierCtrlPWM1);
+  PWM_Set(16384,PeltierCtrlPWM2);
+  PWM_Set(24576,PeltierCtrlPWM3);
   ConfigOSTimer();
 
   //HeartBeatLEDTimer();
@@ -331,14 +429,14 @@ int main(void)
   CooleAndLidQueueHandle=xQueueCreate( QUEUESIZE, ( unsigned portBASE_TYPE ) sizeof( void * ) );
   TubeSequencerQueueHandle=xQueueCreate( 50, ( unsigned portBASE_TYPE ) sizeof( void * ) );
 
-  heaterIrqInit();
+ // heaterIrqInit();
   result=xTaskCreate( ModbusTask, ( const signed char * ) "Modbus task", ( unsigned short ) 200, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &modbusCreatedTask );
   result=xTaskCreate( AppTask, ( const signed char * ) "App task", ( unsigned short ) 100, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvCreatedTask );
   result=xTaskCreate( gdi_task, ( const signed char * ) "Debug task", ( unsigned short ) 200, NULL, ( ( unsigned portBASE_TYPE ) 1 ) | portPRIVILEGE_BIT, &gdiCreatedTask );
 #ifndef GDI_ON_USART3
   result=xTaskCreate( CooleAndLidTask, (const signed char *) "CooleAndLid task", 200, NULL, ( (unsigned portBASE_TYPE) 13 ) | portPRIVILEGE_BIT, &pvCooleAndLidTask );
 #endif
-  result=xTaskCreate( TubeSequencerTask, ( const signed char * ) "TubeSeq task", ( unsigned short ) 500, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvCreatedTask );
+  result=xTaskCreate( TubeSequencerTask, ( const signed char * ) "TubeSeq task", ( unsigned short ) 700, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvCreatedTask );
 #if 0
   for(i=0;i<16;i++)
   {
@@ -350,7 +448,7 @@ int main(void)
     xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
   }
 #endif  
-  TubeId = 0;
+  TubeId = 14;
   msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
   msg->ucMessageID=START_TUBE_SEQ;
   p=(long *)msg->ucData;
@@ -376,6 +474,7 @@ void assert_failed(uint8_t* file, uint32_t line)
 { 
   /* User can add his own implementation to report the file name and line number,
      ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+	  ErrorOn();/*Turn on error led to show that sequence has ended*/
 
   /* Infinite loop */
   while (1)

@@ -24,7 +24,7 @@
 extern void Heater_PinConfig(void);
 extern void heaterIrqInit(void);
 
-
+extern void start_tube_seq(long TubeId);
 
 
 

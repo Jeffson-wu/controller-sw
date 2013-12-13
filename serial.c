@@ -31,6 +31,18 @@
 #include "semphr.h"
 #include "string.h"
 
+#ifdef STM32F10C_EVAL
+#define  RS485_RE GPIOD,GPIO_Pin_3
+#define  RS485_DE GPIOD,GPIO_Pin_4
+#define  RS485_TX_LED GPIOB,GPIO_Pin_1
+#define  RS485_RX_LED GPIOB,GPIO_Pin_0
+#else
+#define  RS485_RE GPIOA,GPIO_Pin_0
+#define  RS485_DE GPIOA,GPIO_Pin_1
+#define  RS485_TX_LED GPIOB,GPIO_Pin_1
+#define  RS485_RX_LED GPIOB,GPIO_Pin_0
+#endif
+
 static void (*receiveDataCB)()=0;
 
 void UART_SendMsg(USART_TypeDef *uart, u8 *buffer, int len)
@@ -41,8 +53,9 @@ void UART_SendMsg(USART_TypeDef *uart, u8 *buffer, int len)
      DMA_InitTypeDef         DMA_InitStructure;
      NVIC_InitTypeDef NVIC_InitStructure;
      len+=2;/*Delay to wait RS485 to settle*/
-     GPIO_SetBits(GPIOD,GPIO_Pin_3);
-     GPIO_SetBits(GPIOD,GPIO_Pin_4);
+     GPIO_SetBits(RS485_RE);
+     GPIO_SetBits(RS485_DE);
+	 GPIO_SetBits(RS485_TX_LED);/*TX LED*/
      if(len > 255)
      {
        DMA_InitStructure.DMA_BufferSize = 255;
@@ -93,8 +106,9 @@ void UART2_TX_Handler(void)
 {
    if(DMA_GetITStatus(DMA1_IT_TC7)==SET)
    {
-     GPIO_ResetBits(GPIOD,GPIO_Pin_3);
-     GPIO_ResetBits(GPIOD,GPIO_Pin_4);
+     GPIO_ResetBits(RS485_RE);
+     GPIO_ResetBits(RS485_DE);
+	 GPIO_ResetBits(RS485_TX_LED);/*TX LED*/
      DMA_ClearITPendingBit(DMA1_IT_TC7);
    }
    portEND_SWITCHING_ISR( pdTRUE);

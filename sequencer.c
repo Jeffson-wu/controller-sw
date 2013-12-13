@@ -522,11 +522,11 @@ ExtiGpioTypeDef ExtiGpio = Heater1;
 #if 1
   if(SET == EXTI_GetFlagStatus(ADS_EXTI_LINE))
   {
-    if(GPIO_ReadInputDataBit(GPIOB,ADS_DRDY_PINSOURCE) == Bit_RESET)
+    if(GPIO_ReadInputDataBit(GPIOB,GPIO_Pin_10/*ADS_DRDY_PINSOURCE*/) == Bit_RESET)
     {
     //ADS_Handler();
     }
-	if(GPIO_ReadInputDataBit(GPIOC,gpio_EXTI_CNF[Heater4].PINSOURCE) == Bit_RESET)
+	if(GPIO_ReadInputDataBit(GPIOC,GPIO_Pin_10)/*gpio_EXTI_CNF[Heater4].PINSOURCE */== Bit_RESET)
   	{
     	//HeaterEventHandler(Heater4);
 	}
@@ -566,7 +566,36 @@ signed short temp_2_dac(int16_t temp)
   return res;
 }
 
+void insert_state_to_seq(int Idx, long TubeId,uint16_t time, uint16_t temp )
+{
+	stateCmdTypeDef *TSeq = &TubeSeq[TubeId][Idx];
+  if((time != 0))
+  {
+  	TSeq->time = time;
+  	TSeq->temp = temp;
+  }else
+  { /*Last entry in sequence for tube if time is = 0*/
+  	TSeq->time = 0;
+  	TSeq->temp = 0;
+  	TSeq->state = End;
+  }
 
+}
+
+
+
+void start_tube_seq( long TubeId)
+{
+  long *p;
+  xMessage *msg;
+  
+  msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
+  msg->ucMessageID=START_TUBE_SEQ;
+  p=(long *)msg->ucData;
+  *p=TubeId;
+  xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
+
+}
 
 
 
@@ -645,7 +674,22 @@ void TubeStateHandler(long TubeId,xMessage *msg)
 
 
 }
+/*
+void json_test()
+{
+		const char *js;
+	int r;
+	jsmn_parser p;
+	jsmntok_t tokens[10];
 
+	js = "{\"a\": 0}";
+
+	jsmn_init(&p);
+	r = jsmn_parse(&p, js, tokens, 10);
+	tokens[0].type
+
+
+}*/
 
 void TubeSequencerTask( void * pvParameter)
 {
@@ -682,8 +726,14 @@ while(1)
 		TubeId = *((long *)(msg->ucData));
 		if((Tube[TubeId].state == TUBE_IDLE) && (Tube[TubeId].SeqIdx==0))
 		{
- 		  ReadTubeHeaterReg(TubeId,EVENT_REG,1, FALSE); /*Read & Clear pending events on heater*/
-		  TubeStateHandler(TubeId,msg);
+         // json_test();
+
+  for(i=1;i<15;i=i+2)
+  {
+   		  ReadTubeHeaterReg(i,EVENT_REG,1, FALSE); /*Read & Clear pending events on heater*/
+  }
+
+		 // TubeStateHandler(TubeId,msg);
 		}else
 		{
 	      DEBUG_PRINTF("Tube[%d]@%s FAILED TO START TUBE SEQUENCE ",TubeId,tube_states[Tube[TubeId].state]);
@@ -704,7 +754,7 @@ while(1)
 		{
 		  modbus_data[i] =(((u16)(preg->data[i*2])<<8)|(preg->data[(i*2)+1]));
 		}
-	    DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s] Tube[%d]ADDR[%d]size[%d]data[%x]STATUS[%s]",TubeId,tube_states[Tube[TubeId].state],signals_txt[msg->ucMessageID],preg->slave,preg->addr,preg->datasize,/*(((u16)(preg->data[0])<<8)|(preg->data[1]))*/modbus_data[0],(preg->resultOk==TRUE)?"PASS":"FAIL");
+	    DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s]ADDR[%d]size[%d]data[%x]STATUS[%s]",TubeId,tube_states[Tube[TubeId].state],signals_txt[msg->ucMessageID],preg->addr,preg->datasize,/*(((u16)(preg->data[0])<<8)|(preg->data[1]))*/modbus_data[0],(preg->resultOk==TRUE)?"PASS":"FAIL");
 		
         if(preg->addr == SETPOINT_REG)
         {
@@ -714,7 +764,21 @@ while(1)
 		}
 		if(preg->addr == EVENT_REG)
 		{
-		  DEBUG_PRINTF("EVENT = %d -> TEMPERATURE REACHED ? %x-%d - %d - %d - %d",modbus_data[0],modbus_data[1],dac_2_temp(modbus_data[1])/10,dac_2_temp(modbus_data[2])/10,dac_2_temp(modbus_data[3])/10,dac_2_temp(modbus_data[4])/10);
+           if(preg->resultOk==TRUE)
+           	{
+              DEBUG_PRINTF("EVENT:%s-%s-%s-%s-%s-%s-%s-%s-%s",((modbus_data[0] & SEQUENCE_EVENT_TUBE1)?"S_EV_T1 ":" "),((modbus_data[0] & SEQUENCE_EVENT_TUBE1)?"S_EV_T2 ":" "),((modbus_data[0] & INIT_HW_ERROR_TUBE1)?"HW_ERR_T1 ":" "),((modbus_data[0] & INIT_HW_ERROR_TUBE2)?"HW_ERR_T2 ":" "),((modbus_data[0] & TUBE1_NOT_PRESENT)?"NO_T1 ":" "),((modbus_data[0] & TUBE2_NOT_PRESENT)?"NO_T2 ":" "),((modbus_data[0] & EVENT6)?"EV6 ":" "),((modbus_data[0] & EVENT7)?"EV7 ":" "),((modbus_data[0] & EVENT8)?"EV8 ":" ")); /* New temperature reached on tube 1             */
+           	}
+				
+         //   SEQUENCE_EVENT_TUBE2 /* New temperature reached on tube 2             */
+         //   INIT_HW_ERROR_TUBE1 /* HW failure detected during start up on tube 1 */
+         //   INIT_HW_ERROR_TUBE2  /* HW failure detected during start up on tube 2 */
+         //   TUBE1_NOT_PRESENT /* Tube1 Not Present    */
+         //   TUBE2_NOT_PRESENT  /* Tube1 Not Present      */
+         //   EVENT6 /* EVENT6     */
+         //   EVENT7 /* EVENT7     */
+         //   EVENT8 /* EVENT8     */
+
+		  DEBUG_PRINTF("EVENT_REG = %d -> TEMPERATURE REACHED ? %x-%d - %d - %d - %d",modbus_data[0],modbus_data[1],dac_2_temp(modbus_data[1])/10,dac_2_temp(modbus_data[2])/10,dac_2_temp(modbus_data[3])/10,dac_2_temp(modbus_data[4])/10);
 		
         /*reg = p->addr;*/
 		

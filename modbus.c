@@ -39,6 +39,9 @@
 #define READ_HOLDINGS_REGISTERS 3
 #define WRITE_MULTIPLE_REGISTERS 16
 
+#define  RS485_RX_LED GPIOB,GPIO_Pin_0
+
+
 static USART_TypeDef *usedUart;
 
 void UART_SendMsg(USART_TypeDef *uart, u8 *buffer, int len);
@@ -141,8 +144,10 @@ void recieveChar(void)
   {
     if(recvBuffer && NOFRecvChars<recvBufferSize)
     {
-      recvBuffer[NOFRecvChars]=USART_ReceiveData(usedUart);
+	  GPIO_SetBits(RS485_RX_LED);/*RX LED*/
+	  recvBuffer[NOFRecvChars]=USART_ReceiveData(usedUart);
       NOFRecvChars++;
+	  GPIO_ResetBits(RS485_RX_LED);/*RX LED*/
     }
     else
     {
