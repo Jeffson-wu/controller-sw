@@ -361,7 +361,7 @@ void ConfigOSTimer ()
   					  ( void * ) 100, 	// Assign each timer a unique id equal to its array index.
   					  vHeartBeat_LEDToggle	 // Each timer calls the same callback when it expires.
   					  );
-  yTimer[1]= xTimerCreate(	  "HeartbeatTimer",		   // Just a text name, not used by the kernel.
+  yTimer[1]= xTimerCreate(	  "ErrorLedTimer",		   // Just a text name, not used by the kernel.
 					  ( 100 * y ),	   // The timer period in ticks.
    		     		  pdTRUE,		  // The timers will auto-reload themselves when they expire.
   					  ( void * ) 101, 	// Assign each timer a unique id equal to its array index.
@@ -427,9 +427,10 @@ int main(void)
   /*create queue*/
   ModbusQueueHandle=xQueueCreate( QUEUESIZE, ( unsigned portBASE_TYPE ) sizeof( void * ) );
   CooleAndLidQueueHandle=xQueueCreate( QUEUESIZE, ( unsigned portBASE_TYPE ) sizeof( void * ) );
-  TubeSequencerQueueHandle=xQueueCreate( 50, ( unsigned portBASE_TYPE ) sizeof( void * ) );
+  TubeSequencerQueueHandle=xQueueCreate( 100, ( unsigned portBASE_TYPE ) sizeof( void * ) );
+  heaterIrqInit();
 
- // heaterIrqInit();
+ 
   result=xTaskCreate( ModbusTask, ( const signed char * ) "Modbus task", ( unsigned short ) 200, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &modbusCreatedTask );
   result=xTaskCreate( AppTask, ( const signed char * ) "App task", ( unsigned short ) 100, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvCreatedTask );
   result=xTaskCreate( gdi_task, ( const signed char * ) "Debug task", ( unsigned short ) 200, NULL, ( ( unsigned portBASE_TYPE ) 1 ) | portPRIVILEGE_BIT, &gdiCreatedTask );
@@ -437,6 +438,9 @@ int main(void)
   result=xTaskCreate( CooleAndLidTask, (const signed char *) "CooleAndLid task", 200, NULL, ( (unsigned portBASE_TYPE) 13 ) | portPRIVILEGE_BIT, &pvCooleAndLidTask );
 #endif
   result=xTaskCreate( TubeSequencerTask, ( const signed char * ) "TubeSeq task", ( unsigned short ) 700, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvCreatedTask );
+
+
+
 #if 0
   for(i=0;i<16;i++)
   {
@@ -448,9 +452,9 @@ int main(void)
     xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
   }
 #endif  
-  TubeId = 14;
+  TubeId = 0;
   msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
-  msg->ucMessageID=START_TUBE_SEQ;
+  msg->ucMessageID=TUBE_TEST_SEQ;
   p=(long *)msg->ucData;
   *p=TubeId;
   xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);

@@ -4,13 +4,13 @@
 #include "jsmn.h"
 
 #include "json.h"
-#include "log.h"
-#include "buf.h"
+//#include "log.h"
+//#include "buf.h"
 
 char URL[] = "https://api.twitter.com/1/trends/1.json";
 
-char out[1000]; /*buffer for debug printf*/
-char out3[1000]; /*buffer for debug printf*/
+char out[500]; /*buffer for debug printf*/
+char out3[500]; /*buffer for debug printf*/
 //#define log_die(fmt, args...)   
 
     typedef enum {
