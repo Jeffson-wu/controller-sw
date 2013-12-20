@@ -41,6 +41,14 @@ USART_TypeDef *uart = USART1;
 #endif
 u32 test_variable= 9876543;
 
+#if 1
+#define GDI_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_response(buf);
+#else
+#define GDI_PRINTF(fmt, args...)    /* Don't do anything in release builds */
+#endif
+
+char buf[300]; /*buffer for debug printf*/
+
 
 u8 DebugModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer);
 bool DebugModbusWriteRegs(u8 slave, u16 addr, u8 *data, u16 datasize);
@@ -58,6 +66,8 @@ enum gdi_func_type
 	help,
 	print,
 	cooleandlid,
+	seq_set,
+	seq_cmd,
 	test_func,
 	modbus_read_regs,
 	modbus_write_regs,
@@ -83,13 +93,15 @@ typedef struct
 
 gdi_func_table_type gdi_func_info_table[] =
 {    
-	{"help", " Help command", "at@gdi:help()",help},		
+  {"help", " Help command", "at@gdi:help()",help},		
   {"print", " Print the debug variable values", "at@gdi:print()",print },
   {"cooleandlid", " Set air cooler and lid temperatures and fan speed", "at@gdi:cooleandlid(idx, setpoint)",cooleandlid },
-	{"test_func", " Test function call", "at@gdi:test_func(parameter1,parameter2)",test_func},		
-	{"modbus_read_regs", " Read register values", "at@gdi:modbus_read_regs(slave,addr,datasize)",modbus_read_regs},
-	{"modbus_write_regs", " Write register values", "at@gdi:modbus_write_regs(slave,addr,[data1,data2,..],datasize)",modbus_write_regs},
-	{ NULL, NULL, 0 }
+  {"seq", " Set tube seq temperatures and time", "at@gdi:seq([temp,time],..)",seq_set },
+  {"seq_cmd", " Set seq start,stop, state", "at@gdi:seq_cmd(tube, cmd)",seq_cmd },
+  {"test_func", " Test function call", "at@gdi:test_func(parameter1,parameter2)",test_func},		
+  {"modbus_read_regs", " Read register values", "at@gdi:modbus_read_regs(slave,addr,datasize)",modbus_read_regs},
+  {"modbus_write_regs", " Write register values", "at@gdi:modbus_write_regs(slave,addr,[data1,data2,..],datasize)",modbus_write_regs},
+  { NULL, NULL, 0 }
 }; 
 
 typedef struct 
@@ -412,6 +424,61 @@ void gdi_map_to_functions()
       }
 			gdi_send_data_response("OK", newline_end);
       break;
+	  case seq_set:
+		  {
+            uint16_t temp; /*Settemp in 0.1 degrees*/
+            uint16_t time; /*time in secs*/
+			long TubeId = 0;
+            int i = 0;
+			TubeId = (u16) atoi(*(gdi_req_func_info.parameters + 0 + i));
+			i++;
+			GDI_PRINTF("SET SEQ PARAMS for Tube[%d]: %d,",TubeId,gdi_req_func_info.number_of_parameters);
+            create_seq(TubeId, gdi_req_func_info.number_of_parameters);
+			while( i < gdi_req_func_info.number_of_parameters)
+			{
+  			temp = (u16) atoi(*(gdi_req_func_info.parameters + 0 + i));
+  			time = (u16) atoi(*(gdi_req_func_info.parameters + 1 + i));
+  			GDI_PRINTF("TEMP/TIME{%d,%d}",temp,time);
+               i = i + 2;
+			   insert_state_to_seq(TubeId,time,temp);
+			}
+			
+			insert_state_to_seq(TubeId,0,0);/*Last id to indicate end of seq*/
+			//start_tube_seq(TubeId);/*Start the seq*/
+	  	 }
+			//gdi_send_data_response("OK", newline_end);
+
+		break;
+		case seq_cmd:
+			{
+			  long TubeId = 0;
+			  int i = 0;
+			  TubeId = (u16) atoi(*(gdi_req_func_info.parameters + 0));
+			  
+			  //GDI_PRINTF("SEQ CMD[%s][%d]",(*(gdi_req_func_info.parameters + 1)),strlen((*(gdi_req_func_info.parameters + 1))));
+			  if(!strncmp((*(gdi_req_func_info.parameters + 1)),"status",strlen("status")))
+			  {
+			    GDI_PRINTF("GET STATE on Tube:%d",TubeId);
+				get_tube_state(TubeId);
+			  }
+			if(!strncmp((*(gdi_req_func_info.parameters + 1)),"start",strlen("start")))
+            {
+				GDI_PRINTF("START SEQ on Tube:%d",TubeId);
+			    start_tube_seq(TubeId);/*Start the seq*/
+			}
+			if(!strncmp((*(gdi_req_func_info.parameters + 1)),"stop",strlen("stop")))
+            {
+				GDI_PRINTF("STOP SEQ on Tube:%d",TubeId);
+			    stop_tube_seq(TubeId);
+			}
+		   }
+			//  gdi_send_data_response("OK", newline_end);
+		
+		  break;
+
+
+
+		
 		case test_func :
 			retvalue = test_function(p);
 			gdi_send_data_response("Function return value is : ", newline_start);

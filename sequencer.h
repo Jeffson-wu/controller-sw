@@ -19,6 +19,32 @@
 #define ENUM_END(typ) }typ;
 
 
+const char *  signals_txt[] = {
+  "FIRST_MSG",
+  "WRITE_MODBUS_REGS",
+  "WRITE_MODBUS_REGS_RES",
+  "TIMER_EXPIRED",
+  "START_TUBE_SEQ",
+  "TUBE_TEST_SEQ",
+  "NEXT_TUBE_STATE",
+  "READ_MODBUS_REGS",
+  "READ_MODBUS_REGS_RES",
+  "START_TUBE",
+  "DATA_FROM_TUBE",
+  "LAST_MSG"
+};
+
+
+const char *  tube_states[] = {
+"TUBE_INIT",
+"TUBE_IDLE",
+"TUBE_WAIT_TEMP", /*Wait until desired temperature are reached*/
+"TUBE_WAIT_TIME", /*Wait the specified time in the sequence*/
+"TUBE_NOT_INITIALIZED"
+};
+
+
+
 
 
 extern void Heater_PinConfig(void);
