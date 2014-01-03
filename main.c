@@ -441,24 +441,25 @@ int main(void)
 
 
 
-#if 0
+#if 1
   for(i=0;i<16;i++)
   {
     TubeId = i;
     msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
-    msg->ucMessageID=START_TUBE_SEQ;
+    msg->ucMessageID=TUBE_TEST_SEQ;
     p=(long *)msg->ucData;
     *p=TubeId;
     xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
   }
 #endif  
+#if 0
   TubeId = 0;
   msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
   msg->ucMessageID=TUBE_TEST_SEQ;
   p=(long *)msg->ucData;
   *p=TubeId;
   xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
-
+#endif
 
   vTaskStartScheduler();
   return 0;

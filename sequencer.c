@@ -165,7 +165,8 @@ uint16_t LoopStart;
 uint16_t LoopIterations;
 int SeqIdx;
 stateCmdTypeDef *data;
-portCHAR ucMessageID;
+portCHAR ucMessageID;/*last message processed in statemachine*/
+uint16_t event_reg;/*last event read from tube*/
 }Tubeloop_t;
 
 
@@ -272,22 +273,22 @@ stateCmdTypeDef TubeSeq[nTubes][6]={/*{{600,10000,Melting},{0,3,LoopStart},{400,
                                     {{500, 9000,Melting},{0,12,LoopStart},{940,200,Annealing},{0,0,LoopEnd},{0,0,End}},
                                     {{500, 8000,Melting},{0,2,LoopStart},{930,3000,Annealing},{0,0,LoopEnd},{0,0,End}}};
 #endif
-Tubeloop_t Tube[nTubes]= {{TUBE_NOT_INITIALIZED,0,0,0,0},
-	                      {TUBE_NOT_INITIALIZED,0,0,0,0},
-                          {TUBE_NOT_INITIALIZED,0,0,0,0},
-                          {TUBE_NOT_INITIALIZED,0,0,0,0},
-                          {TUBE_NOT_INITIALIZED,0,0,0,0},
-                          {TUBE_NOT_INITIALIZED,0,0,0,0},
-                          {TUBE_NOT_INITIALIZED,0,0,0,0},
-                          {TUBE_NOT_INITIALIZED,0,0,0,0},
-                          {TUBE_NOT_INITIALIZED,0,0,0,0},
-                          {TUBE_NOT_INITIALIZED,0,0,0,0},
-                          {TUBE_NOT_INITIALIZED,0,0,0,0},
-                          {TUBE_NOT_INITIALIZED,0,0,0,0},
-                          {TUBE_NOT_INITIALIZED,0,0,0,0},
-                          {TUBE_NOT_INITIALIZED,0,0,0,0},
-                          {TUBE_NOT_INITIALIZED,0,0,0,0},
-                          {TUBE_NOT_INITIALIZED,0,0,0,0}};
+Tubeloop_t Tube[nTubes]= {{TUBE_NOT_INITIALIZED,0,0,0,NULL,0,0xFFFF},
+	                      {TUBE_NOT_INITIALIZED,0,0,0,NULL,0,0xFFFF},
+                          {TUBE_NOT_INITIALIZED,0,0,0,NULL,0,0xFFFF},
+                          {TUBE_NOT_INITIALIZED,0,0,0,NULL,0,0xFFFF},
+                          {TUBE_NOT_INITIALIZED,0,0,0,NULL,0,0xFFFF},
+                          {TUBE_NOT_INITIALIZED,0,0,0,NULL,0,0xFFFF},
+                          {TUBE_NOT_INITIALIZED,0,0,0,NULL,0,0xFFFF},
+                          {TUBE_NOT_INITIALIZED,0,0,0,NULL,0,0xFFFF},
+                          {TUBE_NOT_INITIALIZED,0,0,0,NULL,0,0xFFFF},
+                          {TUBE_NOT_INITIALIZED,0,0,0,NULL,0,0xFFFF},
+                          {TUBE_NOT_INITIALIZED,0,0,0,NULL,0,0xFFFF},
+                          {TUBE_NOT_INITIALIZED,0,0,0,NULL,0,0xFFFF},
+                          {TUBE_NOT_INITIALIZED,0,0,0,NULL,0,0xFFFF},
+                          {TUBE_NOT_INITIALIZED,0,0,0,NULL,0,0xFFFF},
+                          {TUBE_NOT_INITIALIZED,0,0,0,NULL,0,0xFFFF},
+                          {TUBE_NOT_INITIALIZED,0,0,0,NULL,0,0xFFFF}};
 
 
 
@@ -457,14 +458,14 @@ void ExtIrqEnable(ExtiGpioTypeDef heater)
 void WriteTubeHeaterReg(u8 tube, u16 reg, u16 *data, u16 datasize)
 {
     xMessage *msg;
-    ReadModbusRegsRes *p;
+    WriteModbusRegsReq *p;
 if(reg == SET_TUBE_IDLE)
 {
   DEBUG_IF_PRINTF("Tube[%d] MODBUS WRITE_REG[SET_TUBE_IDLE] ",tube);
 }
 else
 {
-#if 0
+#if 1 
 	
 		msg=pvPortMalloc(sizeof(xMessage)+sizeof(WriteModbusRegsReq)+datasize*sizeof(u16));
 		*data=((*data&0xFF)<<8)|(*data>>8);
@@ -476,8 +477,10 @@ else
 		p->datasize=datasize;
 	    p->reply=TubeSequencerQueueHandle;
 		xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);
-		DEBUG_IF_PRINTF("Tube[%d]MODBUS WRITE_REG ID[%d] ADR[%d] data[%x]SIZE[%d]",tube, tube,p->addr,(((u16)(p->data[0])<<8)|(p->data[1])),p->datasize);
-#else
+	//	DEBUG_PRINTF("Tube[%d]MODBUS WRITE_REG ID[%d] ADR[%d] data[%x]SIZE[%d]",tube, tube,p->addr,(((u16)(p->data[0])<<8)|(p->data[1])),p->datasize);
+#else /*Simulate response from Heater CPU*/
+    ReadModbusRegsRes *p;
+
     msg=pvPortMalloc(sizeof(xMessage)+sizeof(ReadModbusRegsRes));
     msg->ucMessageID=READ_MODBUS_REGS_RES;
 	p=(ReadModbusRegsRes *)msg->ucData;
@@ -522,7 +525,7 @@ void ReadTubeHeaterReg(u8 tube, u16 reg, u16 datasize, bool from_isr)
 	{
       xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);
 	}
-	//DEBUG_IF_PRINTF("Tube[%d]MODBUS READ_REG ID[%d] ADR[%d] SIZE[%d]",tube, p->slave,p->addr, p->datasize);
+	DEBUG_IF_PRINTF("Tube[%d]MODBUS READ_REG ID[%d] ADR[%d] SIZE[%d] CALLER:%s",tube, p->slave,p->addr, p->datasize, (from_isr == TRUE) ?"ISR":"NORM");
   }
 #else
 long lArrayIndex;
@@ -670,8 +673,9 @@ int create_seq(long TubeId,int Nstates )
 }
 
 
-void insert_state_to_seq(long TubeId,uint16_t time, uint16_t temp )
+bool insert_state_to_seq(long TubeId,uint16_t time, uint16_t temp )
 {
+    bool result = TRUE;
 	Tubeloop_t *T = &Tube[TubeId];
 	stateCmdTypeDef *TSeq = &(T->data[T->SeqIdx]);
 
@@ -693,7 +697,11 @@ void insert_state_to_seq(long TubeId,uint16_t time, uint16_t temp )
     	TSeq->state = End;
 		T->SeqIdx = 0;/*Set seq ready to start*/
     }
+  }else
+  {
+   result = FALSE;
   }
+  return result;
 }
 
 
@@ -731,7 +739,28 @@ void stop_tube_seq( long TubeId)
 
 void get_tube_state(long TubeId)
 {
-	DEBUG_PRINTF("State for Tube SEQ_ID:%d state:%s LAST  CURR time:%d temp:%d MSG:%s",Tube[TubeId].SeqIdx,tube_states[Tube[TubeId].state],Tube[TubeId].data[Tube[TubeId].SeqIdx].temp,Tube[TubeId].data[Tube[TubeId].SeqIdx].time,signals_txt[Tube[TubeId].ucMessageID]);
+  //if(TubeId < 17)
+  //{
+  if(Tube[TubeId].data != NULL)
+  	{
+  	  DEBUG_PRINTF("State for Tube SEQ_ID:%d state:%s CURR time:%d temp:%d LAST MSG:%s EVENT:%x",Tube[TubeId].SeqIdx,tube_states[Tube[TubeId].state],Tube[TubeId].data[Tube[TubeId].SeqIdx].temp,Tube[TubeId].data[Tube[TubeId].SeqIdx].time,signals_txt[Tube[TubeId].ucMessageID],Tube[TubeId].event_reg);
+  	}else
+  	{
+  	  DEBUG_PRINTF("NO VALID SEQ FOUND State for Tube SEQ_ID:%d state:%s LAST MSG:%s EVENT:%x",Tube[TubeId].SeqIdx,tube_states[Tube[TubeId].state],signals_txt[Tube[TubeId].ucMessageID],Tube[TubeId].event_reg);
+  	}
+  	//DEBUG_PRINTF("Tube[%d]EVENT[%x]:%s-%s-%s-%s-%s-%s-%s-%s",TubeId,Tube[TubeId].event_reg,((Tube[TubeId].event_reg & SEQUENCE_EVENT_TUBE1)?"S_EV_T1 ":" "),((Tube[TubeId].event_reg & SEQUENCE_EVENT_TUBE1)?"S_EV_T2 ":" "),((Tube[TubeId].event_reg & INIT_HW_ERROR_TUBE1)?"HW_ERR_T1 ":" "),((Tube[TubeId].event_reg & INIT_HW_ERROR_TUBE2)?"HW_ERR_T2 ":" "),((Tube[TubeId].event_reg & TUBE1_NOT_PRESENT)?"NO_T1 ":" "),((Tube[TubeId].event_reg & TUBE2_NOT_PRESENT)?"NO_T2 ":" "),((Tube[TubeId].event_reg & EVENT6)?"EV6 ":" "),((Tube[TubeId].event_reg & EVENT7)?"EV7 ":" "));
+
+  //}else
+  //{
+   // for(TubeId=0;TubeId < 16; TubeId++)
+    //{
+   // 	DEBUG_PRINTF("State for Tube SEQ_ID:%d state:%s CURR time:%d temp:%d LAST MSG:%s EVENT[%x]:%s%s%s%s%s%s%s%s",Tube[TubeId].SeqIdx,tube_states[Tube[TubeId].state],Tube[TubeId].data[Tube[TubeId].SeqIdx].temp,Tube[TubeId].data[Tube[TubeId].SeqIdx].time,signals_txt[Tube[TubeId].ucMessageID],Tube[TubeId].event_reg,((Tube[TubeId].event_reg & SEQUENCE_EVENT_TUBE1)?"S_EV_T1 ":" "),((Tube[TubeId].event_reg & SEQUENCE_EVENT_TUBE1)?"S_EV_T2 ":" "),((Tube[TubeId].event_reg & INIT_HW_ERROR_TUBE1)?"HW_ERR_T1 ":" "),((Tube[TubeId].event_reg & INIT_HW_ERROR_TUBE2)?"HW_ERR_T2 ":" "),((Tube[TubeId].event_reg & TUBE1_NOT_PRESENT)?"NO_T1 ":" "),((Tube[TubeId].event_reg & TUBE2_NOT_PRESENT)?"NO_T2 ":" "),((Tube[TubeId].event_reg & EVENT6)?"EV6 ":" "),((Tube[TubeId].event_reg & EVENT7)?"EV7 ":" "));
+  //  	DEBUG_PRINTF("Tube[%d]EVENT[%x]:%s-%s-%s-%s-%s-%s-%s-%s",TubeId,Tube[TubeId].event_reg,((Tube[TubeId].event_reg & SEQUENCE_EVENT_TUBE1)?"S_EV_T1 ":" "),(Tube[TubeId].event_reg & SEQUENCE_EVENT_TUBE1)?"S_EV_T2 ":" "),(Tube[TubeId].event_reg & INIT_HW_ERROR_TUBE1)?"HW_ERR_T1 ":" "),(Tube[TubeId].event_reg & INIT_HW_ERROR_TUBE2)?"HW_ERR_T2 ":" "),(Tube[TubeId].event_reg & TUBE1_NOT_PRESENT)?"NO_T1 ":" "),(Tube[TubeId].event_reg & TUBE2_NOT_PRESENT)?"NO_T2 ":" "),(Tube[TubeId].event_reg & EVENT6)?"EV6 ":" "),(Tube[TubeId].event_reg & EVENT7)?"EV7 ":" "));
+   // }
+ // }
+//	ReadTubeHeaterReg(TubeId,EVENT_REG,5,FALSE);
+
+
 #if 0
 	Tube[TubeId].SeqIdx
 	tube_states[Tube[TubeId].state]
@@ -753,9 +782,11 @@ void TubeStateHandler(long TubeId,xMessage *msg)
   uint16_t i = 0;
   Tubeloop_t *T = &Tube[TubeId];
  // stateCmdTypeDef *TSeq = &TubeSeq[TubeId][Tube[TubeId].SeqIdx];
-  	stateCmdTypeDef *TSeq = &(T->data[T->SeqIdx]);
 
-
+if (T->data != NULL)
+	
+{
+  stateCmdTypeDef *TSeq = &(T->data[T->SeqIdx]);
   switch (TSeq->state)
   {
   case LoopStart:/*{3,0,LoopStart}*/
@@ -802,7 +833,7 @@ void TubeStateHandler(long TubeId,xMessage *msg)
     DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s] Seq Active set new temp %d.%02dC",TubeId,tube_states[T->state],signals_txt[msg->ucMessageID],TSeq->temp/10,TSeq->temp%10);/*ASCII 155 norm 167*/
     while(T->data[a].state != End)
    	{
-      DEBUG_PRINTF("[%d] [%d] [%d]",T->data[a].temp,T->data[a].time,T->data[a].state);
+      //DEBUG_PRINTF("%d.%02dC @ %d.%02dsecs ",T->data[a].temp/10,T->data[a].temp%10,T->data[a].time/10,T->data[a].time%10);
 	  a++;
    	}
 #if 0
@@ -828,6 +859,10 @@ void TubeStateHandler(long TubeId,xMessage *msg)
   	
 	DEBUG_PRINTF("ERROR STATE NOT HADLED Tube[%d]@%s-%d TubeSeq[%s] ",TubeId,tube_states[T->state],T->state,signals_txt[msg->ucMessageID]);
   break;
+}
+}else
+{
+	DEBUG_PRINTF("ERROR NO SEQ FOR Tube[%d]",TubeId);
 }
 
 
@@ -879,7 +914,7 @@ while(1)
   /*wait for queue msg*/
   if( xQueueReceive( TubeSequencerQueueHandle, &msg, portMAX_DELAY) == pdPASS )
   {
-	DEBUG_SEQ_PRINTF("TubeSeq[%s]",signals_txt[msg->ucMessageID]);
+	DEBUG_PRINTF("TubeSeq[%s]",signals_txt[msg->ucMessageID]);
 	switch(msg->ucMessageID)
 	{
 	case TUBE_TEST_SEQ:
@@ -888,10 +923,10 @@ while(1)
 		 modbus_data[0]=1;
 	     //WriteTubeHeaterReg(0,EVENT_REG,&modbus_data[0], 1); /*Read & Clear pending events on heater*/
 		
-		for(i=0;i<15;i=i+2)
-		{
-   		  ReadTubeHeaterReg(i,EVENT_REG,1, FALSE); /*Read & Clear pending events on heater*/
-		}
+		//for(i=0;i<15;i++/*i=i+2*/)
+		//{
+   		  ReadTubeHeaterReg(TubeId,EVENT_REG,1, FALSE); /*Read & Clear pending events on heater*/
+		//}
 		while(heater != nExtiGpio)
 		{
 		 // ExtIrqEnable(heater);
@@ -952,6 +987,7 @@ while(1)
 			    	Heater4_irq_handled == FALSE; /*Now we have read the content of the event register and are ready to recieve a new IRQ from Heater4*/
 			   }
 			  DEBUG_PRINTF("Tube[%d]EVENT[%x]:%s-%s-%s-%s-%s-%s-%s-%s",TubeId,modbus_data[0],((modbus_data[0] & SEQUENCE_EVENT_TUBE1)?"S_EV_T1 ":" "),((modbus_data[0] & SEQUENCE_EVENT_TUBE1)?"S_EV_T2 ":" "),((modbus_data[0] & INIT_HW_ERROR_TUBE1)?"HW_ERR_T1 ":" "),((modbus_data[0] & INIT_HW_ERROR_TUBE2)?"HW_ERR_T2 ":" "),((modbus_data[0] & TUBE1_NOT_PRESENT)?"NO_T1 ":" "),((modbus_data[0] & TUBE2_NOT_PRESENT)?"NO_T2 ":" "),((modbus_data[0] & EVENT6)?"EV6 ":" "),((modbus_data[0] & EVENT7)?"EV7 ":" "));
+			  Tube[TubeId].event_reg = modbus_data[0];
               if(Tube[TubeId].state == TUBE_NOT_INITIALIZED)/*&&(modbus_data[0] & INIT_HW_ERROR_TUBE1)*//*No errors on current tube, set it to IDLE so its ready for use*/
   			  {
      			 Tube[TubeId].state = TUBE_IDLE;

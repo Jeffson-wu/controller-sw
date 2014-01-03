@@ -96,7 +96,7 @@ gdi_func_table_type gdi_func_info_table[] =
   {"help", " Help command", "at@gdi:help()",help},		
   {"print", " Print the debug variable values", "at@gdi:print()",print },
   {"cooleandlid", " Set air cooler and lid temperatures and fan speed", "at@gdi:cooleandlid(idx, setpoint)",cooleandlid },
-  {"seq", " Set tube seq temperatures and time", "at@gdi:seq([temp,time],..)",seq_set },
+  {"seq", " Set tube seq temperatures and time", "at@gdi:seq(tube,[temp,time],..)",seq_set },
   {"seq_cmd", " Set seq start,stop, state", "at@gdi:seq_cmd(tube, cmd)",seq_cmd },
   {"test_func", " Test function call", "at@gdi:test_func(parameter1,parameter2)",test_func},		
   {"modbus_read_regs", " Read register values", "at@gdi:modbus_read_regs(slave,addr,datasize)",modbus_read_regs},
@@ -438,11 +438,15 @@ void gdi_map_to_functions()
 			{
   			temp = (u16) atoi(*(gdi_req_func_info.parameters + 0 + i));
   			time = (u16) atoi(*(gdi_req_func_info.parameters + 1 + i));
-  			GDI_PRINTF("TEMP/TIME{%d,%d}",temp,time);
-               i = i + 2;
-			   insert_state_to_seq(TubeId,time,temp);
-			}
+  			GDI_PRINTF("TEMP %d.%02dC @ TIME %d.%02dsecs ",temp/10,temp%10,time/10,time%10);
 			
+               i = i + 2;
+			   if(insert_state_to_seq(TubeId,time,temp)!= TRUE)
+			   {
+				   GDI_PRINTF("ERROR INSERTING SEQ cause TUBE:%d not in idle state",TubeId);
+				   break;
+			   }
+			}
 			insert_state_to_seq(TubeId,0,0);/*Last id to indicate end of seq*/
 			//start_tube_seq(TubeId);/*Start the seq*/
 	  	 }
@@ -553,7 +557,7 @@ void gdi_map_to_functions()
 
 		case invalid_command :
 			gdi_send_data_response("ERROR", newline_both);
-			gdi_send_data_response("Invalid Command", newline_end);
+			gdi_send_data_response("Invalid Command - type at@gdi:help()", newline_end);
 			break;
 	}
 			
