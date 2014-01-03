@@ -31,7 +31,7 @@
 #include "pwm.h"
 
 /*-----------------------------------------------------------*/
-#define DEBUG
+//#define DEBUG
 
 typedef enum {
   CTRL_OPEN_LOOP_STATE,
