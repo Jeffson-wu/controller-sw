@@ -341,8 +341,13 @@ void gdi_print_number(int number, u8 status)
 	
 }
 
+void gdi_print_wrong_endian_number(int number, u8 status)
+{
+  gdi_print_number((number>>8 & 0x00FF) + (number<<8 &0xFF00), status);
+}
 
-int gdi_get_regwrite_values(u8 * buffer)
+
+int gdi_get_regwrite_values(u16 * buffer)
 {
 	int i=0,j=0,start_pos=0,end_pos=0;
 	char *token;
@@ -356,14 +361,18 @@ int gdi_get_regwrite_values(u8 * buffer)
 	}
 	if((end_pos != 0) && (start_pos <= end_pos))
 	{
-		buffer[j++] = (u8) atoi((*(gdi_req_func_info.parameters + start_pos))+1);
+    u16 tmp;
+    tmp =  (u16) atoi((*(gdi_req_func_info.parameters + start_pos))+1);
+		buffer[j++] = ( (tmp>>8 & 0x00FF) + (tmp<<8 &0xFF00) );
 		for(i=start_pos + 1;i<end_pos;i++)
 		{
-			buffer[j++] = (u8) atoi(*(gdi_req_func_info.parameters + i));
+      tmp = (u16) atoi(*(gdi_req_func_info.parameters + i));
+			buffer[j++] = ( (tmp>>8 & 0x00FF) + (tmp<<8 &0xFF00) );
 		}
 		token = *(gdi_req_func_info.parameters + end_pos);
 		token[strlen(token) - 1] = '\0';
-		buffer[j] =  (u8) atoi(token);
+    tmp = (u16) atoi(token);
+		buffer[j] =  ( (tmp>>8 & 0x00FF) + (tmp<<8 &0xFF00) );
 		return end_pos + 1;
 	}
 	return 0;
@@ -377,7 +386,7 @@ void gdi_map_to_functions()
 	u16 p = 9876;
 	u8 result, slave;
 	u16 addr, datasize;
-	u8 buffer[50];
+	u16 buffer[50];
 
 	switch(gdi_req_func_info.func_type)
 	{
@@ -504,11 +513,11 @@ void gdi_map_to_functions()
 					gdi_send_data_response("ERROR", newline_both);
 				else
 				{
-					result = DebugModbusReadRegs(slave, addr, datasize, buffer);
+					result = DebugModbusReadRegs(slave, addr, datasize, (u8 *)buffer);
 
 					gdi_send_data_response("The register values read are : ", no_newline);
 					for (i=0; i<datasize;i++)
-						gdi_print_number(buffer[i], space_end);
+						gdi_print_wrong_endian_number(buffer[i], space_end);
 					gdi_send_data_response("The return value is : ", newline_start);
 					gdi_print_number(result, newline_end);
 					gdi_send_data_response("OK", newline_end);
@@ -535,10 +544,10 @@ void gdi_map_to_functions()
 					gdi_print_number(addr, space_end);
 					gdi_print_number(datasize, newline_end);
 					gdi_send_data_response("The register values to write are : ", no_newline);
-					for(i=0;i < datasize*2;i++)
-						gdi_print_number(buffer[i], space_end);
+					for(i=0;i < datasize;i++)
+						gdi_print_wrong_endian_number(buffer[i], space_end);
 
-					result = DebugModbusWriteRegs(slave,addr, buffer, datasize);
+					result = DebugModbusWriteRegs(slave,addr, (u8 *)buffer, datasize);
 
 					gdi_send_data_response("The return value is : ", newline_start);
 					gdi_print_number(result, newline_end);
