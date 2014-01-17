@@ -12,7 +12,7 @@
 TARGET = arm-none-eabi-
 CC = $(TARGET)gcc
 OBJCOPY = $(TARGET)objcopy
-INCLUDES = -I ./include -I ./board -I ./arch -I ./freertos/include -I ./ -I ./freertos/portable/GCC/ARM_CM3 
+INCLUDES = -I ./include -I ./board -I ./arch -I ./freertos/include -I ./ -I ./freertos/portable/GCC/ARM_CM3 -I ./GenericRecorderLibSrc/Include -I./GenericRecorderLibSrc/KernelPorts/FreeRTOS -I./GenericRecorderLibSrc/ConfigurationTemplate
 ifdef EVAL
 # Type make EVAL=Y to build for STM3210C-EVAL board
 CFLAGS = -g -O0 -c -mcpu=cortex-m3 -mthumb -D__START=main -D__STARTUP_CLEAR_BSS -DSTM32F1XX -DSTM32F10C_EVAL -DUSE_STDPERIPH_DRIVER $(INCLUDES)
@@ -72,8 +72,13 @@ SOURCES = \
     freertos/tasks.c \
     freertos/timers.c \
     freertos/portable/GCC/ARM_CM3/port.c \
-    freertos/portable/MemMang/heap_4.c 
-
+    freertos/portable/MemMang/heap_4.c \
+    GenericRecorderLibSrc/trcBase.c \
+    GenericRecorderLibSrc/trcHardwarePort.c \
+    GenericRecorderLibSrc/trcKernel.c \
+    GenericRecorderLibSrc/trcUser.c \
+    GenericRecorderLibSrc/KernelPorts/FreeRTOS/trcKernelPort.c
+    
 OBJS = $(patsubst %,$(OBJECTS_DIR)/%,$(SOURCES:%.c=%.o))
 OBJECTS = $(OBJS:%.S=%.o)
 DEPS = $(patsubst %,$(DEPENDS_DIR)/%,$(SOURCES:%.c=%.d))

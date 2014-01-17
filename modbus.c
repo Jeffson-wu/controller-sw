@@ -138,6 +138,7 @@ void timeoutCB(xTimerHandle handle)
 
 void recieveChar(void)
 {
+ // vTraceUserEvent(3);
   /*restart timer*/
   xTimerResetFromISR(TimerHandle,pdFALSE);
   while(USART_GetITStatus(USART2, USART_IT_RXNE))
@@ -154,6 +155,7 @@ void recieveChar(void)
       USART_ReceiveData(usedUart);
     }
   }
+//  vTraceUserEvent(4);
 }
 
 void waitForRespons(u8 *telegram, int *telegramSize)

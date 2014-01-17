@@ -84,9 +84,9 @@
 #define configUSE_TICK_HOOK			0
 #define configCPU_CLOCK_HZ			( ( unsigned long ) 62500000 )
 #define configTICK_RATE_HZ			( ( portTickType ) 1000 )
-#define configMAX_PRIORITIES		( ( unsigned portBASE_TYPE ) 5 )
+#define configMAX_PRIORITIES		( ( unsigned portBASE_TYPE ) 16 )
 #define configMINIMAL_STACK_SIZE	( ( unsigned short ) 64 )
-#define configTOTAL_HEAP_SIZE		( ( size_t ) ( 16 * 1024 ) )
+#define configTOTAL_HEAP_SIZE		( ( size_t ) ( 32 * 1024 ) )
 #define configMAX_TASK_NAME_LEN		( 16 )
 #define configUSE_TRACE_FACILITY	1
 #define configUSE_16_BIT_TICKS		0
@@ -99,13 +99,19 @@
 #define configUSE_MUTEXES				1
 #define configUSE_COUNTING_SEMAPHORES 	0
 #define configUSE_ALTERNATIVE_API 		0
-#define configCHECK_FOR_STACK_OVERFLOW	0
+#define configCHECK_FOR_STACK_OVERFLOW	2/*0 TFK DEBUG_RTOS*/
 #define configUSE_RECURSIVE_MUTEXES		1
-#define configQUEUE_REGISTRY_SIZE		0
+#define configQUEUE_REGISTRY_SIZE		30/*0 TFK DEBUG_RTOS*/
+#define configGENERATE_RUN_TIME_STATS	1 /*0 TFK DEBUG_RTOS*/
+#define configUSE_MALLOC_FAILED_HOOK 1  /*0 TFK DEBUG_RTOS*/
+#define configUSE_STATS_FORMATTING_FUNCTIONS 1 /*0 TFK DEBUG_RTOS*/
+//#define configASSERT 1 /*0 TFK DEBUG_RTOS*/
+#define configASSERT(expr) ((expr) ? (void)0 : assert_failed((uint8_t *)__FILE__, __LINE__))
+
 
 /*Use timers*/
 #define configUSE_TIMERS                1
-#define configTIMER_TASK_PRIORITY     128
+#define configTIMER_TASK_PRIORITY      15
 #define configTIMER_QUEUE_LENGTH       10
 #define configTIMER_TASK_STACK_DEPTH   600
 
@@ -125,7 +131,8 @@ to exclude the API function. */
 /* This is the raw value as per the Cortex-M3 NVIC.  Values can be 255
 (lowest) to 0 (1?) (highest). */
 #define configKERNEL_INTERRUPT_PRIORITY 		255
-#define configMAX_SYSCALL_INTERRUPT_PRIORITY 	191 /* equivalent to 0xb0, or priority 11. */
+#define configMAX_SYSCALL_INTERRUPT_PRIORITY 191 /* equivalent to 0xb0, or priority 11. */
+#define configMAX_INTERRUPT_PRIORITY 0x0B /*IRQ range 0x0B - 0x0F  only PreemptionPriority are used SubPriority will be ignored cause NVIC_PriorityGroup_4 is set*/
 
 
 /* This is the value being used as per the ST library which permits 16
@@ -143,10 +150,25 @@ interrupt count respectively. */
 /*extern unsigned long runtime_stats_clock;
 #define portCONFIGURE_TIMER_FOR_RUN_TIME_STATS() runtime_stats_clock = 0
 #define portGET_RUN_TIME_COUNTER_VALUE() runtime_stats_clock*/
+//extern unsigned long runtime_stats_clock; /* TFK DEBUG_RTOS*/
+//#define portCONFIGURE_TIMER_FOR_RUN_TIME_STATS() runtime_stats_clock = 0 /* TFK DEBUG_RTOS*/
+//#define portGET_RUN_TIME_COUNTER_VALUE() runtime_stats_clock /* TFK DEBUG_RTOS*/
+
+/* Defined in FreeRTOSConfig.h. */
+extern void vConfigureTimerForRunTimeStats( void );
+extern unsigned long vGetCounter();
+#define portCONFIGURE_TIMER_FOR_RUN_TIME_STATS() vConfigureTimerForRunTimeStats()
+#define portGET_RUN_TIME_COUNTER_VALUE() vGetCounter()
+
 
 
 #define vPortSVCHandler SVC_Handler
 #define xPortPendSVHandler PendSV_Handler
 #define xPortSysTickHandler SysTick_Handler
+
+
+#define configUSE_TRACE_FACILITY 1
+			  #include "trcKernelPort.h"
+
 
 #endif /* FREERTOS_CONFIG_H */

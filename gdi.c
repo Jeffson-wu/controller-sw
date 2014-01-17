@@ -159,7 +159,7 @@ void gdi_send_msg_response(char * response)
 {
 	char i;
 	char message[strlen(response)+5];
-	strcpy(message, "\r\n");
+	strcpy(message, "\0");
 	strcat(message, response);
 	strcat(message, "\r\n");
 	for(i=0;i<strlen(message);i++)
@@ -217,14 +217,18 @@ void gdi_get_func_parameters(char *param_list)
         	char* token = strtok(param_list, ",");
         	while (token)
         	{
-            		if (idx < count);
+            		if (idx < count)
 			{
 				*(gdi_req_func_info.parameters + idx) = pvPortMalloc(sizeof(token));
 				strcpy(*(gdi_req_func_info.parameters + idx++), token);
             			token = strtok(0, ",");
-            		}			
+            		}else
+                {
+                token = NULL;
+                idx--;
+                }  
         	}
-        	if (idx == count - 1)
+        //	if (idx == count - 1)
 			*(gdi_req_func_info.parameters + idx) = NULL;
     	}
 
@@ -442,22 +446,27 @@ void gdi_map_to_functions()
 			TubeId = (u16) atoi(*(gdi_req_func_info.parameters + 0 + i));
 			i++;
 			GDI_PRINTF("SET SEQ PARAMS for Tube[%d]: %d,",TubeId,gdi_req_func_info.number_of_parameters);
-            create_seq(TubeId, gdi_req_func_info.number_of_parameters);
-			while( i < gdi_req_func_info.number_of_parameters)
+            if((int)NULL != create_seq(TubeId, gdi_req_func_info.number_of_parameters))
+            {
+               while( i < gdi_req_func_info.number_of_parameters)
+               {
+                 temp = (u16) atoi(*(gdi_req_func_info.parameters + 0 + i));
+                 time = (u16) atoi(*(gdi_req_func_info.parameters + 1 + i));
+                 GDI_PRINTF("%d:TEMP %d.%02dC @ TIME %d.%02dsecs ",(i+1)/2,temp/10,temp%10,time/10,time%10);
+                 
+                 i = i + 2;
+                 if(insert_state_to_seq(TubeId,time,temp)!= TRUE)
+                 {
+                   GDI_PRINTF("ERROR INSERTING SEQ cause TUBE:%d not in idle state",TubeId);
+                   break;
+                 }
+               }
+               insert_state_to_seq(TubeId,0,0);/*Last id to indicate end of seq*/
+               //start_tube_seq(TubeId);/*Start the seq*/
+            }else
 			{
-  			temp = (u16) atoi(*(gdi_req_func_info.parameters + 0 + i));
-  			time = (u16) atoi(*(gdi_req_func_info.parameters + 1 + i));
-  			GDI_PRINTF("TEMP %d.%02dC @ TIME %d.%02dsecs ",temp/10,temp%10,time/10,time%10);
-			
-               i = i + 2;
-			   if(insert_state_to_seq(TubeId,time,temp)!= TRUE)
-			   {
-				   GDI_PRINTF("ERROR INSERTING SEQ cause TUBE:%d not in idle state",TubeId);
-				   break;
-			   }
+                GDI_PRINTF("ERROR no memory for sequence");
 			}
-			insert_state_to_seq(TubeId,0,0);/*Last id to indicate end of seq*/
-			//start_tube_seq(TubeId);/*Start the seq*/
 	  	 }
 			//gdi_send_data_response("OK", newline_end);
 
@@ -467,24 +476,29 @@ void gdi_map_to_functions()
 			  long TubeId = 0;
 			  int i = 0;
 			  TubeId = (u16) atoi(*(gdi_req_func_info.parameters + 0));
-			  
-			  //GDI_PRINTF("SEQ CMD[%s][%d]",(*(gdi_req_func_info.parameters + 1)),strlen((*(gdi_req_func_info.parameters + 1))));
-			  if(!strncmp((*(gdi_req_func_info.parameters + 1)),"status",strlen("status")))
-			  {
-			    GDI_PRINTF("GET STATE on Tube:%d",TubeId);
-				get_tube_state(TubeId);
-			  }
-			if(!strncmp((*(gdi_req_func_info.parameters + 1)),"start",strlen("start")))
-            {
-				GDI_PRINTF("START SEQ on Tube:%d",TubeId);
-			    start_tube_seq(TubeId);/*Start the seq*/
-			}
-			if(!strncmp((*(gdi_req_func_info.parameters + 1)),"stop",strlen("stop")))
-            {
-				GDI_PRINTF("STOP SEQ on Tube:%d",TubeId);
-			    stop_tube_seq(TubeId);
-			}
-		   }
+        if((TubeId < 17)||(TubeId > 1))
+        {
+          //GDI_PRINTF("SEQ CMD[%s][%d]",(*(gdi_req_func_info.parameters + 1)),strlen((*(gdi_req_func_info.parameters + 1))));
+          if(!strncmp((*(gdi_req_func_info.parameters + 1)),"status",strlen("status")))
+          {
+            GDI_PRINTF("GET STATE on Tube:%d",TubeId);
+            get_tube_state(TubeId);
+          }
+          if(!strncmp((*(gdi_req_func_info.parameters + 1)),"start",strlen("start")))
+          {
+            GDI_PRINTF("START SEQ on Tube:%d",TubeId);
+            start_tube_seq(TubeId);/*Start the seq*/
+          }
+          if(!strncmp((*(gdi_req_func_info.parameters + 1)),"stop",strlen("stop")))
+          {
+            GDI_PRINTF("STOP SEQ on Tube:%d",TubeId);
+            stop_tube_seq(TubeId);
+          }
+       }else
+        {
+          GDI_PRINTF("ERROR TubeID out of range Tube:%d",TubeId);
+        }
+      }
 			//  gdi_send_data_response("OK", newline_end);
 		
 		  break;
@@ -595,8 +609,9 @@ void gdi_deinit_req_func_info()
 
 void gdi_task(void *pvParameters)
 {
-	u8 data;
-	char input_buffer[100];
+#define INPUT_BUF_SIZE 200
+  u8 data;
+	char input_buffer[INPUT_BUF_SIZE];
 	u8 index=0;
 
 	while(1)
@@ -631,14 +646,21 @@ void gdi_task(void *pvParameters)
 					index = index - 1;
 			}
 			else
+      {   
 				input_buffer[index++] = data;
-
+        if(INPUT_BUF_SIZE <= index)
+        {
+        gdi_send_msg_response("\nINPUT BUFFER OVERRUN !!!");
+        index = 0;
+        }
+      }
 			while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
 			USART_SendData(uart, data);
 		}
  
 
 	}
+  configASSERT(0);
 
 	vTaskDelete(NULL);
 }

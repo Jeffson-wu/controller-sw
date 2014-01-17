@@ -35,13 +35,23 @@
 #include "timers.h"
 #include "stm32f10x_rcc.h"
 #include "cooleandlidtask.h"
-#define QUEUESIZE 10
+#include "stm32f10x_tim.h"
 
+
+#include "trcUser.h"
+#include "trcConfig.h"
+#include "trcHardwarePort.h"
+
+#include "../heater-sw/heater_reg.h"
+
+
+#define QUEUESIZE 10
 //#define GDI_ON_USART3
 //also in gdi.c
 
 extern xQueueHandle ModbusQueueHandle;
 xQueueHandle TubeSequencerQueueHandle;
+xQueueHandle AppQueueHandle;
 extern xQueueHandle CooleAndLidQueueHandle;
 
 xSemaphoreHandle xSemaphore = NULL;
@@ -56,39 +66,82 @@ void gdi_task(void *pvParameters);
 
 
 void TubeSequencerTask( void * pvParameter);
+void ErrorOn();
+
+void ErrorOff();
+
+
+void fn(void)
+{
+  static int nesting = 0;
+  char fill[30];
+  nesting++;
+  taskYIELD();
+  fn();
+  nesting--;
+}
+
+
 static void AppTask( void * pvParameters )
 {
-  {
-#if 0
-	xMessage *msg;
-    WriteModbusRegsReq *p;
-    msg=pvPortMalloc(sizeof(xMessage)+sizeof(WriteModbusRegsReq)+20);
-    msg->ucMessageID=WRITE_MODBUS_REGS;
-    p=(WriteModbusRegsReq *)msg->ucData;
-    p->slave=0x01;
-    p->addr=64;
-    memcpy(p->data, "\x00\x35\x00\x36", 4);
-    p->datasize=2;
-    p->reply=0;
-    xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);
-  }
-  vTaskDelay(5000);
-  {
-    xMessage *msg;
-    ReadModbusRegsReq *p;
-    msg=pvPortMalloc(sizeof(xMessage)+sizeof(ReadModbusRegsReq));
-    msg->ucMessageID=READ_MODBUS_REGS;
-    p=(ReadModbusRegsReq *)msg->ucData;
-    p->slave=0x01;
-    p->addr=64;
-    p->datasize=2;
-    p->reply=0;
-    xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);
+  ReadModbusRegsRes *preg;
+  uint16_t modbus_data, modbus_addr;
+  xMessage *msg;
+  long TubeId;
+  char message[20],i;
+  
+#ifdef GDI_ON_USART3
+  USART_TypeDef *uart = USART3;
+#else
+  USART_TypeDef *uart = USART1;
 #endif
-  }
+
   while(1)
   {
-    vTaskDelay(5000);
+    if( xQueueReceive( AppQueueHandle, &msg, portMAX_DELAY) == pdPASS )
+    {
+    //DEBUG_PRINTF("TubeSeq[%s]",signals_txt[msg->ucMessageID]);
+      switch(msg->ucMessageID)
+      {
+      case TUBE_TEST_SEQ:
+        TubeId = *((long *)(msg->ucData));
+        if (TubeId == 1)
+        {
+          ErrorOn();
+        }else
+        {
+          ErrorOff();
+        }
+      break;
+      case READ_MODBUS_REGS_RES:
+        preg=(ReadModbusRegsRes *)msg->ucData;
+        //TubeId = preg->slave;
+        modbus_addr = preg->addr;
+        /*modbus_data =  preg->data[1];*/
+        modbus_data =(((u16)(preg->data[0])<<8)|(preg->data[1]));
+        if((preg->resultOk == TRUE)&&(modbus_addr == TUBE1_TEMP_REG || TUBE2_TEMP_REG))
+        {
+          sprintf(message,"%d.%01dC ",dac_2_temp(modbus_data)/10,dac_2_temp(modbus_data)%10);
+
+            for(i=0;i<strlen(message);i++)
+            {
+                while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
+          //      UART_SendMsg(uart, message , strlen(message));
+              USART_SendData(uart, *(message+i));
+          //      while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
+            }
+
+
+       /*  vTraceConsoleMessage("%d.%02dC-",dac_2_temp(modbus_data)/10,dac_2_temp(modbus_data)%10);*/
+        }
+      break;
+      }
+    vPortFree(msg);
+    }
+
+  
+  //  vTaskDelay(5000);
+
   }
 }
 
@@ -323,6 +376,13 @@ void HW_Init(void)
 
   /* TIM Configuration */
   PWM_PinConfig();
+
+  NVIC_PriorityGroupConfig(NVIC_PriorityGroup_4);
+  /* FREERTOS CONFIG For simplicity all bits must be defined
+		to be pre-emption priority bits.  The following assertion will fail if
+		this is not the case (if some bits represent a sub-priority).
+			configASSERT( ( portAIRCR_REG & portPRIORITY_GROUP_MASK ) <= ulMaxPRIGROUPValue );*/
+
 }
 
 void ErrorOn()
@@ -340,19 +400,34 @@ void ErrorOff()
 
 void vError_LEDToggle(xTimerHandle pxTimer )
 {
-  GPIOB->ODR ^= GPIO_Pin_11;
+    GPIOB->ODR ^= GPIO_Pin_11;
+  
+    xMessage *msg;
+    ReadModbusRegsReq *p;
+    portBASE_TYPE taskWoken = pdTRUE;
+    msg=pvPortMalloc(sizeof(xMessage)+sizeof(ReadModbusRegsReq));
+    msg->ucMessageID=READ_MODBUS_REGS;
+    p=(ReadModbusRegsReq *)msg->ucData;
+    p->slave=1/*+0x02*/;
+    p->addr=TUBE1_TEMP_REG;
+    p->datasize=1;
+    p->reply=AppQueueHandle;
+    xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);
 }
 
+#define DEBUG_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_response(buf);
 
 void vHeartBeat_LEDToggle(xTimerHandle pxTimer )
 {
+  //char buf[20];
   GPIOC->ODR ^= GPIO_Pin_9;
+  //DEBUG_PRINTF("FREE HEAP:%d",xPortGetFreeHeapSize());
 }
 
 
 void ConfigOSTimer ()
 {
-  int y = 2;
+  int y = /*2*/100;
   int x= 10;
   int i = 0;
   yTimer[0]= xTimerCreate(	  "HeartbeatTimer",		   // Just a text name, not used by the kernel.
@@ -386,6 +461,110 @@ for (i=0;i<1;i++)/*Only start Heartbeat timer, error timer will be started when 
   }
 }
 }
+#define DEBUG_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_response(buf);
+
+char buf[300]; /*buffer for debug printf*/
+
+#if (SELECTED_PORT == PORT_ARM_CortexM)
+
+#define _PORT_INIT_EXISTS
+
+void port_init(void);
+
+extern void prvSetupHardware(void);
+
+void port_init(void)
+{
+   // prvSetupHardware();
+}
+#endif
+
+
+
+void vApplicationMallocFailedHook( void );
+extern void vApplicationStackOverflowHook( xTaskHandle *pxTask, signed char *pcTaskName );
+
+void vApplicationMallocFailedHook( void )
+{
+    vTraceConsoleMessage("\n\rMalloc failed!\n\r");
+}
+
+void vApplicationStackOverflowHook( xTaskHandle *pxTask, signed char *pcTaskName )
+{
+    vTraceConsoleMessage("\n\rStack overflow!\n\r");
+	taskDISABLE_INTERRUPTS();
+    for( ;; );
+}
+
+#if 0
+void vAssertCalled( void );
+void vApplicationTickHook( void );
+void vApplicationIdleHook( void );
+
+void vApplicationIdleHook( void )
+{
+
+}
+
+void vApplicationTickHook( void )
+{
+}
+
+void vAssertCalled( void )
+{
+    taskDISABLE_INTERRUPTS();
+    for( ;; );
+}
+#endif
+void init_os_trace()
+{
+		/* Put the recorder data structure on the heap (malloc), if no 
+		static allocation. (See TRACE_DATA_ALLOCATION in trcConfig.h). */
+	
+#ifdef _PORT_INIT_EXISTS
+		port_init();
+#endif	
+	
+		vTraceInitTraceData();
+		
+		if (! uiTraceStart() )
+		{
+				vTraceConsoleMessage("Could not start recorder!");
+		}else
+			{
+			vTraceConsoleMessage("OS trace started");
+			}
+
+}
+
+/* Defined in main.c. */
+void vConfigureTimerForRunTimeStats( void )
+{
+TIM_TimeBaseInitTypeDef  TIM_TimeBaseStructure;
+uint16_t TimerPeriod_TIM5 = 0;
+uint16_t TIM3_pwm_freq = 1500;
+
+
+TimerPeriod_TIM5 = (SystemCoreClock / TIM3_pwm_freq ) - 1;
+
+RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM5 , ENABLE);
+
+/* Time Base configuration */
+TIM_TimeBaseStructure.TIM_Prescaler = 0;
+TIM_TimeBaseStructure.TIM_CounterMode = TIM_CounterMode_Up;
+TIM_TimeBaseStructure.TIM_Period = TimerPeriod_TIM5;
+TIM_TimeBaseStructure.TIM_ClockDivision = 0;
+TIM_TimeBaseStructure.TIM_RepetitionCounter = 0;
+
+TIM_TimeBaseInit(TIM5, &TIM_TimeBaseStructure);
+
+}
+
+
+unsigned long vGetCounter()
+{
+return TIM_GetCounter(TIM5);
+}
 
 /**
   * @brief  Main program.
@@ -408,12 +587,16 @@ int main(void)
   set_clock();
 
   HW_Init();
+
+
   PWM_Init(1500,1500);
 #ifdef GDI_ON_USART3
   UART_Init(USART3);
 #else
   UART_Init(USART1);
 #endif
+  init_os_trace(); /*GDB CMD:dump binary memory gdb_dump_1.txt 0x20000000 0x20010000  -- http://percepio.com/*/
+
   Modbus_init(USART2);
   PWM_Set(16384,TopHeaterCtrlPWM);
   PWM_Set(50,FANctrlPWM);
@@ -425,24 +608,31 @@ int main(void)
   //HeartBeatLEDTimer();
   xSemaphore = xSemaphoreCreateMutex();
   /*create queue*/
-  ModbusQueueHandle=xQueueCreate( QUEUESIZE, ( unsigned portBASE_TYPE ) sizeof( void * ) );
+  ModbusQueueHandle=xQueueCreate( 32, ( unsigned portBASE_TYPE ) sizeof( void * ) );
+  vQueueAddToRegistry(ModbusQueueHandle,"MODBUS");
+    AppQueueHandle=xQueueCreate( 32, ( unsigned portBASE_TYPE ) sizeof( void * ) );
+  vQueueAddToRegistry(AppQueueHandle,"APP");
   CooleAndLidQueueHandle=xQueueCreate( QUEUESIZE, ( unsigned portBASE_TYPE ) sizeof( void * ) );
+  vQueueAddToRegistry(CooleAndLidQueueHandle,"CooleAndLid");
   TubeSequencerQueueHandle=xQueueCreate( 100, ( unsigned portBASE_TYPE ) sizeof( void * ) );
+  vQueueAddToRegistry(TubeSequencerQueueHandle,"TubeSeq");
+
   heaterIrqInit();
 
  
-  result=xTaskCreate( ModbusTask, ( const signed char * ) "Modbus task", ( unsigned short ) 200, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &modbusCreatedTask );
-  result=xTaskCreate( AppTask, ( const signed char * ) "App task", ( unsigned short ) 100, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvCreatedTask );
-  result=xTaskCreate( gdi_task, ( const signed char * ) "Debug task", ( unsigned short ) 200, NULL, ( ( unsigned portBASE_TYPE ) 1 ) | portPRIVILEGE_BIT, &gdiCreatedTask );
+  result=xTaskCreate( ModbusTask, ( const signed char * ) "Modbus task", ( unsigned short ) 400, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &modbusCreatedTask );
+  result=xTaskCreate( AppTask, ( const signed char * ) "App task", ( unsigned short ) 300, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvCreatedTask );
+  result=xTaskCreate( gdi_task, ( const signed char * ) "Debug task", ( unsigned short ) 400, NULL, ( ( unsigned portBASE_TYPE ) 1 ) | portPRIVILEGE_BIT, &gdiCreatedTask );
 #ifndef GDI_ON_USART3
-  result=xTaskCreate( CooleAndLidTask, (const signed char *) "CooleAndLid task", 200, NULL, ( (unsigned portBASE_TYPE) 13 ) | portPRIVILEGE_BIT, &pvCooleAndLidTask );
+  //result=xTaskCreate( CooleAndLidTask, (const signed char *) "CooleAndLid task", 300, NULL, ( (unsigned portBASE_TYPE) 4 ) | portPRIVILEGE_BIT, &pvCooleAndLidTask );
 #endif
-  result=xTaskCreate( TubeSequencerTask, ( const signed char * ) "TubeSeq task", ( unsigned short ) 700, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvCreatedTask );
+  result=xTaskCreate( TubeSequencerTask, ( const signed char * ) "TubeSeq task", ( unsigned short ) 1000, NULL, ( ( unsigned portBASE_TYPE ) 4 ) | portPRIVILEGE_BIT, &pvCreatedTask );
+
+ 
 
 
-
-#if 1
-  for(i=0;i<16;i++)
+#if 0
+  for(i=1;i<17;i++)
   {
     TubeId = i;
     msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
@@ -451,9 +641,10 @@ int main(void)
     *p=TubeId;
     xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
   }
+
 #endif  
-#if 0
-  TubeId = 0;
+#if 1
+  TubeId = 1;
   msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
   msg->ucMessageID=TUBE_TEST_SEQ;
   p=(long *)msg->ucData;
