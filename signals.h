@@ -22,6 +22,10 @@ enum
   SET_COOLE_TEMP_RES,
   SET_LID_TEMP,
   SET_LID_TEMP_RES,
+  START_LOG,
+  END_LOG,
+  SET_LOG_INTERVAL,
+  GDI_NEW_CMD,
   LAST_MSG
 };
 
@@ -71,5 +75,13 @@ typedef struct
   bool resultOk;
   u8 data[1];
 }ReadModbusRegsRes;
+
+typedef enum 
+{
+NO_ERROR = 0,
+TIMEOUT,
+OVERRUN,
+WRONG_TEL_LENGHT
+}USART_ERROR;
 
 #endif

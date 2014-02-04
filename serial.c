@@ -31,6 +31,7 @@
 #include "semphr.h"
 #include "string.h"
 
+
 #ifdef STM32F10C_EVAL
 #define  RS485_RE GPIOD,GPIO_Pin_3
 #define  RS485_DE GPIOD,GPIO_Pin_4
@@ -44,6 +45,8 @@
 #endif
 
 static void (*receiveDataCB)()=0;
+static void (*receiveUART1CB)()=0;
+
 
 void UART_SendMsg(USART_TypeDef *uart, u8 *buffer, int len)
 {
@@ -104,6 +107,8 @@ void UART_SendMsg(USART_TypeDef *uart, u8 *buffer, int len)
 
 void UART2_TX_Handler(void)
 {
+  vTraceStoreISRBegin(4);
+
    if(DMA_GetITStatus(DMA1_IT_TC7)==SET)
    {
      GPIO_ResetBits(RS485_RE);
@@ -112,6 +117,8 @@ void UART2_TX_Handler(void)
      DMA_ClearITPendingBit(DMA1_IT_TC7);
    }
    portEND_SWITCHING_ISR( pdTRUE);
+   
+   vTraceStoreISREnd();
 }
 
 void UART_Init(USART_TypeDef *uart, void (*recvCallback)())
@@ -119,7 +126,6 @@ void UART_Init(USART_TypeDef *uart, void (*recvCallback)())
   USART_InitTypeDef USART_InitStruct;
   NVIC_InitTypeDef NVIC_InitStructure;
 
-  receiveDataCB=recvCallback;
 
   USART_StructInit(&USART_InitStruct);
   USART_InitStruct.USART_BaudRate=115200;/*Remember to update frametimer in modbus.c -> MODBUS_SILENT_INTERVAL when changing baudrate*/
@@ -128,24 +134,47 @@ void UART_Init(USART_TypeDef *uart, void (*recvCallback)())
 
   if(uart==USART2)
   {
+    receiveDataCB=recvCallback;
     NVIC_InitStructure.NVIC_IRQChannel = USART2_IRQn;
-    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0/* configMAX_INTERRUPT_PRIORITY*/;
+    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;
     NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
     NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
     NVIC_Init(&NVIC_InitStructure);
-  }
-
+  }else if(uart==USART1)
+ {
+   receiveUART1CB=recvCallback;
+   NVIC_InitStructure.NVIC_IRQChannel = USART1_IRQn;
+   NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority =  configMAX_INTERRUPT_PRIORITY+1;
+   NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1;
+   NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+   NVIC_Init(&NVIC_InitStructure);
+ }
   USART_ITConfig(uart, USART_IT_RXNE, ENABLE);
+  
 }
 
 void UART2_Handler(void)
 {
+  GPIO_SetBits(RS485_RX_LED);/*RX LED*/
+ // vTraceStoreISRBegin(2);
+
    if (USART_GetITStatus(USART2, USART_IT_RXNE) && receiveDataCB)
    {
      receiveDataCB();
    }
    USART_ClearITPendingBit(USART2,USART_IT_RXNE);
-   portEND_SWITCHING_ISR( pdTRUE);
+ //  vTraceStoreISREnd();
+   GPIO_ResetBits(RS485_RX_LED);/*RX LED*/
 }
+void UART1_Handler(void)
+{
+  vTraceStoreISRBegin(1);
+   if (USART_GetITStatus(USART1, USART_IT_RXNE) && receiveUART1CB)
+   {
+     receiveUART1CB();
+   }
+   USART_ClearITPendingBit(USART1,USART_IT_RXNE);
+   vTraceStoreISREnd();
 
+}
 

@@ -123,7 +123,7 @@ __isr_vector:
     .long    Default_Handler           /* 34: I2C2_ER */
     .long    Default_Handler           /* 35: SPI1 */
     .long    Default_Handler           /* 36: SPI2 */
-    .long    Default_Handler           /* 37: USART1 */
+    .long    UART1_Handler           /* 37: USART1 */
     .long    UART2_Handler          /* 38: USART2 */
     .long    Default_Handler           /* 39: USART3 */
     .long    EXTI_Handler           /* 40: EXTI15_10 */
@@ -140,8 +140,8 @@ __isr_vector:
     .long    Default_Handler           /* 51: SPI3 */
     .long    Default_Handler           /* 52: UART4 */
     .long    Default_Handler           /* 53: UART5 */
-    .long    Default_Handler           /* 54: TIM6 */
-    .long    Default_Handler           /* 55: TIM7 */
+    .long    modbus_end_of_telegram /* 54: TIM6 */
+    .long    Default_Handler          /* 55: TIM7 */
     .long    Default_Handler           /* 56: DMA2_Channel1 */
     .long    Default_Handler           /* 57: DMA2_Channel2 */
     .long    Default_Handler           /* 58: DMA2_Channel3 */

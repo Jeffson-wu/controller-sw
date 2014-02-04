@@ -26,6 +26,7 @@
 #include "stm3210c-eval.h"
 #include "stm32f10x_usart.h"
 #include "stm32f10x_dma.h"
+#include "stm32f10x_tim.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
@@ -33,16 +34,30 @@
 #include "signals.h"
 #include "timers.h"
 
-#define MODBUS_SILENT_INTERVAL (40000/(115200/(8*4)))
-#define MODBUS_TIMEOUT 100
+#define CHARS_IN_FRAME 10 /*1 startbit, 8 data, 1 stopbit*/
+#define CHARS_TO_WAIT 3.5 /* Silence on modbus to detect end of telegram*/
+#define USECS_2_NUM 1000000
+#define MODBUS_SILENT_INTERVAL (CHARS_TO_WAIT *(CHARS_IN_FRAME * USECS_2_NUM / 115200))
+
+#define MODBUS_RESPONSE_TIMEOUT 100 /*Time to wait for response in ms*/
 
 #define READ_HOLDINGS_REGISTERS 3
 #define WRITE_MULTIPLE_REGISTERS 16
 
 #define  RS485_RX_LED GPIOB,GPIO_Pin_0
 
+USART_ERROR USART2_ERROR = 0;
+
 
 static USART_TypeDef *usedUart;
+typedef struct
+{
+int chars;
+int buf;
+}rx_debug;
+
+rx_debug debug[200];
+int debug_cnt = 0;
 
 void UART_SendMsg(USART_TypeDef *uart, u8 *buffer, int len);
 
@@ -53,6 +68,45 @@ static  xTimerHandle TimerHandle;
 static  uint8_t *recvBuffer=0;
 static int NOFRecvChars=0;
 static int recvBufferSize;
+
+
+/* Defined in main.c. */
+void configTimerModbusTimeout( void )
+{
+  TIM_TimeBaseInitTypeDef  TIM_TimeBaseStructure;
+  NVIC_InitTypeDef NVIC_InitStructure;
+  uint32_t TimerPeriod_TIM6 = 0;
+  uint32_t TIM6_pwm_freq = 1000000;/*Make uS tics*/
+  TimerPeriod_TIM6 = (SystemCoreClock / TIM6_pwm_freq ) - 1;
+  TimerPeriod_TIM6 = TimerPeriod_TIM6 * MODBUS_SILENT_INTERVAL;
+
+ 
+  RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM6 , ENABLE);
+  TIM_Cmd(TIM6, DISABLE);
+  TIM_SetCounter(TIM6,0x00);
+
+  /* Time Base configuration */
+  TIM_TimeBaseStructure.TIM_Prescaler = 0;
+  TIM_TimeBaseStructure.TIM_CounterMode = TIM_CounterMode_Up;
+  TIM_TimeBaseStructure.TIM_Period = TimerPeriod_TIM6;
+  TIM_TimeBaseStructure.TIM_ClockDivision = 0;
+  TIM_TimeBaseStructure.TIM_RepetitionCounter = 0;
+  TIM_TimeBaseInit(TIM6, &TIM_TimeBaseStructure);
+
+  NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0x0D   /*0x0B - 0x0F */;
+  NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0x00; /*dont care*/
+  NVIC_InitStructure.NVIC_IRQChannel = TIM6_IRQn;
+  NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+  NVIC_Init(&NVIC_InitStructure);
+  TIM_ClearITPendingBit(TIM6, TIM_IT_Update);
+
+  TIM_ITConfig(TIM6, TIM_IT_Update, ENABLE);
+
+}
+
+
+
+
 
 static uint16_t gen_crc16(const uint8_t *buf, int len)
 {
@@ -116,115 +170,97 @@ static bool handleModbusTelegram(u8 *telegram, u16 size)
     return result;
 }
 
-void timeoutCB(xTimerHandle handle)
-{
-  static int counter=0;
-  if(recvBuffer && (NOFRecvChars!=0 || counter>MODBUS_TIMEOUT))
+
+void modbus_end_of_telegram()
+{/*end of telegram 3.5 chars of silence*/
+    portBASE_TYPE xHigherPriorityTaskWoken;
+
+  if (TIM_GetITStatus(TIM6, TIM_IT_Update) != RESET)
   {
-    counter=0;
+      TIM_ClearITPendingBit(TIM6, TIM_IT_Update);
+      TIM_Cmd(TIM6, DISABLE);
     /*Stop updating recvBuffer*/
     recvBuffer=0;
     /*unlock mutex to continue in modbus task*/
-    xSemaphoreGive( xSemaphore );
+    xSemaphoreGiveFromISR( xSemaphore, &xHigherPriorityTaskWoken );
+    
+    portEND_SWITCHING_ISR( xHigherPriorityTaskWoken );
   }
-  else
-  {
-     if(recvBuffer)
-     {
-       counter++;
-     }
-  }
+}
+
+void response_timeoutCB(xTimerHandle handle)
+{/* response telegram did not arrive*/
+  if(recvBuffer && (NOFRecvChars==0) )
+    {
+        USART2_ERROR = TIMEOUT;
+      /*Stop updating recvBuffer*/
+      recvBuffer=0;
+      /*unlock mutex to continue in modbus task*/
+      xSemaphoreGive( xSemaphore );
+    }
 }
 
 void recieveChar(void)
 {
- // vTraceUserEvent(3);
-  /*restart timer*/
-  xTimerResetFromISR(TimerHandle,pdFALSE);
   while(USART_GetITStatus(USART2, USART_IT_RXNE))
   {
+    /*If recvBuffer has a pointer we have  modbus read or write function in progess else discard the charaters*/
     if(recvBuffer && NOFRecvChars<recvBufferSize)
     {
-	  GPIO_SetBits(RS485_RX_LED);/*RX LED*/
-	  recvBuffer[NOFRecvChars]=USART_ReceiveData(usedUart);
+      recvBuffer[NOFRecvChars]=USART_ReceiveData(usedUart);
       NOFRecvChars++;
-	  GPIO_ResetBits(RS485_RX_LED);/*RX LED*/
+    if(NOFRecvChars == 1) /*First character recieved start end of telegram timer*/
+      {
+        TIM_Cmd(TIM6, ENABLE);
+      }
+      TIM_SetCounter(TIM6,0x00); /*Reset end of telegram timer*/
     }
     else
     {
       USART_ReceiveData(usedUart);
     }
+    if(USART_GetFlagStatus(USART2,USART_FLAG_ORE))
+      {
+      USART_ClearFlag(USART2, USART_IT_ORE);
+       USART2_ERROR = OVERRUN;
+      }
   }
-//  vTraceUserEvent(4);
+ //portEND_SWITCHING_ISR( xHigherPriorityTaskWoken );
 }
 
-void waitForRespons(u8 *telegram, int *telegramSize)
+USART_ERROR waitForRespons(u8 *telegram, int *telegramSize)
 {
-  /*start timer*/
+  USART_ERROR modbus_err;
+  debug[debug_cnt].chars = 0xEE;
+  
+  /*start response telegram timer,*/
   xTimerReset( TimerHandle, 0 );
+  xTimerStart( TimerHandle, 0 );
   NOFRecvChars=0;
-
+  debug[debug_cnt].chars = 0xFF;
   /*wait for mutex*/
   xSemaphoreTake( xSemaphore, portMAX_DELAY );
-
+  xTimerStop( TimerHandle, 0 ); 
+  modbus_err = USART2_ERROR;
   /*handle modbus telegram*/
-  if(NOFRecvChars)
+  if(NOFRecvChars && (modbus_err == NO_ERROR))
   {
     *telegramSize=NOFRecvChars;
+    modbus_err = NO_ERROR;
   }
   else
   {
     *telegramSize=0;
   }
   recvBuffer=0;
-  return;
-  #if 0
-  int i=0;
-  int stopReceiver=0;
-  
-  while(stopReceiver==0)
-  {
-    portTickType time=xTaskGetTickCount();
-    while(USART_GetFlagStatus(usedUart, USART_FLAG_RXNE)== RESET)
-    {
-      portTickType currentTime=xTaskGetTickCount();
-      if(time>currentTime)
-      {
-        /*wrap around*/
-        portTickType maxtime=-1;
-        if(currentTime+(maxtime-time)>MODBUS_SILENT_INTERVAL && i>0)
-        {
-          stopReceiver=1;
-          break;
-        }
-      }
-      else if(currentTime>time+MODBUS_SILENT_INTERVAL && i>0)
-      {
-        stopReceiver=1;
-        break;
-      }
-    }
-    if(stopReceiver==0 && i<*telegramsize)
-    {
-      if(i<*telegramsize)
-      {
-        *telegram = USART_ReceiveData(usedUart);
-        telegram++;
-        i++;
-      }
-      else
-      {
-        USART_ReceiveData(usedUart);
-      }
-    }
-  }
-  *telegramsize=i;
-  #endif
+  USART2_ERROR = NO_ERROR;
+  return modbus_err;
 }
 
 static u8 ModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer)
 {
   u16 crc;
+  USART_ERROR ERR;
   u8 telegram[255];
   int telegramsize=255;
   telegram[0]=slave;
@@ -237,12 +273,17 @@ static u8 ModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer)
   memcpy(&(telegram[6]), &crc, (size_t)2);
   recvBuffer=telegram;
   recvBufferSize=telegramsize;
+  debug[debug_cnt].chars = 0xAA;
   UART_SendMsg(usedUart, telegram, 6+2);
-  waitForRespons(telegram, &telegramsize);
+  ERR = waitForRespons(telegram, &telegramsize);
+  if(ERR != NO_ERROR)
+  {
+  return ERR;
+  }
   memcpy(buffer, telegram, datasize*sizeof(u16)>telegramsize?telegramsize:datasize*sizeof(u16));
   if(telegramsize-5<=0)
   {
-    return 0;
+    return WRONG_TEL_LENGHT;
   }
   else
   {
@@ -250,7 +291,7 @@ static u8 ModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer)
      {
        memcpy(buffer, &telegram[3], telegramsize-5);
      }
-     return telegramsize-5;
+     return NO_ERROR;
   }
 }
 
@@ -259,6 +300,7 @@ static bool ModbusWriteRegs(u8 slave, u16 addr, u8 *data, u16 datasize)
   u16 crc;
   u8 telegram[255];
   int telegramsize=255;
+  USART_ERROR ERR;
   telegram[0]=slave;
   telegram[1]=WRITE_MULTIPLE_REGISTERS;/*write multiple regs*/
   telegram[2]=(addr & 0xFF00)>>8;
@@ -271,16 +313,10 @@ static bool ModbusWriteRegs(u8 slave, u16 addr, u8 *data, u16 datasize)
   memcpy(&(telegram[7+datasize*2]), &crc, 2);
   recvBuffer=telegram;
   recvBufferSize=telegramsize;
+  debug[debug_cnt].chars = 0xBB;
   UART_SendMsg(usedUart, telegram, 7+datasize*2+2);
-  waitForRespons(telegram, &telegramsize);
-  if(telegramsize==0)
-  {
-    return FALSE;
-  }
-  else
-  {
-    return TRUE;
-  }
+  ERR = waitForRespons(telegram, &telegramsize);
+  return ERR;
 }
 
 void ModbusTask( void * pvParameters )
@@ -303,7 +339,7 @@ void ModbusTask( void * pvParameters )
           if(p->reply)
           {
             msgout=pvPortMalloc(sizeof(xMessage)+sizeof(WriteModbusRegsRes));
-			msgout->ucMessageID=WRITE_MODBUS_REGS_RES;
+            msgout->ucMessageID=WRITE_MODBUS_REGS_RES;
             po=(WriteModbusRegsRes *)(msgout->ucData);
             po->slave=p->slave;
             po->datasize=p->datasize;
@@ -326,14 +362,14 @@ void ModbusTask( void * pvParameters )
           {
             msgout=pvPortMalloc(sizeof(xMessage)+sizeof(ReadModbusRegsRes)+p->datasize*sizeof(u16));
             po=(ReadModbusRegsRes *)(msgout->ucData);
-			msgout->ucMessageID=READ_MODBUS_REGS_RES;
+            msgout->ucMessageID=READ_MODBUS_REGS_RES;
             po->slave=p->slave;
             po->addr=p->addr;
             po->datasize=p->datasize;
             po->resultOk=FALSE;
-            if(ModbusReadRegs(p->slave, p->addr, p->datasize, po->data))
+            if(ModbusReadRegs(p->slave, p->addr, p->datasize, po->data)== NO_ERROR)
             {
-              po->resultOk=TRUE;
+              po->resultOk=NO_ERROR;
             }
             xQueueSend(p->reply, &msgout, portMAX_DELAY);
           }
@@ -354,12 +390,11 @@ void ModbusTask( void * pvParameters )
 void Modbus_init(USART_TypeDef *uart)
 {
   usedUart=uart;
-  TimerHandle=xTimerCreate("Modbus timer", MODBUS_SILENT_INTERVAL, pdTRUE, NULL, timeoutCB);
-  xTimerStart( TimerHandle, 0 );
+  TimerHandle=xTimerCreate("Modbus Response timer", MODBUS_RESPONSE_TIMEOUT, pdTRUE, NULL, response_timeoutCB);
   xSemaphore = xSemaphoreCreateMutex();
   xSemaphoreTake( xSemaphore, portMAX_DELAY );
   UART_Init(USART2, recieveChar);
-
+  configTimerModbusTimeout();
 }
 
 u8 DebugModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer)

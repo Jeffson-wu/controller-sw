@@ -32,6 +32,15 @@
 #define CHAR_BACKSPACE '\b'
 char *command_prefix = "at@gdi:";
 
+#define INPUT_BUF_SIZE 200
+  u8 data;
+char a = 0;
+char input_buffer[2][INPUT_BUF_SIZE];
+
+
+
+xSemaphoreHandle GDI_RXSemaphore = NULL;
+
 extern xQueueHandle CooleAndLidQueueHandle;
 
 #ifdef GDI_ON_USART3
@@ -440,7 +449,7 @@ void gdi_map_to_functions()
 	  case seq_set:
 		  {
             uint16_t temp; /*Settemp in 0.1 degrees*/
-            uint16_t time; /*time in secs*/
+            uint32_t time; /*time in secs*/
 			long TubeId = 0;
             int i = 0;
 			TubeId = (u16) atoi(*(gdi_req_func_info.parameters + 0 + i));
@@ -451,7 +460,7 @@ void gdi_map_to_functions()
                while( i < gdi_req_func_info.number_of_parameters)
                {
                  temp = (u16) atoi(*(gdi_req_func_info.parameters + 0 + i));
-                 time = (u16) atoi(*(gdi_req_func_info.parameters + 1 + i));
+                 time = (u32) atoi(*(gdi_req_func_info.parameters + 1 + i));
                  GDI_PRINTF("%d:TEMP %d.%02dC @ TIME %d.%02dsecs ",(i+1)/2,temp/10,temp%10,time/10,time%10);
                  
                  i = i + 2;
@@ -493,6 +502,11 @@ void gdi_map_to_functions()
           {
             GDI_PRINTF("STOP SEQ on Tube:%d",TubeId);
             stop_tube_seq(TubeId);
+          }
+           if(!strncmp((*(gdi_req_func_info.parameters + 1)),"log",strlen("log")))
+          {
+            GDI_PRINTF("LOG Interval:%d ms",TubeId);
+            set_log_interval(TubeId);
           }
        }else
         {
@@ -538,7 +552,15 @@ void gdi_map_to_functions()
 						gdi_print_wrong_endian_number(buffer[i], space_end);
 					gdi_send_data_response("The return value is : ", newline_start);
 					gdi_print_number(result, newline_end);
-					gdi_send_data_response("OK", newline_end);
+          if(result == NO_ERROR)
+          {
+					  gdi_send_data_response("OK", newline_end);
+          }
+          else
+          {
+            gdi_send_data_response("ERROR", newline_end);
+          }
+
 				}
 			}	
 			break;
@@ -570,7 +592,7 @@ void gdi_map_to_functions()
 					gdi_send_data_response("The return value is : ", newline_start);
 					gdi_print_number(result, newline_end);
 					
-					if (result == 0)
+					if (result != NO_ERROR)
 						gdi_send_data_response("Register Write Failed!", newline_end);
 					else
 						gdi_send_data_response("OK", newline_end);
@@ -586,83 +608,96 @@ void gdi_map_to_functions()
 			
 }
 
+void recieveCMD(void)
+{
+  static u8 index=0;
+	/*
+	 * xSemaphoreGiveFromISR() will set *pxHigherPriorityTaskWoken to pdTRUE 
+	 * if giving the semaphoree caused a task to unblock, and the unblocked 
+	 * task has a priority higher than the currently running task.
+	 */
+  portBASE_TYPE xHigherPriorityTaskWoken;
+
+  while(USART_GetFlagStatus(uart, USART_FLAG_RXNE)==RESET);
+  data = USART_ReceiveData(uart);
+
+  if (CHAR_ENTER == data)/*Enter detected interpret CMD */
+  {
+    input_buffer[a][index] = '\0';
+    /*unlock mutex to continue in GDI task*/
+    xSemaphoreGiveFromISR( GDI_RXSemaphore, &xHigherPriorityTaskWoken);
+    
+    portEND_SWITCHING_ISR( xHigherPriorityTaskWoken );
+    a = !a;
+    index = 0;
+  }
+  else
+  {
+    if(CHAR_BACKSPACE == data) /* support backspace in case of typing errors */
+    {
+      if (index > 0)
+      index = index - 1;
+    }
+    else
+    {   
+      input_buffer[a][index++] = data;
+      if(INPUT_BUF_SIZE <= index)
+      {
+        gdi_send_msg_response("\nINPUT BUFFER OVERRUN !!!");
+        index = 0;
+      }
+    }
+    while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
+    USART_SendData(uart, data);
+    }
+  // vTraceUserEvent(4);
+  //portEND_SWITCHING_ISR( xHigherPriorityTaskWoken );
+}
+
 void gdi_init_req_func_info()
 {
-	gdi_req_func_info.func_type = invalid_command;
-	gdi_req_func_info.number_of_parameters = 0;
-	gdi_req_func_info.parameters = NULL;
+  gdi_req_func_info.func_type = invalid_command;
+  gdi_req_func_info.number_of_parameters = 0;
+  gdi_req_func_info.parameters = NULL;
 }
 
 void gdi_deinit_req_func_info()
 {
-	if (gdi_req_func_info.parameters)
-    	{
-        	int i;
-        	for (i = 0; *(gdi_req_func_info.parameters + i); i++)
-        	{
-            		//gdi_send_data_response(*(gdi_req_func_info.parameters + i), newline_both);
-            		vPortFree(*(gdi_req_func_info.parameters + i));
-        	}
-        	vPortFree(gdi_req_func_info.parameters);
-    	}
+  if (gdi_req_func_info.parameters)
+  {
+    int i;
+    for (i = 0; *(gdi_req_func_info.parameters + i); i++)
+    {
+      //gdi_send_data_response(*(gdi_req_func_info.parameters + i), newline_both);
+      vPortFree(*(gdi_req_func_info.parameters + i));
+    }
+    vPortFree(gdi_req_func_info.parameters);
+  }
 }
+void gdi_init()
+{
+  UART_Init(uart, recieveCMD);
 
+}
 void gdi_task(void *pvParameters)
 {
-#define INPUT_BUF_SIZE 200
-  u8 data;
-	char input_buffer[INPUT_BUF_SIZE];
-	u8 index=0;
+   GDI_RXSemaphore = xSemaphoreCreateMutex();
+   xSemaphoreTake( GDI_RXSemaphore, portMAX_DELAY );
+  
 
-	while(1)
-	{
-		//USART_SendData(uart, 'U');
-		//while (USART_GetFlagStatus(uart, USART_FLAG_TXE) == RESET);
-		//vTaskDelay(100);
-		
-		//GPIOA->ODR ^= GPIO_Pin_9;	
-
-		//GPIOE->ODR ^= GPIO_Pin_9;	
-
-
-		while(USART_GetFlagStatus(uart, USART_FLAG_RXNE)==RESET);
-		data = USART_ReceiveData(uart);
-
-		if (CHAR_ENTER == data)
-		{
-			input_buffer[index] = '\0';
-			gdi_init_req_func_info();
-			gdi_parse_command(input_buffer);
-			gdi_map_to_functions();
-			gdi_send_data_response("", newline_end);
-			gdi_deinit_req_func_info();
-			index = 0;
-		}
-		else
-		{
-			if(CHAR_BACKSPACE == data)
-			{
-				if (index > 0)
-					index = index - 1;
-			}
-			else
-      {   
-				input_buffer[index++] = data;
-        if(INPUT_BUF_SIZE <= index)
-        {
-        gdi_send_msg_response("\nINPUT BUFFER OVERRUN !!!");
-        index = 0;
-        }
-      }
-			while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
-			USART_SendData(uart, data);
-		}
- 
-
-	}
+  while(1)
+  {
+    /*wait for mutex*/
+    xSemaphoreTake( GDI_RXSemaphore, portMAX_DELAY );
+    gdi_init_req_func_info();
+    gdi_parse_command(input_buffer[!a]);
+    gdi_map_to_functions();
+    gdi_send_data_response("", newline_end);
+    gdi_deinit_req_func_info();
+  }
   configASSERT(0);
 
-	vTaskDelete(NULL);
+  vTaskDelete(NULL);
 }
 
 

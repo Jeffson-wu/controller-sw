@@ -31,6 +31,14 @@ const char *  signals_txt[] = {
   "READ_MODBUS_REGS_RES",
   "START_TUBE",
   "DATA_FROM_TUBE",
+  "SET_FAN",
+  "SET_FAN_RES",
+  "SET_COOLE_TEMP",
+  "SET_COOLE_TEMP_RES",
+  "SET_LID_TEMP",
+  "SET_LID_TEMP_RES",
+  "START_LOG",
+  "END_LOG",
   "LAST_MSG"
 };
 
