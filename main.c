@@ -113,7 +113,7 @@ static void LogTask( void * pvParameters )
         last_tube_to_log = i-1;
         if(i >= NUM_OF_TUBES)
         {
-          LogOn(1000);
+          //####JRJ LogOn(1000);
           last_tube_to_log = 0; /*Init to 0 since first tube*/
         }
         log_tubes[TubeId]= TRUE;
@@ -135,39 +135,75 @@ static void LogTask( void * pvParameters )
         TubeId = preg->slave;
         modbus_addr = preg->addr;
         modbus_data =(((u16)(preg->data[0])<<8)|(preg->data[1]));
-        if((preg->resultOk == NO_ERROR)&&(modbus_addr == TUBE1_TEMP_REG || TUBE2_TEMP_REG))
-        {
-          sprintf(message,"T%d:%d.%01dC ",TubeId,dac_2_temp(modbus_data)/10,dac_2_temp(modbus_data)%10);
+        if(preg->resultOk == NO_ERROR) {
+          if( (TUBE1_TEMP_REG == modbus_addr) || (TUBE2_TEMP_REG == modbus_addr) ) //(modbus_addr == TUBE1_TEMP_REG || TUBE2_TEMP_REG)
+          {
+            sprintf(message,"T%d:%d.%01dC ",TubeId,dac_2_temp(modbus_data)/10,dac_2_temp(modbus_data)%10);
 
             for(i=0;i<strlen(message);i++)
             {
               while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
               USART_SendData(uart, *(message+i));
             }
-          if(last_tube_to_log == TubeId) 
-          {
+            if(last_tube_to_log == TubeId) 
+            {
+              USART_SendData(uart, '\r');
+              while (USART_GetFlagStatus(uart, USART_FLAG_TXE) == RESET);
+              USART_SendData(uart, '\n');
+              while (USART_GetFlagStatus(uart, USART_FLAG_TXE) == RESET);
+            }
+          }
+          else if(modbus_addr == DATA_LOG)
+          { // Auto Logging
+            int j;
+            int k;
+            modbus_data =(((u16)(preg->data[0])<<8)|(preg->data[1]));
+            sprintf(message,"Log T%d Seq %d: ",TubeId, modbus_data);
+            for(j=0; j<strlen(message); j++)
+            {
+              while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
+              USART_SendData(uart, *(message+j));
+            }
+            for(j=1; j<( (DATA_LOG_SIZE*2+1)); j++)
+            {
+              modbus_data =(((u16)(preg->data[j*2])<<8)|(preg->data[(j*2)+1]));
+              sprintf(message,"%d.%01dC, ",dac_2_temp(modbus_data)/10,dac_2_temp(modbus_data)%10);
+              for(k=0; k<strlen(message); k++)
+              {
+                while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
+                USART_SendData(uart, *(message+k));
+              }
+            }
             USART_SendData(uart, '\r');
             while (USART_GetFlagStatus(uart, USART_FLAG_TXE) == RESET);
             USART_SendData(uart, '\n');
             while (USART_GetFlagStatus(uart, USART_FLAG_TXE) == RESET);
           }
-        }else
-        {
-           sprintf(message,"####Tube[%d]ERROR MODBUS READ FAILED-log!!! %d",TubeId,preg->resultOk);
-           for(i=0;i<strlen(message);i++)
-            {
-              while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
-              USART_SendData(uart, *(message+i));
-            }
+          else
+          {
+             sprintf(message,"####Tube[%d]ERROR MODBUS READ FAILED-log!!! %d",TubeId,preg->resultOk);
+             for(i=0;i<strlen(message);i++)
+              {
+                while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
+                USART_SendData(uart, *(message+i));
+              }
+          }
         }
       break;
       case SET_LOG_INTERVAL:
-         log_interval = *((long *)(msg->ucData));
-        if(xTimerChangePeriod( yTimer[2],1 * log_interval,100)!= pdPASS );
+        log_interval = *((long *)(msg->ucData));
+        if(0 == log_interval) {
+          LogOff();
+        } else {
+          //####JRJ LogOn(log_interval);
+        }
+        if(xTimerChangePeriod( yTimer[2],1 * log_interval,100)!= pdPASS ) {
+          //error handling
+        }
       break;
       }
-    vPortFree(msg);
     }
+    vPortFree(msg);
   }
 }
 
@@ -443,7 +479,7 @@ char buf[300]; /*buffer for debug printf*/
 
 #define _PORT_INIT_EXISTS
 
-void port_init(void);
+//####JRJ void port_init(void);
 
 extern void prvSetupHardware(void);
 
@@ -455,8 +491,8 @@ void port_init(void)
 
 
 
-void vApplicationMallocFailedHook( void );
-extern void vApplicationStackOverflowHook( xTaskHandle *pxTask, signed char *pcTaskName );
+//####JRJ void vApplicationMallocFailedHook( void );
+//####JRJ extern void vApplicationStackOverflowHook( xTaskHandle *pxTask, signed char *pcTaskName );
 
 void vApplicationMallocFailedHook( void )
 {

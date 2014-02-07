@@ -73,6 +73,7 @@ enum gdi_func_type
 {
 	at,	
 	help,
+	reset,
 	print,
 	cooleandlid,
 	seq_set,
@@ -103,10 +104,11 @@ typedef struct
 gdi_func_table_type gdi_func_info_table[] =
 {    
   {"help", " Help command", "at@gdi:help()",help},		
+  {"reset", " Reset M3 command", "at@gdi:reset()",reset},		
   {"print", " Print the debug variable values", "at@gdi:print()",print },
   {"cooleandlid", " Set air cooler and lid temperatures and fan speed", "at@gdi:cooleandlid(idx, setpoint)",cooleandlid },
   {"seq", " Set tube seq temperatures and time", "at@gdi:seq(tube,[temp,time],..)",seq_set },
-  {"seq_cmd", " Set seq start,stop, state", "at@gdi:seq_cmd(tube, cmd)",seq_cmd },
+  {"seq_cmd", " Set seq start, stop, state, log", "at@gdi:seq_cmd(tube, cmd)",seq_cmd },
   {"test_func", " Test function call", "at@gdi:test_func(parameter1,parameter2)",test_func},		
   {"modbus_read_regs", " Read register values", "at@gdi:modbus_read_regs(slave,addr,datasize)",modbus_read_regs},
   {"modbus_write_regs", " Write register values", "at@gdi:modbus_write_regs(slave,addr,[data1,data2,..],datasize)",modbus_write_regs},
@@ -418,6 +420,10 @@ void gdi_map_to_functions()
 			gdi_send_data_response("OK", newline_end);
 			break;
 
+    case reset :
+      Reset_Handler();
+      break;
+
 		case print :
 			gdi_print_number(test_variable,newline_both);
 			gdi_send_data_response("OK", newline_end);
@@ -505,7 +511,11 @@ void gdi_map_to_functions()
           }
            if(!strncmp((*(gdi_req_func_info.parameters + 1)),"log",strlen("log")))
           {
-            GDI_PRINTF("LOG Interval:%d ms",TubeId);
+            if(0 == TubeId) {
+              GDI_PRINTF("LOG off");
+            } else {
+              GDI_PRINTF("LOG Interval:%d ms",TubeId);
+            }
             set_log_interval(TubeId);
           }
        }else
@@ -547,9 +557,13 @@ void gdi_map_to_functions()
 				{
 					result = DebugModbusReadRegs(slave, addr, datasize, (u8 *)buffer);
 
-					gdi_send_data_response("The register values read are : ", no_newline);
-					for (i=0; i<datasize;i++)
-						gdi_print_wrong_endian_number(buffer[i], space_end);
+          if(NO_ERROR == result)
+          {
+            gdi_send_data_response("The register values read are : ", no_newline);
+  					for (i=0; i<datasize;i++) { 
+              gdi_print_wrong_endian_number(buffer[i], space_end); 
+            }
+          }
 					gdi_send_data_response("The return value is : ", newline_start);
 					gdi_print_number(result, newline_end);
           if(result == NO_ERROR)
@@ -584,9 +598,9 @@ void gdi_map_to_functions()
 					gdi_print_number(addr, space_end);
 					gdi_print_number(datasize, newline_end);
 					gdi_send_data_response("The register values to write are : ", no_newline);
-					for(i=0;i < datasize;i++)
+					for(i=0;i < datasize;i++) {
 						gdi_print_wrong_endian_number(buffer[i], space_end);
-
+          }
 					result = DebugModbusWriteRegs(slave,addr, (u8 *)buffer, datasize);
 
 					gdi_send_data_response("The return value is : ", newline_start);
