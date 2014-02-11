@@ -24,6 +24,7 @@
 #include "queue.h"
 #include "semphr.h"
 #include "signals.h"
+#include "logtask.h"
 
 //#define GDI_ON_USART3
 //also in main.c
@@ -36,7 +37,7 @@ char *command_prefix = "at@gdi:";
   u8 data;
 char a = 0;
 char input_buffer[2][INPUT_BUF_SIZE];
-
+static u8 gdiEcho = FALSE;
 
 
 xSemaphoreHandle GDI_RXSemaphore = NULL;
@@ -74,6 +75,7 @@ enum gdi_func_type
 	at,	
 	help,
 	reset,
+	echo,
 	print,
 	cooleandlid,
 	seq_set,
@@ -105,10 +107,11 @@ gdi_func_table_type gdi_func_info_table[] =
 {    
   {"help", " Help command", "at@gdi:help()",help},		
   {"reset", " Reset M3 command", "at@gdi:reset()",reset},		
+  {"echo", " Echo command", "at@gdi:echo(<e>) e=1=> Echo on, e=0=> echo off",echo},    
   {"print", " Print the debug variable values", "at@gdi:print()",print },
   {"cooleandlid", " Set air cooler and lid temperatures and fan speed", "at@gdi:cooleandlid(idx, setpoint)",cooleandlid },
   {"seq", " Set tube seq temperatures and time", "at@gdi:seq(tube,[temp,time],..)",seq_set },
-  {"seq_cmd", " Set seq start, stop, state, log", "at@gdi:seq_cmd(tube, cmd)",seq_cmd },
+  {"seq_cmd", " Set seq start, stop, state, pause, log, getlog", "at@gdi:seq_cmd(tube, cmd)",seq_cmd },
   {"test_func", " Test function call", "at@gdi:test_func(parameter1,parameter2)",test_func},		
   {"modbus_read_regs", " Read register values", "at@gdi:modbus_read_regs(slave,addr,datasize)",modbus_read_regs},
   {"modbus_write_regs", " Write register values", "at@gdi:modbus_write_regs(slave,addr,[data1,data2,..],datasize)",modbus_write_regs},
@@ -424,10 +427,20 @@ void gdi_map_to_functions()
       Reset_Handler();
       break;
 
+    case echo :
+      {
+        u8 echoSwitch;
+        echoSwitch = (u8)  atoi(*(gdi_req_func_info.parameters + 0));
+        gdiEcho = echoSwitch;
+  			gdi_send_data_response("OK", newline_end);
+      }
+      break;
+
 		case print :
 			gdi_print_number(test_variable,newline_both);
 			gdi_send_data_response("OK", newline_end);
 			break;	
+      
     case cooleandlid:     
       {
         s16 setpoint;
@@ -490,37 +503,50 @@ void gdi_map_to_functions()
 			{
 			  long TubeId = 0;
 			  int i = 0;
-			  TubeId = (u16) atoi(*(gdi_req_func_info.parameters + 0));
-        if((TubeId < 17)||(TubeId > 1))
+        if(!strncmp((*(gdi_req_func_info.parameters + 0)),"getlog",strlen("getlog")))
         {
-          //GDI_PRINTF("SEQ CMD[%s][%d]",(*(gdi_req_func_info.parameters + 1)),strlen((*(gdi_req_func_info.parameters + 1))));
-          if(!strncmp((*(gdi_req_func_info.parameters + 1)),"status",strlen("status")))
+          sendLog();
+        }
+        else if(!strncmp((*(gdi_req_func_info.parameters + 0)),"pause",strlen("pause")))
+        {
+          GDI_PRINTF("PAUSE SEQ");
+          pause_tube_seq();
+        }
+        else 
+        {
+  			  TubeId = (u16) atoi(*(gdi_req_func_info.parameters + 0));
+          if((TubeId < 17)||(TubeId > 1))
           {
-            GDI_PRINTF("GET STATE on Tube:%d",TubeId);
-            get_tube_state(TubeId);
-          }
-          if(!strncmp((*(gdi_req_func_info.parameters + 1)),"start",strlen("start")))
-          {
-            GDI_PRINTF("START SEQ on Tube:%d",TubeId);
-            start_tube_seq(TubeId);/*Start the seq*/
-          }
-          if(!strncmp((*(gdi_req_func_info.parameters + 1)),"stop",strlen("stop")))
-          {
-            GDI_PRINTF("STOP SEQ on Tube:%d",TubeId);
-            stop_tube_seq(TubeId);
-          }
-           if(!strncmp((*(gdi_req_func_info.parameters + 1)),"log",strlen("log")))
-          {
-            if(0 == TubeId) {
-              GDI_PRINTF("LOG off");
-            } else {
-              GDI_PRINTF("LOG Interval:%d ms",TubeId);
+            //GDI_PRINTF("SEQ CMD[%s][%d]",(*(gdi_req_func_info.parameters + 1)),strlen((*(gdi_req_func_info.parameters + 1))));
+            if(!strncmp((*(gdi_req_func_info.parameters + 1)),"status",strlen("status")))
+            {
+              GDI_PRINTF("GET STATE on Tube:%d",TubeId);
+              get_tube_state(TubeId);
             }
-            set_log_interval(TubeId);
+            if(!strncmp((*(gdi_req_func_info.parameters + 1)),"start",strlen("start")))
+            {
+              GDI_PRINTF("START SEQ on Tube:%d",TubeId);
+              start_tube_seq(TubeId);/*Start the seq*/
+            }
+            if(!strncmp((*(gdi_req_func_info.parameters + 1)),"stop",strlen("stop")))
+            {
+              GDI_PRINTF("STOP SEQ on Tube:%d",TubeId);
+              stop_tube_seq(TubeId);
+            }
+            if(!strncmp((*(gdi_req_func_info.parameters + 1)),"log",strlen("log")))
+            {
+              if(0 == TubeId) {
+                GDI_PRINTF("LOG off");
+              } else {
+                GDI_PRINTF("LOG Interval:%d ms",TubeId);
+              }
+              set_log_interval(TubeId);
+            }
           }
-       }else
-        {
-          GDI_PRINTF("ERROR TubeID out of range Tube:%d",TubeId);
+          else
+          {
+            GDI_PRINTF("ERROR TubeID out of range Tube:%d",TubeId);
+          }
         }
       }
 			//  gdi_send_data_response("OK", newline_end);
@@ -661,9 +687,11 @@ void recieveCMD(void)
         index = 0;
       }
     }
-    while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
-    USART_SendData(uart, data);
+    if(gdiEcho) {
+      while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
+      USART_SendData(uart, data);
     }
+  }
   // vTraceUserEvent(4);
   //portEND_SWITCHING_ISR( xHigherPriorityTaskWoken );
 }

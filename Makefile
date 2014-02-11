@@ -37,7 +37,8 @@ SOURCES = \
     jsmn/decode_script.c \
     jsmn/json.c \
     jsmn/jsmn.c \
-      	cooleandlidtask.c \
+    cooleandlidtask.c \
+    logtask.c \
 	pid.c \
     arch/startup.S \
     arch/system_stm32f10x.c \

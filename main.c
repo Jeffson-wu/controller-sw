@@ -36,7 +36,7 @@
 #include "stm32f10x_rcc.h"
 #include "cooleandlidtask.h"
 #include "stm32f10x_tim.h"
-
+#include "logtask.h"
 
 #include "trcUser.h"
 #include "trcConfig.h"
@@ -46,7 +46,6 @@
 
 
 #define QUEUESIZE 10
-#define NUM_OF_TUBES 16+1
 
 //#define DEBUG_CLOCK_MSO /*Set mux to output sysclk or other clocks on PA8*/
 //#define GDI_ON_USART3
@@ -54,21 +53,20 @@
 
 extern xQueueHandle ModbusQueueHandle;
 xQueueHandle TubeSequencerQueueHandle;
+extern xQueueHandle LogQueueHandle;
 xQueueHandle GDIQueueHandle;
-xQueueHandle LogQueueHandle;
 extern xQueueHandle CooleAndLidQueueHandle;
 
 xSemaphoreHandle xSemaphore = NULL;
 xTimerHandle yTimer[3];
 uint32_t load=0xA5A5 ;
 
-bool log_tubes[NUM_OF_TUBES]={FALSE};
-
 extern gdi_init();
 void ModbusTask( void * pvParameters );
 void CooleAndLidTask( void * pvParameters );
 void gdi_task(void *pvParameters);
 void TubeSequencerTask( void * pvParameter);
+void LogTask( void * pvParameters );
 void ErrorOn();
 void ErrorOff();
 void LogOn(int log_time);
@@ -84,129 +82,6 @@ void fn(void)
   fn();
   nesting--;
 }
-
-static void LogTask( void * pvParameters )
-{
-  ReadModbusRegsRes *preg;
-  uint16_t modbus_data, modbus_addr;
-  xMessage *msg;
-  long TubeId,log_interval;
-  char message[20],i=1;
-  static long last_tube_to_log;
-  
-#ifdef GDI_ON_USART3
-  USART_TypeDef *uart = USART3;
-#else
-  USART_TypeDef *uart = USART1;
-#endif
-
-  while(1)
-  {
-    if( xQueueReceive( LogQueueHandle, &msg, portMAX_DELAY) == pdPASS )
-    {
-      switch(msg->ucMessageID)
-      {
-      case START_LOG:
-        i=1;
-        TubeId = *((long *)(msg->ucData));
-        while((i < NUM_OF_TUBES)&&(log_tubes[i++]== FALSE));/*Check if this is the first tube to enable log on then enable log timer*/
-        last_tube_to_log = i-1;
-        if(i >= NUM_OF_TUBES)
-        {
-          //####JRJ LogOn(1000);
-          last_tube_to_log = 0; /*Init to 0 since first tube*/
-        }
-        log_tubes[TubeId]= TRUE;
-        if (TubeId > last_tube_to_log) last_tube_to_log = TubeId;
-      break;
-      case END_LOG:
-       i=1;
-       TubeId = *((long *)(msg->ucData));
-       log_tubes[TubeId]= FALSE;
-       while((i < NUM_OF_TUBES)&&(log_tubes[i++]== FALSE));/*Check if this is last tube to log on, then disable log timer*/
-       last_tube_to_log = i-1;
-       if(i >= NUM_OF_TUBES)
-       {
-         LogOff();
-       }
-      break;
-      case READ_MODBUS_REGS_RES:
-        preg=(ReadModbusRegsRes *)msg->ucData;
-        TubeId = preg->slave;
-        modbus_addr = preg->addr;
-        modbus_data =(((u16)(preg->data[0])<<8)|(preg->data[1]));
-        if(preg->resultOk == NO_ERROR) {
-          if( (TUBE1_TEMP_REG == modbus_addr) || (TUBE2_TEMP_REG == modbus_addr) ) //(modbus_addr == TUBE1_TEMP_REG || TUBE2_TEMP_REG)
-          {
-            sprintf(message,"T%d:%d.%01dC ",TubeId,dac_2_temp(modbus_data)/10,dac_2_temp(modbus_data)%10);
-
-            for(i=0;i<strlen(message);i++)
-            {
-              while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
-              USART_SendData(uart, *(message+i));
-            }
-            if(last_tube_to_log == TubeId) 
-            {
-              USART_SendData(uart, '\r');
-              while (USART_GetFlagStatus(uart, USART_FLAG_TXE) == RESET);
-              USART_SendData(uart, '\n');
-              while (USART_GetFlagStatus(uart, USART_FLAG_TXE) == RESET);
-            }
-          }
-          else if(modbus_addr == DATA_LOG)
-          { // Auto Logging
-            int j;
-            int k;
-            modbus_data =(((u16)(preg->data[0])<<8)|(preg->data[1]));
-            sprintf(message,"Log T%d Seq %d: ",TubeId, modbus_data);
-            for(j=0; j<strlen(message); j++)
-            {
-              while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
-              USART_SendData(uart, *(message+j));
-            }
-            for(j=1; j<( (DATA_LOG_SIZE*2+1)); j++)
-            {
-              modbus_data =(((u16)(preg->data[j*2])<<8)|(preg->data[(j*2)+1]));
-              sprintf(message,"%d.%01dC, ",dac_2_temp(modbus_data)/10,dac_2_temp(modbus_data)%10);
-              for(k=0; k<strlen(message); k++)
-              {
-                while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
-                USART_SendData(uart, *(message+k));
-              }
-            }
-            USART_SendData(uart, '\r');
-            while (USART_GetFlagStatus(uart, USART_FLAG_TXE) == RESET);
-            USART_SendData(uart, '\n');
-            while (USART_GetFlagStatus(uart, USART_FLAG_TXE) == RESET);
-          }
-          else
-          {
-             sprintf(message,"####Tube[%d]ERROR MODBUS READ FAILED-log!!! %d",TubeId,preg->resultOk);
-             for(i=0;i<strlen(message);i++)
-              {
-                while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
-                USART_SendData(uart, *(message+i));
-              }
-          }
-        }
-      break;
-      case SET_LOG_INTERVAL:
-        log_interval = *((long *)(msg->ucData));
-        if(0 == log_interval) {
-          LogOff();
-        } else {
-          //####JRJ LogOn(log_interval);
-        }
-        if(xTimerChangePeriod( yTimer[2],1 * log_interval,100)!= pdPASS ) {
-          //error handling
-        }
-      break;
-      }
-    }
-    vPortFree(msg);
-  }
-}
-
 
 void HeartBeat_ErrorLed_Pinconfig()
 {
@@ -389,34 +264,6 @@ if( xTimerStop( yTimer[2], 0 ) != pdPASS );
 void vError_LEDToggle(xTimerHandle pxTimer )
 {
   GPIOB->ODR ^= GPIO_Pin_11;
-}
-void vReadTubeTemp(xTimerHandle pxTimer )
-{
-  xMessage *msg;
-  ReadModbusRegsReq *p;
-  portBASE_TYPE taskWoken = pdTRUE;
-  int tube;
-
-  for(tube=1;tube<17;tube++)
-  {
-    if(log_tubes[tube]== TRUE)
-    {
-      msg=pvPortMalloc(sizeof(xMessage)+sizeof(ReadModbusRegsReq));
-      msg->ucMessageID=READ_MODBUS_REGS;
-      p=(ReadModbusRegsReq *)msg->ucData;
-      if((tube%2) == 0)
-      {
-        p->addr=TUBE2_TEMP_REG;      
-      }else
-      {
-        p->addr=TUBE1_TEMP_REG;
-      }
-      p->datasize=1;
-      p->reply=LogQueueHandle;
-      p->slave=tube/*+0x02*/;
-      xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);
-    }
-  }
 }
 
 #define DEBUG_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_response(buf);

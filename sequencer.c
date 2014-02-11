@@ -89,13 +89,14 @@ loopend
 
 typedef enum
 {
-Melting,
-Annealing,
-Extension,
-Incubation,
-LoopStart,
-LoopEnd,
-End
+  Melting,
+  Annealing,
+  Extension,
+  Incubation,
+  Pause,
+  LoopStart,
+  LoopEnd,
+  End
 }TubestateTypeDef;
 
 typedef struct
@@ -506,6 +507,7 @@ signed short temp_2_dac(int16_t temp)
   return res;
 }
 
+/* ---------------------------------------------------------------------------*/
 int create_seq(long TubeId,int Nstates )
 {
   Tubeloop_t *T = &Tube[TubeId];
@@ -517,6 +519,7 @@ int create_seq(long TubeId,int Nstates )
   return (int)T->data;
 }
 
+/* ---------------------------------------------------------------------------*/
 bool insert_state_to_seq(long TubeId,uint32_t time, uint16_t temp )
 {
   bool result = TRUE;
@@ -544,6 +547,7 @@ bool insert_state_to_seq(long TubeId,uint32_t time, uint16_t temp )
 return result;
 }
 
+/* ---------------------------------------------------------------------------*/
 void start_tube_seq( long TubeId)
 {
   long *p;
@@ -555,27 +559,7 @@ void start_tube_seq( long TubeId)
   xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
 }
 
-void log_tube_seq(long TubeId,bool enable )
-{
-  long *p;
-  xMessage *new_msg;
-  /*Start monitoring temperature on the tube*/
-  new_msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
-  if (enable = TRUE)
-  {
-    new_msg->ucMessageID = START_LOG;
-  }else
-  {
-    new_msg->ucMessageID = END_LOG;
-  }
-  p=(long *)new_msg->ucData;
-  *p=TubeId;
-}
-
-
-
-
-
+/* ---------------------------------------------------------------------------*/
 void stop_tube_seq( long TubeId)
 {
   u16 data;
@@ -597,7 +581,33 @@ void stop_tube_seq( long TubeId)
   xQueueSend(LogQueueHandle, &new_msg, portMAX_DELAY);
 }
 
- void set_log_interval( long Log_Interval)
+/* ---------------------------------------------------------------------------*/
+void pause_tube_seq()
+{
+
+}
+
+/* ---------------------------------------------------------------------------*/
+void log_tube_seq(long TubeId,bool enable )
+ {
+   long *p;
+   xMessage *new_msg;
+   /*Start monitoring temperature on the tube*/
+   new_msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
+   if (enable = TRUE)
+   {
+     new_msg->ucMessageID = START_LOG;
+   }else
+   {
+     new_msg->ucMessageID = END_LOG;
+   }
+   p=(long *)new_msg->ucData;
+   *p=TubeId;
+ }
+ 
+ 
+/* ---------------------------------------------------------------------------*/
+void set_log_interval( long Log_Interval)
  {
   u16 data;
   long *p;
@@ -610,6 +620,7 @@ void stop_tube_seq( long TubeId)
 }
 
 
+/* ---------------------------------------------------------------------------*/
 void get_tube_state(long TubeId)
 {
   char tube_state[10]="IDLE";
@@ -629,6 +640,9 @@ void get_tube_state(long TubeId)
   }
 }
 
+/* ---------------------------------------------------------------------------*/
+/* TubeStateHandler is called on reception of START_TUBE_SEQ and              */
+/* NEXT_TUBE_STATE messages  */
 void TubeStateHandler(long TubeId,xMessage *msg)
 {
   xMessage *new_msg;
@@ -714,6 +728,9 @@ void TubeStateHandler(long TubeId,xMessage *msg)
         *p=TubeId;
         xQueueSend(LogQueueHandle, &new_msg, portMAX_DELAY);
       break;
+      case Pause:
+
+      break;
       default:
         DEBUG_PRINTF("ERROR STATE NOT HADLED Tube[%d]@%s-%d TubeSeq[%s] ",TubeId,tube_states[T->state],T->state,signals_txt[msg->ucMessageID]);
       break;
@@ -741,7 +758,7 @@ void TubeSequencerTask( void * pvParameter)
   stateCmdTypeDef *TSeq; 
 
   InitTubeTimers();
-  //vTaskDelay(2000);/*Wait for heaters to boot*/
+  vTaskDelay(1000);/*Wait for heaters to boot*/
 
   while(1)
   {
@@ -824,9 +841,21 @@ void TubeSequencerTask( void * pvParameter)
                 DEBUG_PRINTF("\n\rTube[%d] Step %d Temp reached:%d.%01dC Start timer %d.%01d Sec",TubeId,T->SeqIdx+1,dac_2_temp(modbus_data[modbus_id])/10,dac_2_temp(modbus_data[modbus_id])%10,TSeq->time/10,TSeq->time%10);/*ASCII 155 norm 167*/
                 StartTubeTimer(TubeId,TSeq->time);
                 Tube[TubeId].state = TUBE_WAIT_TIME;
-              }else
+              }else if(modbus_data[0] & LOGGING_DATA_READY) {
+                // do nothing
+              }
+              else
               {
-                DEBUG_PRINTF("Tube[%d]EVENT[%x]:%s-%s-%s-%s-%s-%s-%s-%s",TubeId,modbus_data[0],((modbus_data[0] & SEQUENCE_EVENT_TUBE1)?"S_EV_T1 ":" "),((modbus_data[0] & SEQUENCE_EVENT_TUBE1)?"S_EV_T2 ":" "),((modbus_data[0] & INIT_HW_ERROR_TUBE1)?"HW_ERR_T1 ":" "),((modbus_data[0] & INIT_HW_ERROR_TUBE2)?"HW_ERR_T2 ":" "),((modbus_data[0] & TUBE1_NOT_PRESENT)?"NO_T1 ":" "),((modbus_data[0] & TUBE2_NOT_PRESENT)?"NO_T2 ":" "),((modbus_data[0] & LOGGING_DATA_READY)?"Log ":" "),((modbus_data[0] & EVENT7)?"EV7 ":" "));
+                DEBUG_PRINTF("Tube[%d]EVENT[%04x]:%s-%s-%s-%s-%s-%s-%s-%s",
+                             TubeId,modbus_data[0],
+                             ((modbus_data[0] & SEQUENCE_EVENT_TUBE1)?"S_EV_T1 ":" "),
+                             ((modbus_data[0] & SEQUENCE_EVENT_TUBE2)?"S_EV_T2 ":" "),
+                             ((modbus_data[0] & INIT_HW_ERROR_TUBE1)?"HW_ERR_T1 ":" "),
+                             ((modbus_data[0] & INIT_HW_ERROR_TUBE2)?"HW_ERR_T2 ":" "),
+                             ((modbus_data[0] & TUBE1_NOT_PRESENT)?"NO_T1 ":" "),
+                             ((modbus_data[0] & TUBE2_NOT_PRESENT)?"NO_T2 ":" "),
+                             ((modbus_data[0] & LOGGING_DATA_READY)?"Log ":" "),
+                             ((modbus_data[0] & EVENT7)?"EV7 ":" "));
               }
               Tube[TubeId].event_reg = modbus_data[0];
               if(Tube[TubeId].state == TUBE_NOT_INITIALIZED)/*No errors on current tube, set it to IDLE so its ready for use*/
