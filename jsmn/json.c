@@ -1,5 +1,6 @@
 //#include <curl/curl.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "json.h"
 //#include "log.h"
@@ -12,7 +13,7 @@ char out1[300]; /*buffer for debug printf*/
 char out2[60]; /*buffer for debug printf*/
 
 
-#define log_die(fmt, args...)      sprintf(out1, fmt, ## args);  gdi_send_msg_response(out1);
+//#define log_die(fmt, args...)      sprintf(out1, fmt, ## args);  gdi_send_msg_response(out1);
 
 
 #if 0

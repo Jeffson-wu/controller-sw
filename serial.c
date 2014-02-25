@@ -50,15 +50,15 @@ static void (*receiveUART1CB)()=0;
 
 void UART_SendMsg(USART_TypeDef *uart, u8 *buffer, int len)
 {
-   if(uart==USART2)
-   {
+  if(uart==USART2)
+  {
      /*UART2 is used for RS485 communication*/
      DMA_InitTypeDef         DMA_InitStructure;
      NVIC_InitTypeDef NVIC_InitStructure;
      len+=2;/*Delay to wait RS485 to settle*/
      GPIO_SetBits(RS485_RE);
      GPIO_SetBits(RS485_DE);
-	 GPIO_SetBits(RS485_TX_LED);/*TX LED*/
+     GPIO_SetBits(RS485_TX_LED);/*TX LED*/
      if(len > 255)
      {
        DMA_InitStructure.DMA_BufferSize = 255;
@@ -113,7 +113,7 @@ void UART2_TX_Handler(void)
    {
      GPIO_ResetBits(RS485_RE);
      GPIO_ResetBits(RS485_DE);
-	 GPIO_ResetBits(RS485_TX_LED);/*TX LED*/
+     GPIO_ResetBits(RS485_TX_LED);/*TX LED*/
      DMA_ClearITPendingBit(DMA1_IT_TC7);
    }
    portEND_SWITCHING_ISR( pdTRUE);
@@ -129,6 +129,9 @@ void UART_Init(USART_TypeDef *uart, void (*recvCallback)())
 
   USART_StructInit(&USART_InitStruct);
   USART_InitStruct.USART_BaudRate=115200;/*Remember to update frametimer in modbus.c -> MODBUS_SILENT_INTERVAL when changing baudrate*/
+  if(uart==USART1) {
+    USART_InitStruct.USART_HardwareFlowControl = USART_HardwareFlowControl_RTS_CTS;
+  }
   USART_Init(uart, &USART_InitStruct);
   USART_Cmd(uart, ENABLE);
 
@@ -140,15 +143,16 @@ void UART_Init(USART_TypeDef *uart, void (*recvCallback)())
     NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
     NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
     NVIC_Init(&NVIC_InitStructure);
-  }else if(uart==USART1)
- {
-   receiveUART1CB=recvCallback;
-   NVIC_InitStructure.NVIC_IRQChannel = USART1_IRQn;
-   NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority =  configMAX_INTERRUPT_PRIORITY+1;
-   NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1;
-   NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
-   NVIC_Init(&NVIC_InitStructure);
- }
+  }
+  else if(uart==USART1)
+  {
+    receiveUART1CB=recvCallback;
+    NVIC_InitStructure.NVIC_IRQChannel = USART1_IRQn;
+    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority =  configMAX_INTERRUPT_PRIORITY+1;
+    NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1;
+    NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+    NVIC_Init(&NVIC_InitStructure);
+  }
   USART_ITConfig(uart, USART_IT_RXNE, ENABLE);
   
 }

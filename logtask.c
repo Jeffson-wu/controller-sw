@@ -142,7 +142,7 @@ int dataQueueAdd(u8 tubeId, u16 seqNumber, u8 data[])
 /*                                                                            */
 /* Where <tempX> is the logged temperature in deci C and printed in HEX       */ 
 /* ---------------------------------------------------------------------------*/
-int sendLog()
+void sendLog()
 {
   int tubeId = 0;
   int i = 0;
@@ -239,7 +239,7 @@ void LogTask( void * pvParameters )
         last_tube_to_log = i-1;
         if(i >= NUM_OF_TUBES)
         {
-          //####JRJ LogOn(1000);
+          LogOn(1000);
           last_tube_to_log = 0; /*Init to 0 since first tube*/
         }
         log_tubes[TubeId]= TRUE;
@@ -264,7 +264,7 @@ void LogTask( void * pvParameters )
           if( (TUBE1_TEMP_REG == modbus_addr) || (TUBE2_TEMP_REG == modbus_addr) )
           {
             modbus_data =(((u16)(preg->data[0])<<8)|(preg->data[1]));
-            sprintf(message,"T%d:%d.%01dC ",TubeId,dac_2_temp(modbus_data)/10,dac_2_temp(modbus_data)%10);
+            sprintf(message,"T%d:%d.%01dC ",TubeId,modbus_data/10,modbus_data%10); //####sprintf(message,"T%d:%d.%01dC ",TubeId,dac_2_temp(modbus_data)/10,dac_2_temp(modbus_data)%10);
 
             for(i=0;i<strlen(message);i++)
             {
@@ -281,47 +281,21 @@ void LogTask( void * pvParameters )
           }
           else if(modbus_addr == DATA_LOG)
           { // Auto Logging
-#if 1
             if( (DATALOGend-DATA_LOG+1) == preg->datasize)
             {
               modbus_data =(((u16)(preg->data[0])<<8)|(preg->data[1]));
               dataQueueAdd(TubeId,     modbus_data, &preg->data[2] ); //data after seq num
               dataQueueAdd(TubeId + 1, modbus_data, &preg->data[22]); //data after seq nom and 10 data
             }
-#else
-            int j;
-            int k;
-            modbus_data =(((u16)(preg->data[0])<<8)|(preg->data[1]));
-            sprintf(message,"Log T%d Seq %d: ",TubeId, modbus_data);
-            for(j=0; j<strlen(message); j++)
-            {
-              while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
-              USART_SendData(uart, *(message+j));
-            }
-            for(j=1; j<( (DATA_LOG_SIZE*2+1)); j++)
-            {
-              modbus_data =(((u16)(preg->data[j*2])<<8)|(preg->data[(j*2)+1]));
-              sprintf(message,"%d.%01dC, ",dac_2_temp(modbus_data)/10,dac_2_temp(modbus_data)%10);
-              for(k=0; k<strlen(message); k++)
-              {
-                while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
-                USART_SendData(uart, *(message+k));
-              }
-            }
-            USART_SendData(uart, '\r');
-            while (USART_GetFlagStatus(uart, USART_FLAG_TXE) == RESET);
-            USART_SendData(uart, '\n');
-            while (USART_GetFlagStatus(uart, USART_FLAG_TXE) == RESET);
-#endif
           }
           else
           {
-             sprintf(message,"####Tube[%d]ERROR MODBUS READ FAILED-log!!! %d",TubeId,preg->resultOk);
-             for(i=0;i<strlen(message);i++)
-              {
-                while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
-                USART_SendData(uart, *(message+i));
-              }
+            sprintf(message,"####Tube[%d]ERROR MODBUS READ FAILED-log!!! %d",TubeId,preg->resultOk);
+            for(i=0;i<strlen(message);i++)
+            {
+              while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
+              USART_SendData(uart, *(message+i));
+            }
           }
         }
       break;
@@ -330,7 +304,7 @@ void LogTask( void * pvParameters )
         if(0 == log_interval) {
           LogOff();
         } else {
-          //####JRJ LogOn(log_interval);
+          LogOn(log_interval);
         }
         if(xTimerChangePeriod( yTimer[2],1 * log_interval,100)!= pdPASS ) {
           //error handling
