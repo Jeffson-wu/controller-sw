@@ -319,6 +319,30 @@ static bool ModbusWriteRegs(u8 slave, u16 addr, u8 *data, u16 datasize)
   return ERR;
 }
 
+static bool ModbusBroadcast(u16 addr, u8 *data, u16 datasize)
+{
+  u16 crc;
+  u8 telegram[255];
+  int telegramsize=255;
+  USART_ERROR ERR;
+  telegram[0]=0; // Id 0 is broadcast
+  telegram[1]=WRITE_MULTIPLE_REGISTERS;/*write multiple regs*/
+  telegram[2]=(addr & 0xFF00)>>8;
+  telegram[3]=addr & 0x00FF;
+  telegram[4]=(datasize & 0xFF00)>>8;
+  telegram[5]=datasize & 0x00FF;
+  telegram[6]=datasize*2;
+  memcpy(&telegram[7], data, datasize*2);
+  crc = gen_crc16(&telegram[0], 7+datasize*2);
+  memcpy(&(telegram[7+datasize*2]), &crc, 2);
+  recvBuffer=telegram;
+  recvBufferSize=telegramsize;
+  debug[debug_cnt].chars = 0xBB;
+  UART_SendMsg(usedUart, telegram, 7+datasize*2+2);
+  //ERR = waitForRespons(telegram, &telegramsize);
+  return NO_ERROR;
+}
+
 void ModbusTask( void * pvParameters )
 {
   short usData;
@@ -378,6 +402,15 @@ void ModbusTask( void * pvParameters )
             ModbusReadRegs(p->slave, p->addr, p->datasize, 0);
           }
         }
+        break;
+        case BROADCAST_MODBUS:
+        {
+          WriteModbusRegsReq *p;
+          p=(WriteModbusRegsReq *)(msg->ucData);
+          // Ignore (p->reply) as no reply can be recieved from broadcasts
+          ModbusBroadcast(p->addr, p->data, p->datasize);
+        }
+        break;
         default:
         break;
       };

@@ -26,6 +26,7 @@
 #include "signals.h"
 #include "logtask.h"
 #include "sequencer.h"
+#include "signals.h"
 
 //#define GDI_ON_USART3
 //also in main.c
@@ -45,6 +46,7 @@ static u8 gdiEcho = FALSE;
 
 xSemaphoreHandle GDI_RXSemaphore = NULL;
 
+extern xQueueHandle ModbusQueueHandle;
 extern xQueueHandle CooleAndLidQueueHandle;
 
 #ifdef GDI_ON_USART3
@@ -87,6 +89,7 @@ enum gdi_func_type
 	test_func,
 	modbus_read_regs,
 	modbus_write_regs,
+	modbus_Synchronize_LED,
 	invalid_command
 };
 
@@ -120,6 +123,7 @@ gdi_func_table_type gdi_func_info_table[] =
   {"test_func", " Test function call", "at@gdi:test_func(parameter1,parameter2)",test_func},		
   {"modbus_read_regs", " Read register values", "at@gdi:modbus_read_regs(slave,addr,datasize)",modbus_read_regs},
   {"modbus_write_regs", " Write register values", "at@gdi:modbus_write_regs(slave,addr,[data1,data2,..],datasize)",modbus_write_regs},
+  {"synchronizeled", " Synchronize tube LEDs", "at@gdi:SynchronizeLED()",modbus_Synchronize_LED},
   { NULL, NULL, 0 }
 }; 
 
@@ -696,6 +700,26 @@ void gdi_map_to_functions()
 				}
 			}	
 			break;
+
+    case modbus_Synchronize_LED:
+      //void WriteTubeHeaterReg(u8 tube '=0', u16 reg '=0', u16 *data 'no data', u16 datasize '=0')
+      {
+        xMessage *msg;
+        WriteModbusRegsReq *p;
+
+        msg=pvPortMalloc(sizeof(xMessage)+sizeof(WriteModbusRegsReq)/*+datasize*sizeof(u16)*/);
+        //*data=((*data&0xFF)<<8)|(*data>>8);
+        msg->ucMessageID=BROADCAST_MODBUS;
+        p=(WriteModbusRegsReq *)msg->ucData;
+        p->slave=0; //not used for broadcast
+        p->addr=0;
+        //No data memcpy(p->data, data, datasize*sizeof(u16));
+        p->datasize=0; //datasize;
+        p->reply=NULL; //No reply
+        xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);      
+  			gdi_send_data_response("OK", newline_end);
+      }
+      break;
 
 		case invalid_command :
 			gdi_send_data_response("ERROR", newline_both);
