@@ -173,7 +173,7 @@ void sendLog()
     }
     taskEXIT_CRITICAL();
   }
-  SERIAL_String(")\n");
+  SERIAL_String(")");
 }
 /* Public functions ----------------------------------------------------------*/
 

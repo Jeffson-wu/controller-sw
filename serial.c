@@ -130,7 +130,7 @@ void UART_Init(USART_TypeDef *uart, void (*recvCallback)())
   USART_StructInit(&USART_InitStruct);
   USART_InitStruct.USART_BaudRate=115200;/*Remember to update frametimer in modbus.c -> MODBUS_SILENT_INTERVAL when changing baudrate*/
   if(uart==USART1) {
-    USART_InitStruct.USART_HardwareFlowControl = USART_HardwareFlowControl_RTS_CTS;
+    USART_InitStruct.USART_HardwareFlowControl = USART_HardwareFlowControl_RTS_CTS;//USART_HardwareFlowControl_None;
   }
   USART_Init(uart, &USART_InitStruct);
   USART_Cmd(uart, ENABLE);

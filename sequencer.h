@@ -20,8 +20,8 @@ extern void heaterIrqInit(void);
 
 extern int create_seq(long TubeId, uint16_t temp, int Nstages);
 extern bool insert_state_to_seq(long TubeId, char stageChar, uint32_t time, uint16_t temp );
-extern void start_tube_seq(long TubeId);
-extern void stop_tube_seq(long TubeId);
+bool start_tube_seq(long TubeId);
+bool stop_tube_seq(long TubeId);
 extern void pause_tube_seq(void);
 extern void continue_tube_seq(void);
 
