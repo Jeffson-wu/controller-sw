@@ -137,6 +137,8 @@ extern void adsGetLatest(int16_t * ch0value, int16_t * ch1value, int16_t * ch2va
 
 extern void adsConfigConversionTimer(tmrTIMER_CALLBACK convStartFn);
 
+extern uint16_t dac_2_temp(signed short dac);
+extern signed short temp_2_dac(int16_t temp);
 
 #endif /* __ADS1148_H */
 

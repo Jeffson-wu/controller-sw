@@ -31,6 +31,8 @@
 #include "pwm.h"
 
 /*-----------------------------------------------------------*/
+#define LOCK_OUTPUT GPIO_Pin_8
+
 //#define DEBUG
 
 typedef enum {
@@ -249,14 +251,22 @@ void CooleAndLidTask( void * pvParameters )
         {
           SetCooleAndLidReq *p;
           p=(SetCooleAndLidReq *)(msg->ucData);
-          peltierData[0].setpoint = peltierData[1].setpoint = peltierData[2].setpoint = p->value;
+          peltierData[0].setpoint = peltierData[1].setpoint = peltierData[2].setpoint = temp_2_dac(p->value);
         }
         break;
         case SET_LID_TEMP:
         {
           SetCooleAndLidReq *p;
           p=(SetCooleAndLidReq *)(msg->ucData);
-          lidData.setpoint = p->value;
+          lidData.setpoint = temp_2_dac(p->value);
+        }
+        break;
+        case SET_LID_LOCK:
+        {
+          SetCooleAndLidReq *p;
+          p=(SetCooleAndLidReq *)(msg->ucData);
+          if(1 == p->value) { GPIO_SetBits(GPIOA, LOCK_OUTPUT);   }
+          if(0 == p->value) { GPIO_ResetBits(GPIOA, LOCK_OUTPUT); }
         }
         break;
         default:

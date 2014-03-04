@@ -57,13 +57,23 @@ typedef struct LOG_DATA_QUEUE {
 } logDataQueue_t;
 
 /* Private macro -------------------------------------------------------------*/
+//#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
+#ifdef DEBUG
+#define DEBUG_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_response(buf);
+#else
+#define DEBUG_PRINTF(fmt, args...)    /* Don't do anything in release builds */
+#endif
 /* Private variables ---------------------------------------------------------*/
 bool log_tubes[NUM_OF_TUBES]={FALSE};
 
 static logDataQueue_t __attribute__ ((aligned (16))) logDataQueue[NUM_OF_TUBES]; // #### Aligned for debug
 
+static char message[40];   /*buffer for printf*/
+
 /* Private function prototypes -----------------------------------------------*/
+void SERIAL_String(const char *string);
 /* Private functions ---------------------------------------------------------*/
+
 void SERIAL_String(const char *string)
 {
 #ifdef GDI_ON_USART3
@@ -73,8 +83,8 @@ void SERIAL_String(const char *string)
 #endif
   if (string) {
     while (*string != '\0') {
-      while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
       USART_SendData(uart, *(string++));
+      while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
     }
   }
 }
@@ -153,8 +163,7 @@ void sendLog()
   for(tubeId = 1; tubeId < NUM_OF_TUBES; tubeId++) //tubeId=[1..16]
   {    
     taskENTER_CRITICAL(); //push irq state #### Kan critical section laves mindre!
-    // Udskriv alle tilgaengelige log elementer for hver tube 
-    //####Skal der kun vaere een post pr tube pr getlog? (Kravet er jo at der skal spoerges oftere end 1gg/sek)
+    // Send all available log elements for each tube
     while(NULL != (pinData = dequeue(&logDataQueue[tubeId-1])) ) //idx=[0..15]
     {
       sprintf(str,"tube%d:",tubeId);
@@ -162,7 +171,7 @@ void sendLog()
       //? = pinData->seqNum;  Handle Seq# ?? Ignored for now
       for(i=0; i<LOG_ELEMENT_SIZE; i++)
       {
-        sprintf(str,"0x%04X",pinData->data[i]); //#### 3 digits should suffice
+        sprintf(str,"%03X",pinData->data[i]); // 3 digits allows for temperatures up to 409,5 degrees
         SERIAL_String(str);
         if(LOG_ELEMENT_SIZE - 1 > i)
         { 
@@ -211,10 +220,10 @@ void vReadTubeTemp(xTimerHandle pxTimer )
 void LogTask( void * pvParameters )
 {
   ReadModbusRegsRes *preg;
-  uint16_t modbus_data, modbus_addr;
+  uint16_t modbus_data;
+  uint16_t modbus_addr;
   xMessage *msg;
   long TubeId,log_interval;
-  char message[20];
   int i = 1;
   static long last_tube_to_log;
   
@@ -279,23 +288,41 @@ void LogTask( void * pvParameters )
               while (USART_GetFlagStatus(uart, USART_FLAG_TXE) == RESET);
             }
           }
-          else if(modbus_addr == DATA_LOG)
+          //#### handle tube 1 logs and tube 2 logs separately or jointly
+          //  DATA_LOG_T1 = 50,
+          //  DATALOG_T1_end = DATA_LOG_T1 + DATA_LOG_SIZE + 1,
+          //  DATA_LOG_T2 = DATALOG_T1_end,
+          //  DATALOG_T2_end = DATA_LOG_T2 + DATA_LOG_SIZE + 1,
+          // Data log is {{seq#Tube1,t1.1,t1.2,t1.3,t1.4,t1.5,t1.6,t1.7,t1.8,t1.9,t1.10},
+          //              {seq#Tube2,t2.1,t2.2,t2.3,t2.4,t2.5,t2.6,t2.7,t2.8,t2.9,t2.10}}
+          else if((modbus_addr == DATA_LOG_T1) || (modbus_addr == DATA_LOG_T2))
           { // Auto Logging
-            if( (DATALOGend-DATA_LOG+1) == preg->datasize)
-            {
-              modbus_data =(((u16)(preg->data[0])<<8)|(preg->data[1]));
-              dataQueueAdd(TubeId,     modbus_data, &preg->data[2] ); //data after seq num
-              dataQueueAdd(TubeId + 1, modbus_data, &preg->data[22]); //data after seq nom and 10 data
+            if( (modbus_addr == DATA_LOG_T1) && (DATA_LOG_SIZE*2 + 2 == preg->datasize) )
+            { // Logs for tube 1 and tube 2 from that M0
+            DEBUG_PRINTF("Enqueue both (%d)", TubeId);
+              modbus_data =(((u16)(preg->data[0])<<8)|(preg->data[1]));   //Seq num1
+              dataQueueAdd(TubeId,     modbus_data, &preg->data[2] );     //data after seq num
+              modbus_data =(((u16)(preg->data[22])<<8)|(preg->data[23])); //Seq num2 
+              dataQueueAdd(TubeId + 1, modbus_data, &preg->data[24]);     //data after seq num1 and 10 data and seq num2
+            }
+
+            if( (modbus_addr == DATA_LOG_T1) && (DATA_LOG_SIZE+1) == preg->datasize)
+            { // Logs for tube 1 only from that M0
+              DEBUG_PRINTF("Enqueue T1 (%d)", TubeId);
+              modbus_data =(((u16)(preg->data[0])<<8)|(preg->data[1])); //Seq num
+              dataQueueAdd(TubeId, modbus_data, &preg->data[2] );       //data after seq num
+            }
+
+            if( (modbus_addr == DATA_LOG_T2) && (DATA_LOG_SIZE+1) == preg->datasize)
+            { // Logs for tube 2 only from that M0
+              DEBUG_PRINTF("Enqueue T2 (%d)", TubeId + 1);
+              modbus_data =(((u16)(preg->data[0])<<8)|(preg->data[1])); //Seq num
+              dataQueueAdd(TubeId + 1, modbus_data, &preg->data[2] );   //data after seq num
             }
           }
           else
           {
-            sprintf(message,"####Tube[%d]ERROR MODBUS READ FAILED-log!!! %d",TubeId,preg->resultOk);
-            for(i=0;i<strlen(message);i++)
-            {
-              while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
-              USART_SendData(uart, *(message+i));
-            }
+            DEBUG_PRINTF("Tube[%d]ERROR MODBUS read log FAILED!!! %d",TubeId,preg->resultOk);
           }
         }
       break;
