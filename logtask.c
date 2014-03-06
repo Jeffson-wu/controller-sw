@@ -59,9 +59,9 @@ typedef struct LOG_DATA_QUEUE {
 /* Private macro -------------------------------------------------------------*/
 //#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
 #ifdef DEBUG
-#define DEBUG_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_response(buf);
+#define DEBUG_LOG_PRINTF(fmt, args...)      sprintf(message, fmt, ## args);  gdi_send_msg_response(message);
 #else
-#define DEBUG_PRINTF(fmt, args...)    /* Don't do anything in release builds */
+#define DEBUG_LOG_PRINTF(fmt, args...)    /* Don't do anything in release builds */
 #endif
 /* Private variables ---------------------------------------------------------*/
 bool log_tubes[NUM_OF_TUBES]={FALSE};
@@ -299,7 +299,7 @@ void LogTask( void * pvParameters )
           { // Auto Logging
             if( (modbus_addr == DATA_LOG_T1) && (DATA_LOG_SIZE*2 + 2 == preg->datasize) )
             { // Logs for tube 1 and tube 2 from that M0
-            DEBUG_PRINTF("Enqueue both (%d)", TubeId);
+            DEBUG_LOG_PRINTF("Enqueue both (%d)", TubeId);
               modbus_data =(((u16)(preg->data[0])<<8)|(preg->data[1]));   //Seq num1
               dataQueueAdd(TubeId,     modbus_data, &preg->data[2] );     //data after seq num
               modbus_data =(((u16)(preg->data[22])<<8)|(preg->data[23])); //Seq num2 
@@ -308,21 +308,21 @@ void LogTask( void * pvParameters )
 
             if( (modbus_addr == DATA_LOG_T1) && (DATA_LOG_SIZE+1) == preg->datasize)
             { // Logs for tube 1 only from that M0
-              DEBUG_PRINTF("Enqueue T1 (%d)", TubeId);
+              DEBUG_LOG_PRINTF("Enqueue T1 (%d)", TubeId);
               modbus_data =(((u16)(preg->data[0])<<8)|(preg->data[1])); //Seq num
               dataQueueAdd(TubeId, modbus_data, &preg->data[2] );       //data after seq num
             }
 
             if( (modbus_addr == DATA_LOG_T2) && (DATA_LOG_SIZE+1) == preg->datasize)
             { // Logs for tube 2 only from that M0
-              DEBUG_PRINTF("Enqueue T2 (%d)", TubeId + 1);
+              DEBUG_LOG_PRINTF("Enqueue T2 (%d)", TubeId + 1);
               modbus_data =(((u16)(preg->data[0])<<8)|(preg->data[1])); //Seq num
               dataQueueAdd(TubeId + 1, modbus_data, &preg->data[2] );   //data after seq num
             }
           }
           else
           {
-            DEBUG_PRINTF("Tube[%d]ERROR MODBUS read log FAILED!!! %d",TubeId,preg->resultOk);
+            DEBUG_LOG_PRINTF("Tube[%d]ERROR MODBUS read log FAILED!!! %d",TubeId,preg->resultOk);
           }
         }
       break;
