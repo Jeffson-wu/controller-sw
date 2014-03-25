@@ -31,7 +31,7 @@
 #include "pwm.h"
 
 /*-----------------------------------------------------------*/
-#define LOCK_OUTPUT GPIO_Pin_8
+#define LOCK_OUTPUT GPIO_Pin_15  //GPIO_Pin_8
 
 //#define DEBUG
 
@@ -210,6 +210,7 @@ void CooleAndLidTask( void * pvParameters )
 
     /* The control task is synchronized to the ADC interrupt by semaphore */
     /* wait indefinitely for the semaphore to become free i.e. the ISR frees it. */
+    /* This also means the frequency is controlled by the ADC */
     xSemaphoreTake(xADSSemaphore, portMAX_DELAY);
     /* The semaphore is given when the ADC is done */
     /* Read lastest ADC samples into buffer */
@@ -219,7 +220,6 @@ void CooleAndLidTask( void * pvParameters )
     {
       peltier(&peltierData[i]);
     }
-    peltier(&peltierData[0]);
     lid(&lidData);
 
 #ifdef DEBUG

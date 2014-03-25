@@ -274,6 +274,7 @@ heater_tubes_t heater2tube[]={
 /*Tube state register*/
 #ifdef USE_STATICALLY_ALLOCATED_SEQUENCES
 /* state, pausePendingState, ucMessageID, LoopStart, LoopIterations, pauseTemp, event_reg, SeqIdx, *data, seq[]*/
+/* Save code space - initialize this in code instead - this is 19kB initialized data in FLASH */
 Tubeloop_t Tubeloop[nTubes]= {
                               {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,NULL,{}},
                               {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,NULL,{}},
@@ -470,16 +471,23 @@ void WriteTubeHeaterReg(u8 tube, u16 reg, u16 *data, u16 datasize)
 #else
   WriteModbusRegsReq *p;
   msg=pvPortMalloc(sizeof(xMessage)+sizeof(WriteModbusRegsReq)+datasize*sizeof(u16));
-  *data=((*data&0xFF)<<8)|(*data>>8);
-  msg->ucMessageID=WRITE_MODBUS_REGS;
-  p=(WriteModbusRegsReq *)msg->ucData;
-  p->slave=tube/*+0x02*/;
-  p->addr=reg;
-  memcpy(p->data, data, datasize*sizeof(u16));
-  p->datasize=datasize;
-  p->reply=TubeSequencerQueueHandle;
-  xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);
-  DEBUG_IF_PRINTF("Tube[%d]MODBUS WRITE_REG ID[%d] ADR[%d] data[%x]SIZE[%d]",tube, tube,p->addr,(((u16)(p->data[0])<<8)|(p->data[1])),p->datasize);
+  if(NULL == msg)
+  {
+    DEBUG_IF_PRINTF("Malloc failed! WriteTubeHeaterReg Tube[%d]MODBUS WRITE_REG ADR[%d]",tube,reg);
+  }
+  else
+  {
+    *data=((*data&0xFF)<<8)|(*data>>8);
+    msg->ucMessageID=WRITE_MODBUS_REGS;
+    p=(WriteModbusRegsReq *)msg->ucData;
+    p->slave=tube/*+0x02*/;
+    p->addr=reg;
+    memcpy(p->data, data, datasize*sizeof(u16));
+    p->datasize=datasize;
+    p->reply=TubeSequencerQueueHandle;
+    xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);
+    DEBUG_IF_PRINTF("Tube[%d]MODBUS WRITE_REG ID[%d] ADR[%d] data[%x]SIZE[%d]",tube, tube,p->addr,(((u16)(p->data[0])<<8)|(p->data[1])),p->datasize);
+  }
 #endif
 }
 
@@ -506,20 +514,27 @@ void ReadTubeHeaterReg(u8 tube, u16 reg, u16 datasize, xQueueHandle xQueue, bool
   ReadModbusRegsReq *p;
   portBASE_TYPE taskWoken = pdTRUE;
   msg=pvPortMalloc(sizeof(xMessage)+sizeof(ReadModbusRegsReq));
-  msg->ucMessageID=READ_MODBUS_REGS;
-  p=(ReadModbusRegsReq *)msg->ucData;
-  p->slave=tube/*+0x02*/;
-  p->addr=reg;
-  p->datasize=datasize;
-  p->reply=xQueue;
-  if (from_isr == TRUE)
+  if(NULL == msg)
   {
-   assert_param(xQueueSendFromISR(ModbusQueueHandle,&msg,&taskWoken) == pdPASS);
-  }else
-  {
-    assert_param(xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY)== pdPASS);
+    DEBUG_IF_PRINTF("Malloc failed! ReadTubeHeaterReg Tube[%d]MODBUS WRITE_REG ADR[%d]",tube,reg);
   }
-  DEBUG_IF_PRINTF("Tube[%d]MODBUS READ_REG ID[%d] ADR[%d] SIZE[%d] CALLER:%s",tube, p->slave,p->addr, p->datasize, (from_isr == TRUE) ?"ISR":"NORM");
+  else
+  {
+    msg->ucMessageID=READ_MODBUS_REGS;
+    p=(ReadModbusRegsReq *)msg->ucData;
+    p->slave=tube/*+0x02*/;
+    p->addr=reg;
+    p->datasize=datasize;
+    p->reply=xQueue;
+    if (from_isr == TRUE)
+    {
+     assert_param(xQueueSendFromISR(ModbusQueueHandle,&msg,&taskWoken) == pdPASS);
+    }else
+    {
+      assert_param(xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY)== pdPASS);
+    }
+    DEBUG_IF_PRINTF("Tube[%d]MODBUS READ_REG ID[%d] ADR[%d] SIZE[%d] CALLER:%s",tube, p->slave,p->addr, p->datasize, (from_isr == TRUE) ?"ISR":"NORM");
+  }
 #endif
 }
 
@@ -643,10 +658,13 @@ bool start_tube_seq( long TubeId)
     long *p;
     xMessage *msg;
     msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
-    msg->ucMessageID=START_TUBE_SEQ;
-    p=(long *)msg->ucData;
-    *p=TubeId;
-    xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
+    if(msg)
+    {
+      msg->ucMessageID=START_TUBE_SEQ;
+      p=(long *)msg->ucData;
+      *p=TubeId;
+      xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
+    }
   }
   else
   {
@@ -681,10 +699,13 @@ bool stop_tube_seq( long TubeId)
     Tubeloop[TubeId].pausePendingState = TUBE_P_NORM;
 #ifdef USE_DEVELOPMENT_LOGGING
     new_msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
-    new_msg->ucMessageID=END_LOG;
-    p=(long *)new_msg->ucData;
-    *p=TubeId;
-    xQueueSend(LogQueueHandle, &new_msg, portMAX_DELAY);
+    if(new_msg)
+    {
+      new_msg->ucMessageID=END_LOG;
+      p=(long *)new_msg->ucData;
+      *p=TubeId;
+      xQueueSend(LogQueueHandle, &new_msg, portMAX_DELAY);
+    }
 #endif
   }
   return result;
@@ -714,11 +735,14 @@ void continue_tube_seq(void)
     { // Tubes in pause needs to move on. SeqIdx is normally incremented on timer expiry but not when entering states.
       Tubeloop[TubeId].SeqIdx++; /*Going to next stage in sequence*/
       msg = pvPortMalloc(sizeof(xMessage)+sizeof(long));
-      msg->ucMessageID = NEXT_TUBE_STAGE; //Hvordan siger man at pausen er slut??
-      pucData=(long *)msg->ucData;
-      *pucData=TubeId;
-      xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);      
-      Tubeloop[TubeId].pausePendingState = TUBE_P_NORM;
+      if(msg)
+      {
+        msg->ucMessageID = NEXT_TUBE_STAGE; //Hvordan siger man at pausen er slut??
+        pucData=(long *)msg->ucData;
+        *pucData=TubeId;
+        xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);      
+        Tubeloop[TubeId].pausePendingState = TUBE_P_NORM;
+      }
     }
   }
 }
@@ -731,15 +755,18 @@ void log_tube_seq(long TubeId,bool enable )
    xMessage *new_msg;
    /*Start monitoring temperature on the tube*/
    new_msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
-   if (enable = TRUE)
+   if(new_msg)
    {
-     new_msg->ucMessageID = START_LOG;
-   }else
-   {
-     new_msg->ucMessageID = END_LOG;
+     if (enable = TRUE)
+     {
+       new_msg->ucMessageID = START_LOG;
+     }else
+     {
+       new_msg->ucMessageID = END_LOG;
+     }
+     p=(long *)new_msg->ucData;
+     *p=TubeId;
    }
-   p=(long *)new_msg->ucData;
-   *p=TubeId;
  }
  
  
@@ -750,10 +777,13 @@ void set_log_interval( long Log_Interval)
   long *p;
   xMessage *new_msg;
   new_msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
-  new_msg->ucMessageID=SET_LOG_INTERVAL;
-  p=(long *)new_msg->ucData;
-  *p=Log_Interval;
-  xQueueSend(LogQueueHandle, &new_msg, portMAX_DELAY);
+  if(new_msg)
+  {
+    new_msg->ucMessageID=SET_LOG_INTERVAL;
+    p=(long *)new_msg->ucData;
+    *p=Log_Interval;
+    xQueueSend(LogQueueHandle, &new_msg, portMAX_DELAY);
+  }
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -878,10 +908,13 @@ void TubeStateHandler(long TubeId,xMessage *msg)
           TubeId,tube_states[pTubeloop->state],signals_txt[msg->ucMessageID],pTubeloop->SeqIdx,pTubeloop->LoopIterations);
         pTubeloop->SeqIdx++; /*Going to next step*/
         new_msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
-        new_msg->ucMessageID=NEXT_TUBE_STAGE;
-        p=(long *)new_msg->ucData;
-        *p=TubeId;
-        assert_param(pdPASS == xQueueSend(TubeSequencerQueueHandle, &new_msg, portMAX_DELAY));
+        if(new_msg)
+        {
+          new_msg->ucMessageID=NEXT_TUBE_STAGE;
+          p=(long *)new_msg->ucData;
+          *p=TubeId;
+          assert_param(pdPASS == xQueueSend(TubeSequencerQueueHandle, &new_msg, portMAX_DELAY));
+        }
       break;
       case LoopEnd: 
         pTubeloop->LoopIterations--;
@@ -897,10 +930,13 @@ void TubeStateHandler(long TubeId,xMessage *msg)
             TubeId,tube_states[pTubeloop->state],signals_txt[msg->ucMessageID]);
         }
         new_msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
-        new_msg->ucMessageID=NEXT_TUBE_STAGE;
-        p=(long *)new_msg->ucData;
-        *p=TubeId;
-        xQueueSend(TubeSequencerQueueHandle, &new_msg, portMAX_DELAY);
+        if(new_msg)
+        {
+          new_msg->ucMessageID=NEXT_TUBE_STAGE;
+          p=(long *)new_msg->ucData;
+          *p=TubeId;
+          xQueueSend(TubeSequencerQueueHandle, &new_msg, portMAX_DELAY);
+        }
       break;
 #endif
       //All sequences has got an End stage as last entry
@@ -915,10 +951,13 @@ void TubeStateHandler(long TubeId,xMessage *msg)
 #ifdef USE_DEVELOPMENT_LOGGING
         /*Stop monitoring temperature on the tube*/
         new_msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
-        new_msg->ucMessageID=END_LOG;
-        p=(long *)new_msg->ucData;
-        *p=TubeId;
-        xQueueSend(LogQueueHandle, &new_msg, portMAX_DELAY);
+        if(new_msg)
+        {
+          new_msg->ucMessageID=END_LOG;
+          p=(long *)new_msg->ucData;
+          *p=TubeId;
+          xQueueSend(LogQueueHandle, &new_msg, portMAX_DELAY);
+        }
 #endif
       break;
       //Normal entries are one of these stages - they are handled alike, except for pause.
@@ -926,6 +965,9 @@ void TubeStateHandler(long TubeId,xMessage *msg)
       case Annealing:
       case Extension:
       case Incubation:
+        data = TSeq->temp;
+        WriteTubeHeaterReg(TubeId,SETPOINT_REG,&data,sizeof(data)/2);
+        pTubeloop->state = TUBE_WAIT_TEMP;
         if(pTubeloop->SeqIdx == 0) 
         {
           /*Set heater to automatic mode if a new sequence is started*/
@@ -942,16 +984,16 @@ void TubeStateHandler(long TubeId,xMessage *msg)
           DEBUG_SEQ_PRINTF("\n\rTube[%d] Step %d Time reached. New stage:%c, temp %d.%01dC",
             TubeId, pTubeloop->SeqIdx+1, stageToChar[TSeq->stage], TSeq->temp/10, TSeq->temp%10);
         }
-        data = TSeq->temp;
-        WriteTubeHeaterReg(TubeId,SETPOINT_REG,&data,sizeof(data)/2);
-        pTubeloop->state = TUBE_WAIT_TEMP;
 #ifdef USE_DEVELOPMENT_LOGGING
         /*Start monitoring temperature on the tube*/
         new_msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
-        new_msg->ucMessageID=START_LOG;
-        p=(long *)new_msg->ucData;
-        *p=TubeId;
-        xQueueSend(LogQueueHandle, &new_msg, portMAX_DELAY);
+        if(new_msg)
+        {
+          new_msg->ucMessageID=START_LOG;
+          p=(long *)new_msg->ucData;
+          *p=TubeId;
+          xQueueSend(LogQueueHandle, &new_msg, portMAX_DELAY);
+        }
 #endif
       break;
       default:
@@ -1001,15 +1043,18 @@ void TubeSequencerTask( void * pvParameter)
           ReadTubeHeaterReg(TubeId,EVENT_REG,1, TubeSequencerQueueHandle, FALSE); /*Read & Clear pending events on heater*/
 #ifdef USE_DEVELOPMENT_LOGGING
           new_msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
-          new_msg->ucMessageID=START_LOG;
-          p=(long *)new_msg->ucData;
-          *p=TubeId;
-          xQueueSend(LogQueueHandle, &new_msg, portMAX_DELAY);
-#endif
-          while(heater != nExtiGpio)
+          if(new_msg)
           {
-            heater++;
+            new_msg->ucMessageID=START_LOG;
+            p=(long *)new_msg->ucData;
+            *p=TubeId;
+            xQueueSend(LogQueueHandle, &new_msg, portMAX_DELAY);
           }
+#endif
+          //while(heater != nExtiGpio) ####JRJ hvad var meningen med dette?
+          //{
+          //  heater++;
+          //}
           // json_test();
         break;
         case START_TUBE_SEQ:

@@ -26,6 +26,7 @@
 #include "signals.h"
 #include "logtask.h"
 #include "sequencer.h"
+#include "swupdatetask.h"
 #include "signals.h"
 #include "../heater-sw/heater_reg.h"
 
@@ -50,6 +51,7 @@ xSemaphoreHandle GDI_RXSemaphore = NULL;
 
 extern xQueueHandle ModbusQueueHandle;
 extern xQueueHandle CooleAndLidQueueHandle;
+extern xQueueHandle SwuQueueHandle;
 
 #ifdef GDI_ON_USART3
 USART_TypeDef *uart = USART3;
@@ -93,6 +95,7 @@ enum gdi_func_type
 	modbus_write_regs,
 	modbus_Synchronize_LED,
 	modbus_LED,
+	swupdate,
 	invalid_command
 };
 
@@ -128,6 +131,7 @@ gdi_func_table_type gdi_func_info_table[] =
   {"modbus_write_regs", " Write register values", "at@gdi:modbus_write_regs(slave,addr,[data1,data2,..],datasize)",modbus_write_regs},
   {"synchronizeled", " Synchronize tube LEDs", "at@gdi:SynchronizeLED()",modbus_Synchronize_LED},
   {"led", " Set tube LED function", "at@gdi:led(tube,fn)",modbus_LED},
+  {"swupdate", " Start M0 SW update", "at@gdi:swupdate(tube,fn)",swupdate},
   { NULL, NULL, 0 }
 }; 
 
@@ -142,24 +146,28 @@ typedef struct
 
 struct_gdi_req_func_info gdi_req_func_info;
 
-/* Functions --------------------------------------------------------------*/
+/* Functions -----------------------------------------------------------------*/
 int send_led_cmd(u16 fn, long TubeId) 
 {
   xMessage *msg;
   WriteModbusRegsReq *p;
 
   msg=pvPortMalloc(sizeof(xMessage)+sizeof(WriteModbusRegsReq)+sizeof(u16));
-  fn=((fn&0xFF)<<8)|(fn>>8);
-  msg->ucMessageID=WRITE_MODBUS_REGS;
-  p=(WriteModbusRegsReq *)msg->ucData;
-  p->slave=TubeId;
-  p->addr=TUBE_COMMAND_REG;
-  memcpy(p->data, &fn, sizeof(u16));
-  p->datasize=2; //datasize;
-  p->reply=NULL; //No reply
-  return xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);     
+  if(NULL != msg)
+  {
+    fn=((fn&0xFF)<<8)|(fn>>8);
+    msg->ucMessageID=WRITE_MODBUS_REGS;
+    p=(WriteModbusRegsReq *)msg->ucData;
+    p->slave=TubeId;
+    p->addr=TUBE_COMMAND_REG;
+    memcpy(p->data, &fn, sizeof(u16));
+    p->datasize=2; //datasize;
+    p->reply=NULL; //No reply
+    return xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);     
+  }
 }
 
+/* ---------------------------------------------------------------------------*/
 void gdi_send_result(u8 result)
 {
 	while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
@@ -515,24 +523,27 @@ void gdi_map_to_functions()
         }
         SetCooleAndLidReq *p;
         msg = pvPortMalloc(sizeof(xMessage)+sizeof(SetCooleAndLidReq)+20);
-				fn_idx   = (u8)  atoi(*(gdi_req_func_info.parameters + i));
-        i++;
-				setpoint = (s16) atoi(*(gdi_req_func_info.parameters + i));
-        if(3 > fn_idx) {
-          msg->ucMessageID = SET_COOLE_TEMP;
-        } else if(3 == fn_idx) {
-          msg->ucMessageID = SET_LID_TEMP;
-        } else if(4 == fn_idx) {
-          msg->ucMessageID = SET_FAN;
-        } else if(5 == fn_idx) {
-          msg->ucMessageID = SET_LID_LOCK;
-        } else {
-          result = FALSE;
-          gdi_send_data_response("NOK invalid fn", newline_end);
+        if(msg)
+        {
+  				fn_idx   = (u8)  atoi(*(gdi_req_func_info.parameters + i));
+          i++;
+  				setpoint = (s16) atoi(*(gdi_req_func_info.parameters + i));
+          if(3 > fn_idx) {
+            msg->ucMessageID = SET_COOLE_TEMP;
+          } else if(3 == fn_idx) {
+            msg->ucMessageID = SET_LID_TEMP;
+          } else if(4 == fn_idx) {
+            msg->ucMessageID = SET_FAN;
+          } else if(5 == fn_idx) {
+            msg->ucMessageID = SET_LID_LOCK;
+          } else {
+            result = FALSE;
+            gdi_send_data_response("NOK invalid fn", newline_end);
+          }
+          p = (SetCooleAndLidReq *)msg->ucData;
+          p->value = setpoint;
+          xQueueSend(CooleAndLidQueueHandle, &msg, portMAX_DELAY);
         }
-        p = (SetCooleAndLidReq *)msg->ucData;
-        p->value = setpoint;
-        xQueueSend(CooleAndLidQueueHandle, &msg, portMAX_DELAY);
       }
 			if(result) { gdi_send_data_response("OK", newline_end); }
       break;
@@ -796,16 +807,19 @@ void gdi_map_to_functions()
           cmdSeq = (u16) atoi(*(gdi_req_func_info.parameters));
         }
         msg=pvPortMalloc(sizeof(xMessage)+sizeof(WriteModbusRegsReq)/*+datasize*sizeof(u16)*/);
-        //*data=((*data&0xFF)<<8)|(*data>>8);
-        msg->ucMessageID=BROADCAST_MODBUS;
-        p=(WriteModbusRegsReq *)msg->ucData;
-        p->slave=0; //not used for broadcast
-        p->addr=0;
-        //No data memcpy(p->data, data, datasize*sizeof(u16));
-        p->datasize=0; //datasize;
-        p->reply=NULL; //No reply
-        xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);      
-  			gdi_send_data_response("OK", newline_end);
+        if(msg)
+        {
+          //*data=((*data&0xFF)<<8)|(*data>>8);
+          msg->ucMessageID=BROADCAST_MODBUS;
+          p=(WriteModbusRegsReq *)msg->ucData;
+          p->slave=0; //not used for broadcast
+          p->addr=0;
+          //No data memcpy(p->data, data, datasize*sizeof(u16));
+          p->datasize=0; //datasize;
+          p->reply=NULL; //No reply
+          xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);      
+    			gdi_send_data_response("OK", newline_end);
+        }
       }
       break;
 
@@ -868,6 +882,57 @@ void gdi_map_to_functions()
   			} else {
           gdi_send_data_response("NOK Param out of range", newline_end);
   			}
+      }
+      break;
+
+    case swupdate:
+      {
+        xMessage *msg;
+        SetSSUpdateReq *p;
+        long TubeId = 0;
+        int i = 0;
+        int cmd;
+        u16 fn;
+        int result = 1;
+        
+        if(!gdiEcho) {
+          cmdSeq = (u16) atoi(*(gdi_req_func_info.parameters + i));
+          i++;
+        }
+        //TubeId = (u16) atoi(*(gdi_req_func_info.parameters + i));
+        //i++;
+        cmd = (u16) atoi(*(gdi_req_func_info.parameters + i));
+        i++;
+
+        if(1 == cmd)
+        {
+          result = SWU_start_task();
+          if(result) { 
+            gdi_send_data_response("OK", newline_end);
+          } else {
+            gdi_send_data_response("NOK failed", newline_end);
+          }
+        }
+        else
+        {
+          msg = pvPortMalloc(sizeof(xMessage)+sizeof(WriteModbusRegsReq)/*+datasize*sizeof(u16)*/);
+          if(msg)
+          {
+            msg->ucMessageID = START_SWU;
+            p = (SetSSUpdateReq *)msg->ucData;
+            p->value = cmd;
+            xQueueSend(SwuQueueHandle, &msg, portMAX_DELAY);
+            if(result) { 
+              gdi_send_data_response("OK", newline_end);
+            } else {
+              gdi_send_data_response("NOK Param out of range", newline_end);
+            }
+          }
+          else
+          {          
+            gdi_send_data_response("NOK malloc failed", newline_end);
+          }
+        }
       }
       break;
 

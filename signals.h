@@ -28,6 +28,7 @@ enum
   GDI_NEW_CMD,
   BROADCAST_MODBUS,
   SET_LID_LOCK,
+  START_SWU,
   LAST_MSG
 };
 
@@ -68,6 +69,12 @@ typedef struct
 {
   s16 value;
 } SetCooleAndLidReq;
+
+typedef struct
+{
+  s16 value;
+} SetSSUpdateReq;
+
 
 typedef struct
 {

@@ -46,6 +46,8 @@
 
 #define  RS485_RX_LED GPIOB,GPIO_Pin_0
 
+extern xSemaphoreHandle xModbusSemaphore;
+
 USART_ERROR USART2_ERROR = 0;
 
 
@@ -182,7 +184,7 @@ void modbus_end_of_telegram()
     /*Stop updating recvBuffer*/
     recvBuffer=0;
     /*unlock mutex to continue in modbus task*/
-    xSemaphoreGiveFromISR( xSemaphore, &xHigherPriorityTaskWoken );
+    xSemaphoreGiveFromISR( xModbusSemaphore, &xHigherPriorityTaskWoken );
     
     portEND_SWITCHING_ISR( xHigherPriorityTaskWoken );
   }
@@ -196,7 +198,7 @@ void response_timeoutCB(xTimerHandle handle)
       /*Stop updating recvBuffer*/
       recvBuffer=0;
       /*unlock mutex to continue in modbus task*/
-      xSemaphoreGive( xSemaphore );
+      xSemaphoreGive( xModbusSemaphore );
     }
 }
 
@@ -239,7 +241,7 @@ USART_ERROR waitForRespons(u8 *telegram, int *telegramSize)
   NOFRecvChars=0;
   debug[debug_cnt].chars = 0xFF;
   /*wait for mutex*/
-  xSemaphoreTake( xSemaphore, portMAX_DELAY );
+  xSemaphoreTake( xModbusSemaphore, portMAX_DELAY );
   xTimerStop( TimerHandle, 0 ); 
   modbus_err = USART2_ERROR;
   /*handle modbus telegram*/
@@ -363,13 +365,16 @@ void ModbusTask( void * pvParameters )
           if(p->reply)
           {
             msgout=pvPortMalloc(sizeof(xMessage)+sizeof(WriteModbusRegsRes));
-            msgout->ucMessageID=WRITE_MODBUS_REGS_RES;
-            po=(WriteModbusRegsRes *)(msgout->ucData);
-            po->slave=p->slave;
-            po->datasize=p->datasize;
-            po->addr=p->addr;
-            po->resultOk=ModbusWriteRegs(p->slave, p->addr, p->data, p->datasize);
-            xQueueSend(p->reply, &msgout, portMAX_DELAY);
+            if(msgout)
+            {
+              msgout->ucMessageID=WRITE_MODBUS_REGS_RES;
+              po=(WriteModbusRegsRes *)(msgout->ucData);
+              po->slave=p->slave;
+              po->datasize=p->datasize;
+              po->addr=p->addr;
+              po->resultOk=ModbusWriteRegs(p->slave, p->addr, p->data, p->datasize);
+              xQueueSend(p->reply, &msgout, portMAX_DELAY);
+            }
           }
           else
           {
@@ -385,17 +390,20 @@ void ModbusTask( void * pvParameters )
           if(p->reply)
           {
             msgout=pvPortMalloc(sizeof(xMessage)+sizeof(ReadModbusRegsRes)+p->datasize*sizeof(u16));
-            po=(ReadModbusRegsRes *)(msgout->ucData);
-            msgout->ucMessageID=READ_MODBUS_REGS_RES;
-            po->slave=p->slave;
-            po->addr=p->addr;
-            po->datasize=p->datasize;
-            po->resultOk=FALSE;
-            if(ModbusReadRegs(p->slave, p->addr, p->datasize, po->data)== NO_ERROR)
+            if(msgout)
             {
-              po->resultOk=NO_ERROR;
+              po=(ReadModbusRegsRes *)(msgout->ucData);
+              msgout->ucMessageID=READ_MODBUS_REGS_RES;
+              po->slave=p->slave;
+              po->addr=p->addr;
+              po->datasize=p->datasize;
+              po->resultOk=FALSE;
+              if(ModbusReadRegs(p->slave, p->addr, p->datasize, po->data)== NO_ERROR)
+              {
+                po->resultOk=NO_ERROR;
+              }
+              xQueueSend(p->reply, &msgout, portMAX_DELAY);
             }
-            xQueueSend(p->reply, &msgout, portMAX_DELAY);
           }
           else
           {
@@ -424,8 +432,8 @@ void Modbus_init(USART_TypeDef *uart)
 {
   usedUart=uart;
   TimerHandle=xTimerCreate("Modbus Response timer", MODBUS_RESPONSE_TIMEOUT, pdTRUE, NULL, response_timeoutCB);
-  xSemaphore = xSemaphoreCreateMutex();
-  xSemaphoreTake( xSemaphore, portMAX_DELAY );
+  xModbusSemaphore = xSemaphoreCreateMutex();
+  xSemaphoreTake( xModbusSemaphore, portMAX_DELAY );
   UART_Init(USART2, recieveChar);
   configTimerModbusTimeout();
 }

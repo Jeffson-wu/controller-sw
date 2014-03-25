@@ -86,7 +86,7 @@
 #define configTICK_RATE_HZ			( ( portTickType ) 1000 )
 #define configMAX_PRIORITIES		( ( unsigned portBASE_TYPE ) 16 )
 #define configMINIMAL_STACK_SIZE	( ( unsigned short ) 64 )
-#define configTOTAL_HEAP_SIZE		( ( size_t ) ( 16 * 1024 ) ) // 32 when using dynamically allocated sequences, 16 is static
+#define configTOTAL_HEAP_SIZE		( ( size_t ) ( 18 * 1024 ) ) // 32 when using dynamically allocated sequences, 16 is static
 #define configMAX_TASK_NAME_LEN		( 16 )
 #define configUSE_TRACE_FACILITY	1
 #define configUSE_16_BIT_TICKS		0

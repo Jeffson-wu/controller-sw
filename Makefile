@@ -39,6 +39,7 @@ SOURCES = \
     jsmn/jsmn.c \
     cooleandlidtask.c \
     logtask.c \
+    swupdatetask.c \
 	pid.c \
     arch/startup.S \
     arch/system_stm32f10x.c \

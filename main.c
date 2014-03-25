@@ -37,6 +37,7 @@
 #include "cooleandlidtask.h"
 #include "stm32f10x_tim.h"
 #include "logtask.h"
+#include "swupdatetask.h"
 
 #include "trcUser.h"
 #include "trcConfig.h"
@@ -51,13 +52,29 @@
 //#define GDI_ON_USART3
 //also in gdi.c
 
+/* ---------------------------------------------------------------------------*/
+/* Task Message Queues -------------------------------------------------------*/
 extern xQueueHandle ModbusQueueHandle;
 xQueueHandle TubeSequencerQueueHandle;
 extern xQueueHandle LogQueueHandle;
 xQueueHandle GDIQueueHandle;
 extern xQueueHandle CooleAndLidQueueHandle;
+extern xQueueHandle SwuQueueHandle;
 
-xSemaphoreHandle xSemaphore = NULL;
+/* ---------------------------------------------------------------------------*/
+xSemaphoreHandle xModbusSemaphore = NULL;
+
+/* ---------------------------------------------------------------------------*/
+/* Task Handles ---------------------------------------------------------------*/
+xTaskHandle pvTubeSequencerTaskTask;
+xTaskHandle modbusCreatedTask;
+xTaskHandle gdiCreatedTask;
+xTaskHandle pvLogTask;
+xTaskHandle pvCooleAndLidTask;
+extern xTaskHandle pvSWUpdateTask;
+
+/* ---------------------------------------------------------------------------*/
+
 xTimerHandle yTimer[3];
 uint32_t load=0xA5A5 ;
 
@@ -72,6 +89,21 @@ void ErrorOff();
 void LogOn(int log_time);
 void LogOff();
 
+
+void SWupdate_taskkill(void)
+{
+  //Delete tasks not needed
+  vTaskDelete( pvCooleAndLidTask )       PRIVILEGED_FUNCTION;
+  vTaskDelete( pvLogTask )               PRIVILEGED_FUNCTION;
+  vTaskDelete( pvTubeSequencerTaskTask ) PRIVILEGED_FUNCTION;
+  vTaskDelete( modbusCreatedTask )       PRIVILEGED_FUNCTION;
+
+  //Delete a queue - freeing all the memory allocated for storing of items placed on the queue.
+  vQueueDelete(CooleAndLidQueueHandle);
+  vQueueDelete(LogQueueHandle);
+  vQueueDelete(TubeSequencerQueueHandle);
+  vQueueDelete(ModbusQueueHandle);
+}
 
 void fn(void)
 {
@@ -213,10 +245,9 @@ void HW_Init(void)
   GPIO_Init(GPIOA, &GPIO_InitStructure);
   
   GPIO_InitStructure.GPIO_Pin = GPIO_Pin_11;/*CTS*/
-  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
   GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
   GPIO_Init(GPIOA, &GPIO_InitStructure);
-  GPIO_ResetBits(GPIOA,GPIO_Pin_11);
   
   GPIO_InitStructure.GPIO_Pin = GPIO_Pin_12;/*RTS*/
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
@@ -225,11 +256,12 @@ void HW_Init(void)
   GPIO_ResetBits(GPIOA,GPIO_Pin_12);
 #endif
 
-  /* Configure pin for lid lock ctrl. */
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_8;
+  /* Configure pin for lid lock ctrl.(PA8), M0 reset (PA15) */
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_8 | GPIO_Pin_15;
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
   GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
   GPIO_Init(GPIOA, &GPIO_InitStructure);
+  GPIO_SetBits(GPIOA, GPIO_Pin_8); //GPIO_Pin_15 will not go low Deactivate M0 reset
 
   /* TIM Configuration */
   PWM_PinConfig();
@@ -431,11 +463,6 @@ unsigned long vGetCounter()
 int main(void)
 {
   int result,i;
-  xTaskHandle pvCreatedTask;
-  xTaskHandle modbusCreatedTask;
-  xTaskHandle gdiCreatedTask;
-  xTaskHandle systemtestCreatedTask;
-  xTaskHandle pvCooleAndLidTask;
 
   long *p;
   long TubeId;
@@ -460,7 +487,7 @@ int main(void)
   PWM_Set(24576,PeltierCtrlPWM3);
   ConfigOSTimer();
 
-  xSemaphore = xSemaphoreCreateMutex();
+  xModbusSemaphore = xSemaphoreCreateMutex();
   /*create queue*/
   ModbusQueueHandle=xQueueCreate( 32, ( unsigned portBASE_TYPE ) sizeof( void * ) );
   vQueueAddToRegistry(ModbusQueueHandle,"MODBUS");
@@ -470,28 +497,33 @@ int main(void)
   vQueueAddToRegistry(CooleAndLidQueueHandle,"CooleAndLid");
   TubeSequencerQueueHandle=xQueueCreate( 100, ( unsigned portBASE_TYPE ) sizeof( void * ) );
   vQueueAddToRegistry(TubeSequencerQueueHandle,"GDI");
-  
+  SwuQueueHandle=xQueueCreate( QUEUESIZE, ( unsigned portBASE_TYPE ) sizeof( void * ) );
+  vQueueAddToRegistry(SwuQueueHandle,"SWUpdate");
   
 
   heaterIrqInit();
   result=xTaskCreate( ModbusTask, ( const signed char * ) "Modbus task", ( unsigned short ) 400, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &modbusCreatedTask );
-  result=xTaskCreate( LogTask, ( const signed char * ) "Log task", ( unsigned short ) 300, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvCreatedTask );
+  result=xTaskCreate( LogTask, ( const signed char * ) "Log task", ( unsigned short ) 300, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvLogTask );
   result=xTaskCreate( gdi_task, ( const signed char * ) "Debug task", ( unsigned short ) 400, NULL, ( ( unsigned portBASE_TYPE ) 1 ) | portPRIVILEGE_BIT, &gdiCreatedTask );
 #ifndef GDI_ON_USART3
   result=xTaskCreate( CooleAndLidTask, (const signed char *) "CooleAndLid task", 300, NULL, ( (unsigned portBASE_TYPE) 4 ) | portPRIVILEGE_BIT, &pvCooleAndLidTask );
 #endif
-  result=xTaskCreate( TubeSequencerTask, ( const signed char * ) "TubeSeq task", ( unsigned short ) 1000, NULL, ( ( unsigned portBASE_TYPE ) 4 ) | portPRIVILEGE_BIT, &pvCreatedTask );
+  result=xTaskCreate( TubeSequencerTask, ( const signed char * ) "TubeSeq task", ( unsigned short ) 1000, NULL, ( ( unsigned portBASE_TYPE ) 4 ) | portPRIVILEGE_BIT, &pvTubeSequencerTaskTask );
 
-
+#if 0
   for(i=1;i<17;i++)
   {
     TubeId = i;
     msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
-    msg->ucMessageID=TUBE_TEST_SEQ;
-    p=(long *)msg->ucData;
-    *p=TubeId;
-    xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
+    if(msg)
+    {
+      msg->ucMessageID=TUBE_TEST_SEQ;
+      p=(long *)msg->ucData;
+      *p=TubeId;
+      xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
+    }
   }
+#endif
 
   vTaskStartScheduler();
   return 0;
