@@ -149,15 +149,15 @@ void startSWUpdate(void)
   data_package.ID = 15;     //Initially testing with only one M0
   data_package.magicNumber = FLASH_MAGIC_NUMBER;
   data_package.pkgNum = 31; //Program last page in flash
-  CRC_ResetDR(); //generate crc
-  data_package.crc = CRC_CalcBlockCRC((uint32_t *) &data_package, sizeof(data_package_t)-4);
+  CRC_ResetDR(); //generate crc of all the data_packet except the crc itself
+  data_package.crc = CRC_CalcBlockCRC((uint32_t *) &data_package, (sizeof(data_package_t)-sizeof(uint32_t))/sizeof(uint32_t));
 
   SWU_SendMsg((u8 *)&data_package, sizeof(data_package_t));  //send data package
   
   vTaskDelay(100); //Allow for M0 to write flash (measured @ 56,8[mS])
   SWU_SendMsg((u8 *)&end_package, sizeof(end_package_t));  //send end package
 
-  vTaskDelay(10);  //Allow for M0 to act
+  vTaskDelay(100);  //Allow for M0 to act
 
   //inquire as to status
   //loop if not all packages succeded
