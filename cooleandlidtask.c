@@ -33,7 +33,7 @@
 /*-----------------------------------------------------------*/
 #define LOCK_OUTPUT GPIO_Pin_15  //GPIO_Pin_8
 
-//#define DEBUG
+#define DEBUG
 
 typedef enum {
   CTRL_OPEN_LOOP_STATE,
@@ -43,10 +43,16 @@ typedef enum {
 
 typedef enum {
   PELTIER_1,
-  PELTIER_2,
-  PELTIER_3,
+  //PELTIER_2,
+  //PELTIER_3,
   nPELTIER
 } peltierID_t;
+
+typedef enum {
+  LID_HEATER_1,
+  LID_HEATER_2,
+  nLID_HEATER
+} lidHeaterID_t;
 
 typedef struct {
   uint16_t          *pwmVal;
@@ -63,6 +69,7 @@ typedef struct PELTIER_DATA{
 } peltierData_t;
 
 typedef struct LID_DATA{
+  lidHeaterID_t   lidHeaterID;
   int16_t         setpoint;
   regulatorData_t regulator;
 } lidData_t;
@@ -77,14 +84,14 @@ static int16_t adcCh[4] = {0, 0, 0, 0};
 // Parameters for PWM
 static uint16_t pwmCh[5] = {0, 0, 0, 0, 0};
 
-static peltierData_t peltierData[3] = {
-  {PELTIER_1, /*setpoint*/0,{&pwmCh[0], &adcCh[0], CTRL_OPEN_LOOP_STATE}},
-  {PELTIER_2, /*setpoint*/0, {&pwmCh[1], &adcCh[1], CTRL_OPEN_LOOP_STATE}},
-  {PELTIER_3, /*setpoint*/0, {&pwmCh[2], &adcCh[2], CTRL_OPEN_LOOP_STATE}}
+static peltierData_t peltierData[1] = {
+  {PELTIER_1,    /*setpoint*/0, {&pwmCh[0], &adcCh[0], CTRL_OPEN_LOOP_STATE}}
 };
 
-static lidData_t lidData = 
-  {           /*setpoint*/0, {&pwmCh[3], &adcCh[3], CTRL_OPEN_LOOP_STATE}};
+static lidData_t lidData[2] = {
+  {LID_HEATER_1, /*setpoint*/0, {&pwmCh[1], &adcCh[1], CTRL_OPEN_LOOP_STATE}},
+  {LID_HEATER_2, /*setpoint*/0, {&pwmCh[2], &adcCh[2], CTRL_OPEN_LOOP_STATE}}
+};
 
 
 /* ---------------------------------------------------------------------------*/
@@ -108,8 +115,8 @@ peltier(peltierData_t *peltierData){
     case CTRL_OPEN_LOOP_STATE:
     {
       int16_t error = (reg->pid.setPoint - reg->pv);
-      if (error > 1000) {
-        *reg->pwmVal = 0;
+      if (error < -1000) {
+        *reg->pwmVal = 32767;
       } else {
         reg->state = CTRL_CLOSED_LOOP_STATE;
       }
@@ -118,7 +125,7 @@ peltier(peltierData_t *peltierData){
     case CTRL_CLOSED_LOOP_STATE:
     {
       ov = pid_Controller(reg->pv, &peltierData->regulator.pid);
-      *reg->pwmVal = 16384-(ov/2);
+      *reg->pwmVal = (ov/2)-16384;
     }
     break;
   }
@@ -148,7 +155,7 @@ lid(lidData_t *lidData)
     {
       int16_t error = (reg->pid.setPoint - reg->pv);
       if (error > 1000) {
-        *reg->pwmVal = 0;
+        *reg->pwmVal = 32767;
       } else {
         reg->state = CTRL_CLOSED_LOOP_STATE;
       }
@@ -157,7 +164,7 @@ lid(lidData_t *lidData)
     case CTRL_CLOSED_LOOP_STATE:
     {
       ov = pid_Controller(reg->pv, &lidData->regulator.pid);
-      *reg->pwmVal = 16384-(ov/2);
+      *reg->pwmVal = (ov/2)-16384;
     }
     break;
   }
@@ -175,6 +182,7 @@ void CooleAndLidTask( void * pvParameters )
   xMessage *msg;
   int i; //iterator
 #ifdef DEBUG
+  int count = 0;
   char str[20];
 #endif
 
@@ -183,15 +191,13 @@ void CooleAndLidTask( void * pvParameters )
   assert_param(NULL != xADSSemaphore);
   xSemaphoreTake(xADSSemaphore, portMAX_DELAY); //Default is taken. ISR will give.
 
-#ifdef DEBUG
-  /* Debugging the feedback value */
-  gdi_send_msg_response("Hej\r\n");
-#endif
-
   adsSetIsrSemaphore(xADSSemaphore);
   /* Start convertion and let timeout handle subsequent calls to adsContiniueSequence */
   if(0 == ads1148Init())
   {
+#ifdef DEBUG
+    gdi_send_msg_response("ADS1148 OK\r\n");
+#endif
     adsStartSeq();
     adsIrqEnable();
   }
@@ -201,9 +207,8 @@ void CooleAndLidTask( void * pvParameters )
   }
   adsConfigConversionTimer(&adsTimerCallback);
   initPeltier(&peltierData[0], K_P*SCALING_FACTOR, K_I*SCALING_FACTOR, K_D*SCALING_FACTOR); 
-  initPeltier(&peltierData[1], K_P*SCALING_FACTOR, K_I*SCALING_FACTOR, K_D*SCALING_FACTOR); 
-  initPeltier(&peltierData[2], K_P*SCALING_FACTOR, K_I*SCALING_FACTOR, K_D*SCALING_FACTOR); 
-  initLid(&lidData, K_P*SCALING_FACTOR, K_I*SCALING_FACTOR, K_D*SCALING_FACTOR);
+  initLid(&lidData[0], K_P*SCALING_FACTOR, K_I*SCALING_FACTOR, K_D*SCALING_FACTOR);
+  initLid(&lidData[1], K_P*SCALING_FACTOR, K_I*SCALING_FACTOR, K_D*SCALING_FACTOR);
 
   while(1)
   {
@@ -216,16 +221,18 @@ void CooleAndLidTask( void * pvParameters )
     /* Read lastest ADC samples into buffer */
     adsGetLatest(&adcCh[0], &adcCh[1], &adcCh[2], &adcCh[3]);
 
-    for(i = 0; i < 3; i ++)
+    peltier(&peltierData[i]);
+    for(i = 0; i < 2; i ++)
     {
-      peltier(&peltierData[i]);
+      lid(&lidData[i]);
     }
-    lid(&lidData);
 
 #ifdef DEBUG
     /* Debugging the feedback value */
-    sprintf(str, "I=%d, O=%d", adcCh[0], pwmCh[2]);
-    gdi_send_msg_response(str);
+    {
+      sprintf(str, "c: %d" /* "I=%d, O=%d", adcCh[0], pwmCh[0]*/ , count++);
+      gdi_send_msg_response(str);
+    }
 #endif
 
     // Fan ctrl ??
@@ -244,21 +251,21 @@ void CooleAndLidTask( void * pvParameters )
         {
           SetCooleAndLidReq *p;
           p=(SetCooleAndLidReq *)(msg->ucData);
-          pwmCh[4] = p->value;
+          pwmCh[4] = p->value * 32768/100;
         }
         break;
         case SET_COOLE_TEMP:
         {
           SetCooleAndLidReq *p;
           p=(SetCooleAndLidReq *)(msg->ucData);
-          peltierData[0].setpoint = peltierData[1].setpoint = peltierData[2].setpoint = temp_2_dac(p->value);
+          peltierData[0].setpoint = temp_2_dac(p->value);
         }
         break;
         case SET_LID_TEMP:
         {
           SetCooleAndLidReq *p;
           p=(SetCooleAndLidReq *)(msg->ucData);
-          lidData.setpoint = temp_2_dac(p->value);
+          lidData[0].setpoint = lidData[1].setpoint = temp_2_dac(p->value);
         }
         break;
         case SET_LID_LOCK:
@@ -267,6 +274,35 @@ void CooleAndLidTask( void * pvParameters )
           p=(SetCooleAndLidReq *)(msg->ucData);
           if(1 == p->value) { GPIO_SetBits(GPIOA, LOCK_OUTPUT);   }
           if(0 == p->value) { GPIO_ResetBits(GPIOA, LOCK_OUTPUT); }
+        }
+        break;
+        case SET_COOLE_AND_LID:
+        {
+          SetCooleAndLidReq *p;
+          p=(SetCooleAndLidReq *)(msg->ucData);
+          switch(p->idx) {
+            case 0:
+              peltierData[0].setpoint = p->value;
+              break;
+            case 1:
+              lidData[0].setpoint = p->value;
+              break;
+            case 2:
+              lidData[1].setpoint = p->value;
+              break;
+            case 3: //In old lid heater connecter
+              pwmCh[3] = p->value;
+              break;
+            case 4: //Fan ctrl
+              pwmCh[4] = p->value;
+              break;
+            case 5:
+              if(1 == p->value) { GPIO_SetBits(GPIOA, LOCK_OUTPUT);   }
+              if(0 == p->value) { GPIO_ResetBits(GPIOA, LOCK_OUTPUT); }
+              break;
+            default:
+              break;
+          }
         }
         break;
         default:

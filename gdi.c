@@ -87,6 +87,9 @@ enum gdi_func_type
 	echo,
 	print,
 	cooleandlid,
+	coole_fn,
+	lid_fn,
+	fan_fn,
 	seq,
 	seq_set,
 	seq_cmd,
@@ -122,8 +125,11 @@ gdi_func_table_type gdi_func_info_table[] =
   {"reset", " Reset M3 command", "at@gdi:reset()",reset},		
   {"echo", " Echo command", "at@gdi:echo(<e>) e=1=> Echo on, e=0=> echo off",echo},    
   {"print", " Print the debug variable values", "at@gdi:print()",print },
-  {"cooleandlid", " Set air cooler and lid temperatures and fan speed", "at@gdi:cooleandlid(idx, setpoint)",cooleandlid },
-  {"seq", " Set tube seq temperatures and time", "at@gdi:seq(tube,[temp,time],..)",seq },
+  {"cooleandlid", " Set temperatures and fan speed", "at@gdi:cooleandlid(idx, setpoint)",cooleandlid },
+  {"coole", " Set cooler temperature", "at@gdi:cooleandlid(idx, setpoint)",coole_fn },
+  {"lid",   " Set lid temperature",    "at@gdi:cooleandlid(idx, setpoint)",lid_fn },
+  {"Fan",   " Set fan speed % ",       "at@gdi:cooleandlid(idx, setpoint)",fan_fn },
+  {"seq",   " Set tube seq temperatures and time", "at@gdi:seq(tube,[temp,time],..)",seq },
   {"seq_set", " Set tube seq: stage,temperatures,time", "at@gdi:seq_set(tube,pauseTemp,[stage,temp,time],..)",seq_set },
   {"seq_cmd", " Set seq start, stop, state, pause, continue, log, getlog", "at@gdi:seq_cmd(tube, cmd)",seq_cmd },
   {"test_func", " Test function call", "at@gdi:test_func(parameter1,parameter2)",test_func},		
@@ -528,17 +534,41 @@ void gdi_map_to_functions()
   				fn_idx   = (u8)  atoi(*(gdi_req_func_info.parameters + i));
           i++;
   				setpoint = (s16) atoi(*(gdi_req_func_info.parameters + i));
-          if(3 > fn_idx) {
-            msg->ucMessageID = SET_COOLE_TEMP;
-          } else if(3 == fn_idx) {
-            msg->ucMessageID = SET_LID_TEMP;
-          } else if(4 == fn_idx) {
-            msg->ucMessageID = SET_FAN;
-          } else if(5 == fn_idx) {
-            msg->ucMessageID = SET_LID_LOCK;
+          if(6 > fn_idx) {
+            msg->ucMessageID = SET_COOLE_AND_LID;
           } else {
             result = FALSE;
             gdi_send_data_response("NOK invalid fn", newline_end);
+          }
+          p = (SetCooleAndLidReq *)msg->ucData;
+          p->value = setpoint;
+          p->idx   = fn_idx;
+          xQueueSend(CooleAndLidQueueHandle, &msg, portMAX_DELAY);
+        }
+      }
+			if(result) { gdi_send_data_response("OK", newline_end); }
+      break;
+      
+    case coole_fn:
+      {
+        s16 setpoint;
+        xMessage *msg;        
+        int result = TRUE;
+
+        if(!gdiEcho) {
+          cmdSeq = (u16) atoi(*(gdi_req_func_info.parameters + i));
+          i++;
+        }
+        SetCooleAndLidReq *p;
+        msg = pvPortMalloc(sizeof(xMessage)+sizeof(SetCooleAndLidReq)+20);
+        if(msg)
+        {
+  				setpoint = (s16) atoi(*(gdi_req_func_info.parameters + i));
+          if((setpoint >= -100)&&(setpoint <= 100)) {
+            msg->ucMessageID = SET_COOLE_TEMP;
+          } else {
+            result = FALSE;
+            gdi_send_data_response("NOK invalid parameter", newline_end);
           }
           p = (SetCooleAndLidReq *)msg->ucData;
           p->value = setpoint;
@@ -547,6 +577,65 @@ void gdi_map_to_functions()
       }
 			if(result) { gdi_send_data_response("OK", newline_end); }
       break;
+
+    case lid_fn:
+      {
+        s16 setpoint;
+        xMessage *msg;        
+        int result = TRUE;
+
+        if(!gdiEcho) {
+          cmdSeq = (u16) atoi(*(gdi_req_func_info.parameters + i));
+          i++;
+        }
+        SetCooleAndLidReq *p;
+        msg = pvPortMalloc(sizeof(xMessage)+sizeof(SetCooleAndLidReq)+20);
+        if(msg)
+        {
+  				setpoint = (s16) atoi(*(gdi_req_func_info.parameters + i));
+          if((setpoint >= 0)&&(setpoint <= 130)) {
+            msg->ucMessageID = SET_LID_TEMP;
+          } else {
+            result = FALSE;
+            gdi_send_data_response("NOK invalid parameter", newline_end);
+          }
+          p = (SetCooleAndLidReq *)msg->ucData;
+          p->value = setpoint;
+          xQueueSend(CooleAndLidQueueHandle, &msg, portMAX_DELAY);
+        }
+      }
+			if(result) { gdi_send_data_response("OK", newline_end); }
+      break;
+
+    case fan_fn:
+      {
+        s16 setpoint;
+        xMessage *msg;        
+        int result = TRUE;
+
+        if(!gdiEcho) {
+          cmdSeq = (u16) atoi(*(gdi_req_func_info.parameters + i));
+          i++;
+        }
+        SetCooleAndLidReq *p;
+        msg = pvPortMalloc(sizeof(xMessage)+sizeof(SetCooleAndLidReq)+20);
+        if(msg)
+        {
+  				setpoint = (s16) atoi(*(gdi_req_func_info.parameters + i));
+          if((setpoint > 0)&&(setpoint <= 100)) {
+            msg->ucMessageID = SET_FAN;
+          } else {
+            result = FALSE;
+            gdi_send_data_response("NOK invalid parameter", newline_end);
+          }
+          p = (SetCooleAndLidReq *)msg->ucData;
+          p->value = setpoint;
+          xQueueSend(CooleAndLidQueueHandle, &msg, portMAX_DELAY);
+        }
+      }
+			if(result) { gdi_send_data_response("OK", newline_end); }
+      break;
+
 	  case seq:
 		  {//Manual sequence setting
             uint16_t temp; /*Settemp in 0.1 degrees*/

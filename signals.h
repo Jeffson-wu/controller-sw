@@ -16,18 +16,21 @@ enum
   READ_MODBUS_REGS_RES,
   START_TUBE,
   DATA_FROM_TUBE,
+  SET_COOLE_AND_LID,
+  SET_COOLE_AND_LID_RES,
   SET_FAN,
   SET_FAN_RES,
   SET_COOLE_TEMP,
   SET_COOLE_TEMP_RES,
   SET_LID_TEMP,
   SET_LID_TEMP_RES,
+  SET_LID_LOCK,
+  SET_LID_LOCK_RES,
   START_LOG,
   END_LOG,
   SET_LOG_INTERVAL,
   GDI_NEW_CMD,
   BROADCAST_MODBUS,
-  SET_LID_LOCK,
   START_SWU,
   LAST_MSG
 };
@@ -68,6 +71,7 @@ typedef struct
 typedef struct
 {
   s16 value;
+  s16 idx;
 } SetCooleAndLidReq;
 
 typedef struct

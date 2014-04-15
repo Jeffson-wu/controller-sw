@@ -23,6 +23,8 @@
 
 /* Exported types ------------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
+/* ADC conversion frequency */
+#define SAMPLING_FREQUENCY 10
 
 /* BSC Burnout current, 0 = off */
 #define ADS_BCS 0

@@ -648,7 +648,7 @@ void adsConfigConversionTimer(tmrTIMER_CALLBACK convStartFn)
   xTimerHandle xTimer;
   signed portBASE_TYPE * pxReschedule = pdFALSE;
   xTimer= xTimerCreate("ADCTimer",      // Just a text name, not used by the kernel.
-                       (250/portTICK_RATE_MS),// (100/portTICK_RATE_MS),  // 10Hz conversion frequency.
+                       ((configTICK_RATE_HZ)/SAMPLING_FREQUENCY),  // conversion frequency.
                        pdTRUE,          // The timers will auto-reload themselves when they expire.
                        (void *) 1,      // Assign each timer a unique id equal to its array index.
                        convStartFn      // Each timer calls the same callback when it expires.
@@ -704,6 +704,9 @@ static uint16_t readAndPrepareNext(uint8_t channel)
 /*                                                                                                                                   */
 void ADS_Handler(void)
 {
+  static portBASE_TYPE xHigherPriorityTaskWoken;
+
+  xHigherPriorityTaskWoken = pdFALSE;
 #if 1
 	typedef enum {
     CHANNEL_0_SAMPLED,
@@ -738,7 +741,7 @@ void ADS_Handler(void)
       adsIrqDisable();
   /* Synchronize adsConfigConversionTimer. Do not require context switch in case
      running task is lower prio adsConfigConversionTimer (pdTRUE to do so)*/
-      xSemaphoreGiveFromISR(ADSSemaphore, pdFALSE); 
+      xSemaphoreGiveFromISR(ADSSemaphore, &xHigherPriorityTaskWoken); 
       state = CHANNEL_0_SAMPLED;
       break;
   }
@@ -746,5 +749,6 @@ void ADS_Handler(void)
   xSemaphoreGiveFromISR(ADSSemaphore, pdFALSE);
 #endif
   EXTI_ClearITPendingBit(ADS_EXTI_LINE);
+  //portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
 }
 
