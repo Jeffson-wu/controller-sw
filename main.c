@@ -480,11 +480,11 @@ int main(void)
 #endif
   init_os_trace(); /*GDB CMD:dump binary memory gdb_dump_23.txt 0x20000000 0x20010000  -- http://percepio.com/*/
   Modbus_init(USART2);
-  PWM_Set(16384,TopHeaterCtrlPWM);
-  PWM_Set(50,FANctrlPWM); 
-  PWM_Set(8192,PeltierCtrlPWM1);
-  PWM_Set(16384,PeltierCtrlPWM2);
-  PWM_Set(24576,PeltierCtrlPWM3);
+  PWM_Set(0,TopHeaterCtrlPWM);
+  PWM_Set(0,FANctrlPWM); 
+  PWM_Set(0,PeltierCtrlPWM1);
+  PWM_Set(0,PeltierCtrlPWM2);
+  PWM_Set(0,PeltierCtrlPWM3);
   ConfigOSTimer();
 
   xModbusSemaphore = xSemaphoreCreateMutex();
@@ -510,7 +510,7 @@ int main(void)
 #endif
   result=xTaskCreate( TubeSequencerTask, ( const signed char * ) "TubeSeq task", ( unsigned short ) 1000, NULL, ( ( unsigned portBASE_TYPE ) 4 ) | portPRIVILEGE_BIT, &pvTubeSequencerTaskTask );
 
-#if 0
+#if 1
   for(i=1;i<17;i++)
   {
     TubeId = i;

@@ -75,16 +75,16 @@ xQueueHandle CooleAndLidQueueHandle;
 static int16_t adcCh[4] = {0, 0, 0, 0};
 
 // Parameters for PWM
-static uint16_t pwmCh[5] = {32767, 32767, 32767, 32767, 50};
+static uint16_t pwmCh[5] = {0, 0, 0, 0, 0};
 
 static peltierData_t peltierData[3] = {
-  {PELTIER_1, /*setpoint*/-6000,{&pwmCh[0], &adcCh[0], CTRL_OPEN_LOOP_STATE}},
-  {PELTIER_2, /*setpoint*/4340, {&pwmCh[1], &adcCh[1], CTRL_OPEN_LOOP_STATE}},
-  {PELTIER_3, /*setpoint*/4340, {&pwmCh[2], &adcCh[2], CTRL_OPEN_LOOP_STATE}}
+  {PELTIER_1, /*setpoint*/0,{&pwmCh[0], &adcCh[0], CTRL_OPEN_LOOP_STATE}},
+  {PELTIER_2, /*setpoint*/0, {&pwmCh[1], &adcCh[1], CTRL_OPEN_LOOP_STATE}},
+  {PELTIER_3, /*setpoint*/0, {&pwmCh[2], &adcCh[2], CTRL_OPEN_LOOP_STATE}}
 };
 
 static lidData_t lidData = 
-  {           /*setpoint*/4340, {&pwmCh[3], &adcCh[3], CTRL_OPEN_LOOP_STATE}};
+  {           /*setpoint*/0, {&pwmCh[3], &adcCh[3], CTRL_OPEN_LOOP_STATE}};
 
 
 /* ---------------------------------------------------------------------------*/

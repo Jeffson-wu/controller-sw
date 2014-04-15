@@ -83,11 +83,22 @@ void PWM_Init(uint32_t TIM3_pwm_freq, uint32_t TIM4_pwm_freq)
   TIM_TimeBaseInit(TIM4, &TIM_TimeBaseStructure);
 
 
+#if 0
   /* Channel 1, 2, 3 and 4 Configuration in PWM mode */
   TIM_OCInitStructure.TIM_OCMode = TIM_OCMode_PWM1;
   TIM_OCInitStructure.TIM_OutputState = TIM_OutputState_Enable;
   TIM_OCInitStructure.TIM_OutputNState = TIM_OutputNState_Enable;
-  TIM_OCInitStructure.TIM_OCPolarity = TIM_OCPolarity_Low;
+  TIM_OCInitStructure.TIM_OCPolarity = TIM_OCPolarity_High;
+  TIM_OCInitStructure.TIM_OCNPolarity = TIM_OCNPolarity_High;
+  TIM_OCInitStructure.TIM_OCIdleState = TIM_OCIdleState_Set;
+  TIM_OCInitStructure.TIM_OCNIdleState = TIM_OCIdleState_Reset;
+  TIM_OCInitStructure.TIM_Pulse = 0;
+#endif
+  /* Channel 1, 2, 3 and 4 Configuration in PWM mode */
+  TIM_OCInitStructure.TIM_OCMode = TIM_OCMode_PWM1;
+  TIM_OCInitStructure.TIM_OutputState = TIM_OutputState_Enable;
+  TIM_OCInitStructure.TIM_OutputNState = TIM_OutputNState_Enable;
+  TIM_OCInitStructure.TIM_OCPolarity = TIM_OCPolarity_High;
   TIM_OCInitStructure.TIM_OCNPolarity = TIM_OCNPolarity_High;
   TIM_OCInitStructure.TIM_OCIdleState = TIM_OCIdleState_Set;
   TIM_OCInitStructure.TIM_OCNIdleState = TIM_OCIdleState_Reset;
