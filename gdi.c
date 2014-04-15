@@ -126,9 +126,9 @@ gdi_func_table_type gdi_func_info_table[] =
   {"echo", " Echo command", "at@gdi:echo(<e>) e=1=> Echo on, e=0=> echo off",echo},    
   {"print", " Print the debug variable values", "at@gdi:print()",print },
   {"cooleandlid", " Set temperatures and fan speed", "at@gdi:cooleandlid(idx, setpoint)",cooleandlid },
-  {"coole", " Set cooler temperature", "at@gdi:cooleandlid(idx, setpoint)",coole_fn },
-  {"lid",   " Set lid temperature",    "at@gdi:cooleandlid(idx, setpoint)",lid_fn },
-  {"Fan",   " Set fan speed % ",       "at@gdi:cooleandlid(idx, setpoint)",fan_fn },
+  {"coole", " Set cooler temperature", "at@gdi:cooleandlid(idx, setpoint)",coole },
+  {"lid",   " Set lid temperature",    "at@gdi:cooleandlid(idx, setpoint)",lid },
+  {"Fan",   " Set fan speed % ",       "at@gdi:cooleandlid(idx, setpoint)",fan },
   {"seq",   " Set tube seq temperatures and time", "at@gdi:seq(tube,[temp,time],..)",seq },
   {"seq_set", " Set tube seq: stage,temperatures,time", "at@gdi:seq_set(tube,pauseTemp,[stage,temp,time],..)",seq_set },
   {"seq_cmd", " Set seq start, stop, state, pause, continue, log, getlog", "at@gdi:seq_cmd(tube, cmd)",seq_cmd },
@@ -549,7 +549,7 @@ void gdi_map_to_functions()
 			if(result) { gdi_send_data_response("OK", newline_end); }
       break;
       
-    case coole_fn:
+    case coole:
       {
         s16 setpoint;
         xMessage *msg;        
@@ -578,7 +578,7 @@ void gdi_map_to_functions()
 			if(result) { gdi_send_data_response("OK", newline_end); }
       break;
 
-    case lid_fn:
+    case lid:
       {
         s16 setpoint;
         xMessage *msg;        
@@ -607,7 +607,7 @@ void gdi_map_to_functions()
 			if(result) { gdi_send_data_response("OK", newline_end); }
       break;
 
-    case fan_fn:
+    case fan:
       {
         s16 setpoint;
         xMessage *msg;        
