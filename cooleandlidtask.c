@@ -33,7 +33,7 @@
 /*-----------------------------------------------------------*/
 #define LOCK_OUTPUT GPIO_Pin_15  //GPIO_Pin_8
 
-#define DEBUG
+//#define DEBUG
 
 typedef enum {
   CTRL_OPEN_LOOP_STATE,
@@ -282,13 +282,13 @@ void CooleAndLidTask( void * pvParameters )
           p=(SetCooleAndLidReq *)(msg->ucData);
           switch(p->idx) {
             case 0:
-              peltierData[0].setpoint = p->value;
+              peltierData[0].setpoint = temp_2_dac(p->value);
               break;
             case 1:
-              lidData[0].setpoint = p->value;
+              lidData[0].setpoint = temp_2_dac(p->value);
               break;
             case 2:
-              lidData[1].setpoint = p->value;
+              lidData[1].setpoint =temp_2_dac(p->value);
               break;
             case 3: //In old lid heater connecter
               pwmCh[3] = p->value;

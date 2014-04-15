@@ -32,12 +32,12 @@
 #define ADS_BCS_SENSOR_DETECT 3
 /* PGA gain is 2^ADS_PGA; E.g. ADS_PGA = 4 => x16 amplification */
 /* x16 used for 4w, and x32 for 3w (x32 => ADS_PGA = 5) */
-#define ADS_PGA 6
+#define ADS_PGA 2
 /* Data Output Rate */
 /* 0 => 5 SPS, 1 => 10 SPS, 2 => 20 SPS, .. 5 => 160 SPS, ... 8 => 1000SPS and 9 to 15 all => 2000SPS */
 #define ADS_DOR 10
-/* IMAG Magnitude of excitation current 0 = off, 1= 50uA, 2 = 100uA, ... */
-#define ADS_IMAG 2
+/* IMAG Magnitude of excitation current 0 = off, 1= 50uA, 2 = 100uA, 6 = 1mA ... */
+#define ADS_IMAG 6
 /* I1DIR IDAC1 current routing */
 #define ADS_I1DIR 8
 /* I2DIR IDAC2 current routing */
