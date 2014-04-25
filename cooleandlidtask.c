@@ -77,7 +77,9 @@ typedef struct LID_DATA{
 /*-----------------------------------------------------------*/
 // command queue
 xQueueHandle CooleAndLidQueueHandle;
-
+#ifdef DEBUG
+uint8_t  __attribute__ ((aligned (16))) ads_cfg[16] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+#endif
 // Parameters for ADC
 static int16_t adcCh[4] = {0, 0, 0, 0};
 
@@ -213,7 +215,8 @@ void CooleAndLidTask( void * pvParameters )
   while(1)
   {
 
-    /* The control task is synchronized to the ADC interrupt by semaphore */
+    /* The control task is synchronized to the ADC interrupt by semaphore        */
+    /* The ADC is startet by a timer that determines the sampling frequency      */
     /* wait indefinitely for the semaphore to become free i.e. the ISR frees it. */
     /* This also means the frequency is controlled by the ADC */
     xSemaphoreTake(xADSSemaphore, portMAX_DELAY);
@@ -221,16 +224,20 @@ void CooleAndLidTask( void * pvParameters )
     /* Read lastest ADC samples into buffer */
     adsGetLatest(&adcCh[0], &adcCh[1], &adcCh[2], &adcCh[3]);
 
-    peltier(&peltierData[i]);
+#ifndef DEBUG
+    peltier(&peltierData[0]);
     for(i = 0; i < 2; i ++)
     {
       lid(&lidData[i]);
     }
-
+#endif
 #ifdef DEBUG
     /* Debugging the feedback value */
     {
-      sprintf(str, "c: %d" /* "I=%d, O=%d", adcCh[0], pwmCh[0]*/ , count++);
+      static int j = 0;
+      j++;
+      //sprintf(str, "c: %d" /* "I=%d, O=%d", adcCh[0], pwmCh[0]*/ , count++);
+      sprintf(str, "ADC 0: %d 1: %d 2: %d", adcCh[0], adcCh[1], adcCh[2]);
       gdi_send_msg_response(str);
     }
 #endif

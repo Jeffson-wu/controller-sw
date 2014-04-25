@@ -66,12 +66,12 @@ void spiInit()
   /* SPI SCK, MOSI, MISO pin configuration */
   GPIO_InitStructure.GPIO_Pin = ADS_MOSI_PIN | ADS_CLK_PIN /*| ADS_CS_PIN*/;
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
-  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
   GPIO_Init(GPIOA, &GPIO_InitStructure);
 
   GPIO_InitStructure.GPIO_Pin = ADS_MISO_PIN;
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
-  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
   GPIO_Init(GPIOA, &GPIO_InitStructure);
 
   // Common args for the SPI init structure
@@ -132,20 +132,20 @@ void adsGPIOInit(void)
 
   /* Configure the ADS_CS pin */
   GPIO_InitStructure.GPIO_Pin = ADS_CS_PIN;
-  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
-  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_10MHz;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_OD;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
   GPIO_Init(GPIOA, &GPIO_InitStructure);
 
   /* Configure the ADS_DRDY pin */
   GPIO_InitStructure.GPIO_Pin = ADS_DRDY_PIN;
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPU;
-  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_10MHz;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
   GPIO_Init(GPIOB, &GPIO_InitStructure);
 
   /* Configure the ADS_START and ADS_RESET pins */
   GPIO_InitStructure.GPIO_Pin = ADS_START_PIN | ADS_RESET_PIN;
-  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
-  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_10MHz;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_OD;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
   GPIO_Init(GPIOC, &GPIO_InitStructure);
 }
 
@@ -528,7 +528,33 @@ void adsReadCalib(uint32_t * offsetcal, uint32_t * fullscalecal)
 
 }
   
-  /* ---------------------------------------------------------------------------*/
+/* ---------------------------------------------------------------------------*/
+void adsReadAll(uint8_t * data)
+{
+  int i = 0;
+  uint8_t tx[2];
+  uint8_t rx[2];
+  GPIO_SetBits(GPIOB, ADS_START_PIN);
+
+  /* Read all regs in one go */
+  tx[0] = ADS_RREG_Cmd | ADS_MUX0_Reg;
+  tx[1] = 14; // read 15 bytes
+  spiReadWrite(rx, tx, 2);
+
+  for(i = 0; i < 15 ;i++)
+  {
+    /* Read values from reg  */
+    spiReadWrite(rx, nopbuf, 1); // Read result
+    *data = rx[0];
+    data++;
+  }
+  /* Deassert START to stop free runing converting */
+  GPIO_ResetBits(GPIOB, ADS_START_PIN);
+
+}
+  
+/* ---------------------------------------------------------------------------*/
+  
 void adsStart(const uint8_t ch)
 {
   uint8_t tx[3];
@@ -601,6 +627,8 @@ void adsStartSeq(void)
 }
 
 /* ---------------------------------------------------------------------------*/
+/* Start a conversion burst (4 conversions) upon time out */
+/* The semaphore is given upon completion of the conversion see ADS_Handler() */
 void adsTimerCallback(xTimerHandle xTimer)
 {
   adsIrqEnable();
@@ -676,7 +704,7 @@ void adsSetIsrSemaphore(xSemaphoreHandle sem)
 }
 
 /* ---------------------------------------------------------------------------*/
-static uint16_t readAndPrepareNext(uint8_t channel)
+static uint16_t readAndPrepareChannel(uint8_t channel)
 {
   uint8_t tx[3];
   uint8_t rx[3];
@@ -685,7 +713,7 @@ static uint16_t readAndPrepareNext(uint8_t channel)
   /* Route IDAC current */
   tx[0] = ADS_WREG_Cmd | ADS_IDAC1_Reg;
   tx[1] = 0; // write 1 byte
-  tx[2] = ( idacMuxLookup[(channel+1)%4] );
+  tx[2] = ( idacMuxLookup[channel] );
   spiReadWrite(rx, tx, 3);
   //result of just completed conversion is in rxbuf
   value = (rx[0] << 8) + rx[1]; //
@@ -693,7 +721,7 @@ static uint16_t readAndPrepareNext(uint8_t channel)
   /* Initially set MUX0 */
   tx[0] = ADS_WREG_Cmd | ADS_MUX0_Reg;
   tx[1] = 0; // write 1 byte
-  tx[2] = ( (ADS_BCS << 6) | (muxLookup[(channel+1)%4]) );
+  tx[2] = ( (ADS_BCS << 6) | (muxLookup[channel]) );
   spiReadWrite(rx, tx, 3);
 
   return value;
@@ -717,26 +745,34 @@ void ADS_Handler(void)
   
   static state_t state = CHANNEL_0_SAMPLED;
   
-  //use privete rxbuf and txbuf? - As long as "spiReadWrite" is used - no.
+  // use privete rxbuf and txbuf? - As long as "spiReadWrite" is used - no.
   // RDATAC mode is required!!
   // NB! SPI on M3 has no FIFO -> This causes busy waiting for 6 byts transmit time!!
   // The SPI activities in this function is measured at approx 90 us.
 
   switch (state) {
     case CHANNEL_0_SAMPLED:
-      latestConv[0] = readAndPrepareNext(0);
+      latestConv[0] = readAndPrepareChannel(1);
       state++;
       break;
     case CHANNEL_1_SAMPLED:
-      latestConv[1] = readAndPrepareNext(1);
+      latestConv[1] = readAndPrepareChannel(2);
       state++;
       break;
     case CHANNEL_2_SAMPLED:
-      latestConv[2] = readAndPrepareNext(2);
-      state++;
+      latestConv[2] = readAndPrepareChannel(0 /* 3 --> Conv only 3 channels */);
+      //state++;
+//--> Conv only 3 channels
+      GPIO_ResetBits(GPIOC, ADS_START_PIN);
+      adsIrqDisable();
+  /* Synchronize adsConfigConversionTimer. Do not require context switch in case
+     running task is lower prio adsConfigConversionTimer (pdTRUE to do so)*/
+      xSemaphoreGiveFromISR(ADSSemaphore, &xHigherPriorityTaskWoken);
+      state = CHANNEL_0_SAMPLED;
+//<-- Conv only 3 channels
       break;
     case CHANNEL_3_SAMPLED:
-      latestConv[3] = readAndPrepareNext(3);
+      latestConv[3] = readAndPrepareChannel(0);
       GPIO_ResetBits(GPIOC, ADS_START_PIN);
       adsIrqDisable();
   /* Synchronize adsConfigConversionTimer. Do not require context switch in case
