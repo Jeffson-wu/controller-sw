@@ -58,7 +58,7 @@ extern xQueueHandle ModbusQueueHandle;
 xQueueHandle TubeSequencerQueueHandle;
 extern xQueueHandle LogQueueHandle;
 xQueueHandle GDIQueueHandle;
-extern xQueueHandle CooleAndLidQueueHandle;
+extern xQueueHandle CoolAndLidQueueHandle;
 extern xQueueHandle SwuQueueHandle;
 
 /* ---------------------------------------------------------------------------*/
@@ -99,7 +99,7 @@ void SWupdate_taskkill(void)
   vTaskDelete( modbusCreatedTask )       PRIVILEGED_FUNCTION;
 
   //Delete a queue - freeing all the memory allocated for storing of items placed on the queue.
-  vQueueDelete(CooleAndLidQueueHandle);
+  vQueueDelete(CoolAndLidQueueHandle);
   vQueueDelete(LogQueueHandle);
   vQueueDelete(TubeSequencerQueueHandle);
   vQueueDelete(ModbusQueueHandle);
@@ -493,8 +493,8 @@ int main(void)
   vQueueAddToRegistry(ModbusQueueHandle,"MODBUS");
   LogQueueHandle=xQueueCreate( 32, ( unsigned portBASE_TYPE ) sizeof( void * ) );
   vQueueAddToRegistry(LogQueueHandle,"LOG");
-  CooleAndLidQueueHandle=xQueueCreate( QUEUESIZE, ( unsigned portBASE_TYPE ) sizeof( void * ) );
-  vQueueAddToRegistry(CooleAndLidQueueHandle,"CooleAndLid");
+  CoolAndLidQueueHandle=xQueueCreate( QUEUESIZE, ( unsigned portBASE_TYPE ) sizeof( void * ) );
+  vQueueAddToRegistry(CoolAndLidQueueHandle,"CooleAndLid");
   TubeSequencerQueueHandle=xQueueCreate( 100, ( unsigned portBASE_TYPE ) sizeof( void * ) );
   vQueueAddToRegistry(TubeSequencerQueueHandle,"GDI");
   SwuQueueHandle=xQueueCreate( QUEUESIZE, ( unsigned portBASE_TYPE ) sizeof( void * ) );

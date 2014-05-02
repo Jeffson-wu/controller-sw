@@ -373,17 +373,17 @@ int adsDetectSensor(void)
 /* ---------------------------------------------------------------------------*/
 uint16_t dac_2_temp(signed short dac)
 {
-  signed long res;
-  res =(((dac*29549)/10000)+ 77175)/100 ;
+	int64_t res;
+  res = (((dac*29549)/10000)+77175)/100;
   return (uint16_t)res;
 }
 
 /* ---------------------------------------------------------------------------*/
 signed short temp_2_dac(int16_t temp)
 {
-  signed short res;
-  res = (10000*(((long)temp*100)-77175))/29549;
-  return res;
+	int64_t res;
+  res = (10000*(((int64_t)temp*100)-77175))/29549;
+  return (signed short)res;
 }
 
 /* ---------------------------------------------------------------------------*/

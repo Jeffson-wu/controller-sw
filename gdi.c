@@ -44,13 +44,15 @@ int cmdSeq;
   u8 data;
 char a = 0;
 char input_buffer[2][INPUT_BUF_SIZE];
-static u8 gdiEcho = FALSE;
+
+//static u8 gdiEcho = FALSE;
+static u8 gdiEcho = TRUE;
 
 
 xSemaphoreHandle GDI_RXSemaphore = NULL;
 
 extern xQueueHandle ModbusQueueHandle;
-extern xQueueHandle CooleAndLidQueueHandle;
+extern xQueueHandle CoolAndLidQueueHandle;
 extern xQueueHandle SwuQueueHandle;
 
 #ifdef GDI_ON_USART3
@@ -86,8 +88,8 @@ enum gdi_func_type
 	reset,
 	echo,
 	print,
-	cooleandlid,
-	coole,
+	coolandlid,
+	cool,
 	lid,
 	fan,
 	seq,
@@ -125,8 +127,8 @@ gdi_func_table_type gdi_func_info_table[] =
   {"reset", " Reset M3 command", "at@gdi:reset()",reset},		
   {"echo", " Echo command", "at@gdi:echo(<e>) e=1=> Echo on, e=0=> echo off",echo},    
   {"print", " Print the debug variable values", "at@gdi:print()",print },
-  {"cooleandlid", " Set temperatures and fan speed", "at@gdi:cooleandlid(idx, setpoint)",cooleandlid },
-  {"coole", " Set cooler temperature", "at@gdi:coole(idx, setpoint)",coole },
+  {"coolandlid", " Set temperatures and fan speed", "at@gdi:coolandlid(idx, setpoint)",coolandlid },
+  {"cool", " Set cooling temperature", "at@gdi:cool(idx, setpoint)",cool },
   {"lid",   " Set lid temperature",    "at@gdi:lid(idx, setpoint)",lid },
   {"fan",   " Set fan speed % ",       "at@gdi:fan(idx, setpoint)",fan },
   {"seq",   " Set tube seq temperatures and time", "at@gdi:seq(tube,[temp,time],..)",seq },
@@ -516,7 +518,7 @@ void gdi_map_to_functions()
 			gdi_send_data_response("OK", newline_end);
 			break;	
       
-    case cooleandlid:     
+    case coolandlid:
       {
         s16 setpoint;
         u8  fn_idx;
@@ -543,13 +545,13 @@ void gdi_map_to_functions()
           p = (SetCooleAndLidReq *)msg->ucData;
           p->value = setpoint;
           p->idx   = fn_idx;
-          xQueueSend(CooleAndLidQueueHandle, &msg, portMAX_DELAY);
+          xQueueSend(CoolAndLidQueueHandle, &msg, portMAX_DELAY);
         }
       }
 			if(result) { gdi_send_data_response("OK", newline_end); }
       break;
       
-    case coole:
+    case cool:
       {
         s16 setpoint;
         xMessage *msg;        
@@ -565,14 +567,14 @@ void gdi_map_to_functions()
         {
   				setpoint = (s16) atoi(*(gdi_req_func_info.parameters + i));
           if((setpoint >= -100)&&(setpoint <= 100)) {
-            msg->ucMessageID = SET_COOLE_TEMP;
+            msg->ucMessageID = SET_COOL_TEMP;
           } else {
             result = FALSE;
             gdi_send_data_response("NOK invalid parameter", newline_end);
           }
           p = (SetCooleAndLidReq *)msg->ucData;
           p->value = setpoint;
-          xQueueSend(CooleAndLidQueueHandle, &msg, portMAX_DELAY);
+          xQueueSend(CoolAndLidQueueHandle, &msg, portMAX_DELAY);
         }
       }
 			if(result) { gdi_send_data_response("OK", newline_end); }
@@ -581,6 +583,7 @@ void gdi_map_to_functions()
     case lid:
       {
         s16 setpoint;
+        u8 fn_idx;
         xMessage *msg;        
         int result = TRUE;
 
@@ -592,16 +595,21 @@ void gdi_map_to_functions()
         msg = pvPortMalloc(sizeof(xMessage)+sizeof(SetCooleAndLidReq)+20);
         if(msg)
         {
-  				setpoint = (s16) atoi(*(gdi_req_func_info.parameters + i));
-          if((setpoint >= 0)&&(setpoint <= 130)) {
+
+  				fn_idx   = (u8)atoi(*(gdi_req_func_info.parameters + i));
+          i++;
+  				setpoint = (s16)atoi(*(gdi_req_func_info.parameters + i));
+          if((3>fn_idx) && (setpoint >= 0) && (setpoint <= 1300))
+          {
             msg->ucMessageID = SET_LID_TEMP;
           } else {
             result = FALSE;
-            gdi_send_data_response("NOK invalid parameter", newline_end);
+            gdi_send_data_response("NOK invalid fn", newline_end);
           }
           p = (SetCooleAndLidReq *)msg->ucData;
           p->value = setpoint;
-          xQueueSend(CooleAndLidQueueHandle, &msg, portMAX_DELAY);
+          p->idx   = fn_idx;
+          xQueueSend(CoolAndLidQueueHandle, &msg, portMAX_DELAY);
         }
       }
 			if(result) { gdi_send_data_response("OK", newline_end); }
@@ -622,15 +630,15 @@ void gdi_map_to_functions()
         if(msg)
         {
   				setpoint = (s16) atoi(*(gdi_req_func_info.parameters + i));
-          if((setpoint > 0)&&(setpoint <= 100)) {
-            msg->ucMessageID = SET_FAN;
+          if((setpoint >= 0)&&(setpoint <= 100)) {
+            msg->ucMessageID = SET_FAN_SPEED;
           } else {
             result = FALSE;
             gdi_send_data_response("NOK invalid parameter", newline_end);
           }
           p = (SetCooleAndLidReq *)msg->ucData;
           p->value = setpoint;
-          xQueueSend(CooleAndLidQueueHandle, &msg, portMAX_DELAY);
+          xQueueSend(CoolAndLidQueueHandle, &msg, portMAX_DELAY);
         }
       }
 			if(result) { gdi_send_data_response("OK", newline_end); }
@@ -638,13 +646,13 @@ void gdi_map_to_functions()
 
 	  case seq:
 		  {//Manual sequence setting
-            uint16_t temp; /*Settemp in 0.1 degrees*/
-            uint32_t time; /*time in secs*/
-			long TubeId = 0;
-            int i = 0;
-			TubeId = (u16) atoi(*(gdi_req_func_info.parameters + 0 + i));
-			i++;
-			GDI_PRINTF("SET SEQ PARAMS for Tube[%d]: %d,",TubeId,gdi_req_func_info.number_of_parameters);
+				uint16_t temp; /*Settemp in 0.1 degrees*/
+				uint32_t time; /*time in secs*/
+				long TubeId = 0;
+				int i = 0;
+				TubeId = (u16) atoi(*(gdi_req_func_info.parameters + 0 + i));
+				i++;
+				GDI_PRINTF("SET SEQ PARAMS for Tube[%d]: %d,",TubeId,gdi_req_func_info.number_of_parameters);
             if((int)NULL != create_seq(TubeId, 0, gdi_req_func_info.number_of_parameters))
             {
                while( i < gdi_req_func_info.number_of_parameters)
@@ -766,7 +774,7 @@ void gdi_map_to_functions()
               else
               {
                 gdi_send_data_response("NOK No sequence", newline_end);
-              }                
+              }
             }
             if(!strncmp((*(gdi_req_func_info.parameters + i + 1)),"stop",strlen("stop")))
             {

@@ -159,7 +159,7 @@ void PWM_Set(uint16_t pwm_width,PWMPort_t pwm_port)
       TIM_SetCompare3(TIM4,ChannelPulse);
     break;
     case FANctrlPWM:
-	  ChannelPulse = (uint16_t) (((uint32_t) pwm_width * (TimerPeriod_TIM4 - 1)) / 100);
+	  ChannelPulse = (uint16_t) (((uint32_t) pwm_width * (TimerPeriod_TIM4 - 1)) / 32768);
       TIM_SetCompare4(TIM4,ChannelPulse);
     break;
     case PeltierCtrlPWM1:

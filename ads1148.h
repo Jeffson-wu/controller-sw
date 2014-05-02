@@ -23,8 +23,8 @@
 
 /* Exported types ------------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
-/* ADC conversion frequency */
-#define SAMPLING_FREQUENCY 10
+
+#define SCALE_CONTROLLER (1L<<16)
 
 /* BSC Burnout current, 0 = off */
 #define ADS_BCS 0
@@ -32,7 +32,7 @@
 #define ADS_BCS_SENSOR_DETECT 3
 /* PGA gain is 2^ADS_PGA; E.g. ADS_PGA = 4 => x16 amplification */
 /* x16 used for 4w, and x32 for 3w (x32 => ADS_PGA = 5) */
-#define ADS_PGA 2
+#define ADS_PGA 6
 /* Data Output Rate */
 /* 0 => 5 SPS, 1 => 10 SPS, 2 => 20 SPS, .. 5 => 160 SPS, ... 8 => 1000SPS and 9 to 15 all => 2000SPS */
 #define ADS_DOR 10
