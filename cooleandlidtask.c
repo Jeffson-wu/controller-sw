@@ -103,7 +103,7 @@ typedef struct LID_DATA{
 xQueueHandle CoolAndLidQueueHandle;
 extern xQueueHandle TubeSequencerQueueHandle;
 bool msgSent = FALSE;
-#endif
+
 // Parameters for ADC
 static int16_t adcCh[4] = {0, 0, 0, 0};
 
@@ -285,7 +285,7 @@ void CooleAndLidTask( void * pvParameters )
 				msgSent = TRUE;
 			}
 		}
-#endif
+
     for(i = 0; i < 2; i ++)
     {
       lid(&lidData[i]);
