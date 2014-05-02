@@ -103,6 +103,7 @@ typedef struct LID_DATA{
 xQueueHandle CoolAndLidQueueHandle;
 extern xQueueHandle TubeSequencerQueueHandle;
 bool msgSent = FALSE;
+#endif
 // Parameters for ADC
 static int16_t adcCh[4] = {0, 0, 0, 0};
 
@@ -259,7 +260,8 @@ void CooleAndLidTask( void * pvParameters )
   		}
   		cnt++;
 	#endif
-    /* The control task is synchronized to the ADC interrupt by semaphore */
+    /* The control task is synchronized to the ADC interrupt by semaphore        */
+    /* The ADC is startet by a timer that determines the sampling frequency      */
     /* wait indefinitely for the semaphore to become free i.e. the ISR frees it. */
     /* This also means the frequency is controlled by the ADC */
     xSemaphoreTake(xADSSemaphore, portMAX_DELAY);
@@ -283,7 +285,7 @@ void CooleAndLidTask( void * pvParameters )
 				msgSent = TRUE;
 			}
 		}
-
+#endif
     for(i = 0; i < 2; i ++)
     {
       lid(&lidData[i]);

@@ -552,3 +552,10 @@ void assert_failed(uint8_t* file, uint32_t line)
 }
 #endif
 
+void HardFault_Handler(void)
+{
+  GPIO_SetBits(GPIOB,GPIO_Pin_11); /* Turn on error LED */
+  while (1) {}
+}
+
+

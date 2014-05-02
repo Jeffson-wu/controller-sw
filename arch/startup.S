@@ -241,7 +241,7 @@ Reset_Handler:
     .endm
     
     def_default_handler    NMI_Handler
-    def_default_handler    HardFault_Handler
+/*    def_default_handler    HardFault_Handler */
     def_default_handler    MemManage_Handler
     def_default_handler    BusFault_Handler
     def_default_handler    UsageFault_Handler
