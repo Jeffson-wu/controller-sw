@@ -273,7 +273,7 @@ void CooleAndLidTask( void * pvParameters )
 
 		if ( !msgSent
 				&& lidData[0].regulator.state == CTRL_CLOSED_LOOP_STATE
-				&& (*peltierData[0].regulator.adcVal < peltierData[0].regulator.setPointHL)
+				//&& (*peltierData[0].regulator.adcVal < peltierData[0].regulator.setPointHL)		//ToDo: Incomment again!!
 				&& (*lidData[0].regulator.adcVal > lidData[0].regulator.setPointLL)
 				&& (*lidData[1].regulator.adcVal > lidData[1].regulator.setPointLL) )
 		{

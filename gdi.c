@@ -566,7 +566,7 @@ void gdi_map_to_functions()
         if(msg)
         {
   				setpoint = (s16) atoi(*(gdi_req_func_info.parameters + i));
-          if((setpoint >= -100)&&(setpoint <= 100)) {
+          if((setpoint >= -100)&&(setpoint <= 300)) {			// <= 100
             msg->ucMessageID = SET_COOL_TEMP;
           } else {
             result = FALSE;
