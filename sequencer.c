@@ -29,6 +29,8 @@ extern xQueueHandle CoolAndLidQueueHandle;
 
 #define USE_STATICALLY_ALLOCATED_SEQUENCES
 #define USE_PAUSE_FEATURE
+#define MAIN_IF_REV2            
+
 
 #define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
 #ifdef DEBUG
@@ -37,14 +39,14 @@ extern xQueueHandle CoolAndLidQueueHandle;
 #define DEBUG_PRINTF(fmt, args...)    /* Don't do anything in release builds */
 #endif
 
-//#define DEBUG_SEQ /*Debug of sequencer, to follow state of sequencer*/
+#define DEBUG_SEQ /*Debug of sequencer, to follow state of sequencer*/
 #ifdef DEBUG_SEQ
 #define DEBUG_SEQ_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_response(buf);
 #else
 #define DEBUG_SEQ_PRINTF(fmt, args...)    /* Don't do anything in release builds */
 #endif
 
-//#define DEBUG_IF /*Debug of external interfaces modbus, IRQ and serial */
+#define DEBUG_IF /*Debug of external interfaces modbus, IRQ and serial */
 #ifdef DEBUG_IF
 #define DEBUG_IF_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_response(buf);
 #else
@@ -64,7 +66,10 @@ extern xQueueHandle CoolAndLidQueueHandle;
 #define nTubes     16+1     /*Number of tubes to use, index 0 is dummy*/
 #define NUM_TIMERS 16       /*There should be 1 for each tube*/
 
-#define STAGES_PER_SEQ ((35*3)+1)   /* 35 iterations over 3 stages + 1 end indicator stage */
+//#define STAGES_PER_SEQ ((35*3)+1)   /* 35 iterations over 3 stages + 1 end indicator stage */
+
+#define STAGES_PER_SEQ (4)   /* 4 iterations over 3 stages + 1 end indicator stage */
+
 
  /* An array to hold handles to the created timers. */
  xTimerHandle xTimers[ NUM_TIMERS ];
@@ -98,6 +103,19 @@ const char *  signals_txt[] = {
   "END_LOG",
   "LAST_MSG"
 };
+
+const char *  tube_sta[] = {
+"Melting",
+"Annealing",
+"Extension",
+"Incubation",
+"Pause",
+"LoopStart",
+"LoopEnd",
+"End",
+};
+
+
 
 typedef enum
 {
@@ -139,24 +157,9 @@ loopstart,
 loopend
 }CmdNameTypeDef;
 
-typedef enum
-{
-  Melting,
-  Annealing,
-  Extension,
-  Incubation,
-  Pause,
-  LoopStart,
-  LoopEnd,
-  End
-}Tubestage_t;
 
-typedef struct
-{
-  uint16_t temp;      /*Settemp in 0.1 degrees*/
-  Tubestage_t stage;  /*Current stage:[M]elting(1), [A]nnealing(2), [E]xtension(3) or [I]ncubation(4) #### [P]aused #### */
-  uint32_t time;      /*time in 0.1 secs*/
-}stageCmd_t;
+
+
 
 #ifdef USE_STATICALLY_ALLOCATED_SEQUENCES
 typedef struct
@@ -169,8 +172,11 @@ typedef struct
   uint16_t pauseTemp;     /* Temperature to maintain during pause     */
   uint16_t event_reg;     /* last event/status register read from tube*/
   int SeqIdx;             /* Current index that sequence are at now   */
+  int tail;              /*Read Pointer*/ 
+  int  head;              /*Write Pointer */
   stageCmd_t *data;       /* Pointer to the sequence*/
   stageCmd_t seq[STAGES_PER_SEQ];   /* The sequence */
+  stageCmd_t curr;
 }Tubeloop_t;
 #else
 typedef struct
@@ -195,6 +201,16 @@ uint32_t EXTI_LINE;
 IRQn_Type IRQ_CH;
 }gpio_extint_t;
 
+#ifdef REV_2
+typedef enum
+{
+Heater1,
+Heater2,
+Heater3,
+Heater4,
+nExtiGpio
+}ExtiGpioTypeDef;
+#else
 typedef enum
 {
 /*ADS_DRDY,*/
@@ -208,7 +224,7 @@ Heater7,
 Heater8,
 nExtiGpio
 }ExtiGpioTypeDef;
-
+#endif
 char stageToChar[] = {'M','A','E','I','P','x','y','z'};
 
 #ifdef DEBUG_IF
@@ -226,6 +242,51 @@ const char *  heater[] = {
 "nExtiGpio"
 };
 #endif
+#ifdef REV_2
+
+ExtiGpioTypeDef tube2heater[]={
+  0,
+  Heater1,
+	Heater1,
+	Heater1,
+	Heater1,
+	Heater2,
+	Heater2,
+	Heater2,
+	Heater2,
+ 	Heater3,
+	Heater3,
+	Heater3,
+	Heater3,
+	Heater4,
+	Heater4,
+	Heater4,
+	Heater4
+};
+
+typedef struct
+{
+uint16_t tube_1;
+uint16_t tube_2;
+uint16_t tube_3;
+uint16_t tube_4;
+}heater_tubes_t;
+
+heater_tubes_t heater2tube[]={
+{1,2,3,4},/*Heater1*/	
+{5,6,7,8},/*Heater2*/
+{9,10,11,12},/*Heater3*/
+{13,14,15,16},/*Heater4*/
+};
+
+/*const*/ gpio_extint_t gpio_EXTI_CNF[nExtiGpio+1]={
+/*{ADS_DRDY_PINSOURCE ,ADS_EXTI_PORTSOURCE,ADS_EXTI_LINE, EXTI15_10_IRQn},*//*ADS DRDY*/
+{GPIO_PinSource3 ,GPIO_PortSourceGPIOC,EXTI_Line3, EXTI3_IRQn    },/*Heater1*/
+{GPIO_PinSource4 ,GPIO_PortSourceGPIOC,EXTI_Line4, EXTI4_IRQn    },/*Heater2*/
+{GPIO_PinSource11,GPIO_PortSourceGPIOC,EXTI_Line11,EXTI15_10_IRQn},/*Heater3*/
+{GPIO_PinSource12,GPIO_PortSourceGPIOC,EXTI_Line12,EXTI15_10_IRQn},/*Heater4*/
+{0xFF,0,EXTI0_IRQn}};/*Termination*/
+#else
 ExtiGpioTypeDef tube2heater[]={
   0,
   Heater1,
@@ -246,6 +307,7 @@ ExtiGpioTypeDef tube2heater[]={
 	Heater8
 };
 
+
 typedef struct
 {
 uint16_t tube_1;
@@ -263,6 +325,7 @@ heater_tubes_t heater2tube[]={
 {15,16} /*Heater8*/
 };
 
+
 /*const*/ gpio_extint_t gpio_EXTI_CNF[nExtiGpio+1]={
 /*{ADS_DRDY_PINSOURCE ,ADS_EXTI_PORTSOURCE,ADS_EXTI_LINE, EXTI15_10_IRQn},*//*ADS DRDY*/
 {GPIO_PinSource10,GPIO_PortSourceGPIOC,EXTI_Line10,EXTI15_10_IRQn},/*Heater4*/
@@ -274,29 +337,29 @@ heater_tubes_t heater2tube[]={
 {GPIO_PinSource2 ,GPIO_PortSourceGPIOD,EXTI_Line2, EXTI2_IRQn    },/*Heater7*/
 {GPIO_PinSource13,GPIO_PortSourceGPIOC,EXTI_Line13,EXTI15_10_IRQn},/*Heater8*/
 {0xFF,0,EXTI0_IRQn}};/*Termination*/
-
+#endif
 /*Tube state register*/
 #ifdef USE_STATICALLY_ALLOCATED_SEQUENCES
 /* state, pausePendingState, ucMessageID, LoopStart, LoopIterations, pauseTemp, event_reg, SeqIdx, *data, seq[]*/
 /* Save code space - initialize this in code instead - this is 19kB initialized data in FLASH */
 Tubeloop_t Tubeloop[nTubes]= {
-                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,NULL,{}},
-                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,NULL,{}},
-                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,NULL,{}},
-                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,NULL,{}},
-                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,NULL,{}},
-                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,NULL,{}},
-                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,NULL,{}},
-                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,NULL,{}},
-                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,NULL,{}},
-                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,NULL,{}},
-                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,NULL,{}},
-                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,NULL,{}},
-                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,NULL,{}},
-                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,NULL,{}},
-                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,NULL,{}},
-                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,NULL,{}},
-                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,NULL,{}}};
+                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,0,0,NULL,{},0,End,0},
+                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,0,0,NULL,{},0,End,0},
+                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,0,0,NULL,{},0,End,0},
+                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,0,0,NULL,{},0,End,0},
+                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,0,0,NULL,{},0,End,0},
+                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,0,0,NULL,{},0,End,0},
+                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,0,0,NULL,{},0,End,0},
+                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,0,0,NULL,{},0,End,0},
+                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,0,0,NULL,{},0,End,0},
+                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,0,0,NULL,{},0,End,0},
+                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,0,0,NULL,{},0,End,0},
+                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,0,0,NULL,{},0,End,0},
+                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,0,0,NULL,{},0,End,0},
+                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,0,0,NULL,{},0,End,0},
+                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,0,0,NULL,{},0,End,0},
+                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,0,0,NULL,{},0,End,0},
+                              {TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0xFFFF,0,0,0,NULL,{},0,End,0}};
 
 #else
 /* state, pausePendingState, LoopStart, LoopIterations, pauseTemp, SeqIdx, *data, ucMessageID, event_reg */
@@ -569,6 +632,27 @@ void Heater_PinConfig(void)
   GPIO_Init(GPIOC, &GPIO_InitStructure);
 }
 
+
+#ifdef REV_2
+void EXTI_Handler(void)
+{
+ vTraceStoreISRBegin(3);
+  ExtiGpioTypeDef ExtiGpio = Heater1; 
+  while(ExtiGpio < nExtiGpio) /*Alwlays starts at Heater1 since */
+  {
+    if (SET == EXTI_GetFlagStatus(gpio_EXTI_CNF[ExtiGpio].EXTI_LINE))
+    {
+      DEBUG_IF_PRINTF("INTERRUPT-READ STATUS ON HEATER[%s]",heater[ExtiGpio]);
+      ReadTubeHeaterReg(heater2tube[ExtiGpio].tube_2,EVENT_REG,5,TubeSequencerQueueHandle,TRUE);			//ToDo: Also check tube_1!!!
+      EXTI_ClearITPendingBit(gpio_EXTI_CNF[ExtiGpio].EXTI_LINE);
+    }
+    ExtiGpio++;
+  }
+  vTraceStoreISREnd();
+  portEND_SWITCHING_ISR( pdTRUE);
+}
+
+#else
 void EXTI_Handler(void)
 {
  vTraceStoreISRBegin(3);
@@ -602,7 +686,7 @@ void EXTI_Handler(void)
   portEND_SWITCHING_ISR( pdTRUE);
 
 }
-
+#endif
 /* ---------------------------------------------------------------------------*/
 int create_seq(long TubeId, uint16_t temp, int Nstages )
 {
@@ -684,6 +768,8 @@ void stop_lid_heating()
 bool start_tube_seq( long TubeId)
 {  
   bool result = TRUE;
+  Tubeloop_t *pTubeloop = &Tubeloop[TubeId];
+  pTubeloop->data = &Tubeloop[TubeId].seq[0];
   if(NULL != Tubeloop[TubeId].data)
   {
     long *p;
@@ -754,6 +840,11 @@ void pause_tube_seq(void)
     Tubeloop[TubeId].pausePendingState = TUBE_P_PAUSE_REQUESTED;
   }
 }
+void pause_tube_state(long TubeId)
+{
+  Tubeloop[TubeId].pausePendingState = TUBE_P_PAUSE_REQUESTED;
+}
+
 /* ---------------------------------------------------------------------------*/
 /* Send a pause ended message to all tubes paused */
 void continue_tube_seq(void)
@@ -914,6 +1005,235 @@ char * get_tube_state(long TubeId, char *poutText)
     }
   return poutText;
 }
+#ifdef MAIN_IF_REV2  
+
+
+int RDIdx;              /*Read Pointer*/ 
+int WRIdx;              /*Write Pointer */
+stageCmd_t *data;       /* Pointer to the sequence*/
+stageCmd_t seq[STAGES_PER_SEQ];   /* The sequence */
+
+
+/* ---------------------------------------------------------------------------*/
+void tubeinitQueue()
+{
+  int i;
+  //Tubeloop_t *pTubeloop = &Tubeloop[TubeId];
+  for(i=0; nTubes > i; i++)
+  {
+   Tubeloop_t *pTubeloop = &Tubeloop[i];
+    pTubeloop->tail= 0; 
+    pTubeloop->head= 0;
+    // ####Fill in debug padding
+    //logDataQueue[i].padding = 0xA5A5A5A5;
+  }
+}
+
+/* ---------------------------------------------------------------------------*/
+// Data log is {{seq#Tube1,t1.1,t1.2,t1.3,t1.4,t1.5,t1.6,t1.7,t1.8,t1.9,t1.10},
+//              {seq#Tube2,t2.1,t2.2,t2.3,t2.4,t2.5,t2.6,t2.7,t2.8,t2.9,t2.10}}
+// Enqueue elament. Return pointer to element so it can be written to.
+stageCmd_t * tubeenqueue(Tubeloop_t * pQueue)
+{
+  if((pQueue->tail - STAGES_PER_SEQ) == pQueue->head) { return NULL; } // Return null if queue is full
+  pQueue->tail++;
+//  DEBUG_PRINTF("tubeenqueue: t:%d h:%d FREE:%d",pQueue->tail% STAGES_PER_SEQ,pQueue->head% STAGES_PER_SEQ,STAGES_PER_SEQ-(pQueue->tail -  pQueue->head));
+  return &pQueue->seq[pQueue->tail % STAGES_PER_SEQ];
+}
+
+/* ---------------------------------------------------------------------------*/
+// Dequeue elament. Return pointer to element so it can be read from.
+stageCmd_t * tubedequeue(Tubeloop_t * pQueue)
+{
+  if(pQueue->tail == pQueue->head) {return NULL;}  // Return null if queue is empty
+  else
+  {
+    pQueue->head++;
+ //   DEBUG_PRINTF("tubedequeue: t:%d h:%d FREE:%d",pQueue->tail% STAGES_PER_SEQ,pQueue->head% STAGES_PER_SEQ, STAGES_PER_SEQ-(pQueue->tail - pQueue->head));
+    return &pQueue->seq[pQueue->head % STAGES_PER_SEQ];
+  }
+}
+
+/* ---------------------------------------------------------------------------*/
+bool tubedataQueueAdd(u8 tubeId,u16 seq_num, char state, stageCmd_t *data)
+{
+bool result = FALSE;
+  int i;
+  stageCmd_t * poutData;
+//  SERIAL_String("tubedataQueueAdd:()");
+//   DEBUG_PRINTF("tubedataQueueAdd: %d",tubeId);
+
+  taskENTER_CRITICAL(); //push irq state
+           //   DEBUG_PRINTF("ENQUE:Tube:%d:TEMP %d.%02dC @ TIME %d.%02dsecs STATE:%d ",tubeId,data->temp/10,data->temp%10,data->time/10,data->time%10,data->stage);  
+  if(NULL != (poutData = tubeenqueue(&Tubeloop[tubeId-1]))) //tubeId=[1..16],idx=[0..15]
+  {
+DEBUG_PRINTF("ENQUE Tube:%d:TEMP %d.%02dC @ TIME %d.%02dsecs STATE:%c ",tubeId,data->temp/10,data->temp%10,data->time/10,data->time%10,state);   
+   poutData->temp  = data->temp;
+   poutData->time  = data->time;
+
+   if('m' ==  (char)state)      { poutData->stage = Melting;   }
+      else if('a' ==  (char)state) { poutData->stage = Annealing; }
+      else if('e' ==  (char)state) { poutData->stage = Extension; }
+      else if('i' ==  (char)state) { poutData->stage = Incubation;}
+  // poutData->stage = data->stage;
+// DEBUG_PRINTF("%s-%d-%c",tube_sta[poutData->stage],poutData->stage,state);
+   result = TRUE;
+  }else
+  {
+   result = FALSE;
+  }
+
+
+  taskEXIT_CRITICAL();
+
+return result;
+}
+
+/* ---------------------------------------------------------------------------*/
+/* at@gdi:seq_cmd(getlog)\n                                                   */
+/* Response:                                                                  */
+/* LOG:(tube1:<tempX>,<tempX>,<tempX>,<tempX>,<tempX>,<tempX>,<tempX>;        */
+/*      tube2:<tempX>,<tempX>,<tempX>,<tempX>;tube12:<tempX>,<tempX>;)       */
+/*                                                                            */
+/* Where <tempX> is the logged temperature in deci C and printed in HEX       */ 
+/* ---------------------------------------------------------------------------*/
+bool  getseq(u8 tubeId,  stageCmd_t *data)
+{
+bool res = FALSE;
+ stageCmd_t *quedata;
+  int i = 0;
+  
+    taskENTER_CRITICAL(); //push irq state #### Kan critical section laves mindre!
+    // Send all available log elements for each tube
+    if(NULL != (quedata = tubedequeue(&Tubeloop[tubeId-1])) ) //idx=[0..15]
+    {
+    memcpy(data,quedata,sizeof(stageCmd_t));
+    res = TRUE;
+  //  DEBUG_PRINTF("DEQUE P:%x Tube:%d:TEMP %d.%02dC @ TIME %d.%02dsecs STATE:%d ",quedata,tubeId,data->temp/10,data->temp%10,data->time/10,data->time%10,data->stage);   
+    }else
+      {
+     res = FALSE;
+      }
+    taskEXIT_CRITICAL();
+ return res; 
+}
+
+
+#endif
+
+void HeaterMessageHandler (long TubeId, xMessage *msg)
+{
+  ReadModbusRegsRes *preg;
+  u16 modbus_addr,modbus_id;
+  u16 modbus_data[5];
+  bool modbus_result;
+  long i=0;
+
+  preg=(ReadModbusRegsRes *)msg->ucData;
+ 
+  modbus_addr = preg->addr;
+  /*modbus_data =  preg->data[1];*/
+  modbus_result = preg->resultOk;
+  if(modbus_result != NO_ERROR)
+  {
+    DEBUG_PRINTF("####Tube[%d]ERROR MODBUS READ FAILED!!! %d",TubeId,modbus_result);
+  }
+  for(i=0;i<(preg->datasize);i++)
+  {
+    modbus_data[i] =(((u16)(preg->data[i*2])<<8)|(preg->data[(i*2)+1]));
+  }
+  DEBUG_SEQ_PRINTF("Tube[%d]@%s TubeSeq[%s]ADDR[%d]size[%d]data[%x]STATUS[%s]",
+    TubeId, tube_states[Tubeloop[TubeId].state], signals_txt[msg->ucMessageID],
+    preg->addr, preg->datasize,/*(((u16)(preg->data[0])<<8)|(preg->data[1]))*/modbus_data[0],
+    (preg->resultOk==NO_ERROR)?"PASS":"FAIL");
+  if(preg->addr == SETPOINT_REG)
+  {
+    DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s] SetPoint[%d]", TubeId, tube_states[Tubeloop[TubeId].state],
+                     signals_txt[msg->ucMessageID], modbus_data[0]/10);
+  }
+  if(preg->resultOk==NO_ERROR)
+  {
+    if(preg->addr == EVENT_REG)
+    {
+#ifndef REV_2
+      if (TubeId == 7)
+      {
+        Heater4_irq_handled == FALSE; /*Now we have read the content of the event register and are ready to recieve a new IRQ from Heater4*/
+      }
+#endif
+      /* Handle "Temperature reached" event */
+      if( ((Tubeloop[TubeId].state == TUBE_WAIT_TEMP) || (Tubeloop[TubeId].state == TUBE_WAIT_P_TEMP)) && 
+          ((modbus_data[0] & SEQUENCE_EVENT_TUBE1)    || (modbus_data[0] & SEQUENCE_EVENT_TUBE2)))
+      {
+        Tubeloop_t *pTubeloop = &Tubeloop[TubeId];
+        stageCmd_t *TSeq = &(pTubeloop->data[pTubeloop->SeqIdx]);
+        modbus_id = TubeId%2;
+        if(modbus_id == 0) { modbus_id=2; }
+#ifdef USE_PAUSE_FEATURE
+        if(TUBE_WAIT_P_TEMP == Tubeloop[TubeId].state) {
+          Tubeloop[TubeId].state = TUBE_PAUSED;
+          Tubeloop[TubeId].pausePendingState = TUBE_P_NORM; //Pause is not pending anymore
+          //do we check if all tubes are in pause and notify Linuxbox
+          DEBUG_SEQ_PRINTF("Tube[%d] Pause temp reached:%d.%01dC - paused!", TubeId, modbus_data[modbus_id]/10, modbus_data[modbus_id]%10);
+        }
+        else
+#endif
+        {
+          DEBUG_SEQ_PRINTF("\n\rTube[%d] Step %d Temp reached:%d.%01dC Start timer %d.%01d Sec, stage:%c", 
+                       TubeId, pTubeloop->SeqIdx+1, modbus_data[modbus_id]/10, modbus_data[modbus_id]%10, 
+                       TSeq->time/10, TSeq->time%10, stageToChar[TSeq->stage]);/*ASCII 155 norm 167*/
+#ifdef MAIN_IF_REV2  
+          StartTubeTimer(TubeId,pTubeloop->curr.time);     
+#else
+          StartTubeTimer(TubeId,TSeq->time);
+#endif
+          Tubeloop[TubeId].state = TUBE_WAIT_TIME;
+        }
+      }
+#if 0 // event debug out
+      DEBUG_SEQ_PRINTF("Tube[%d]EVENT[%04x]:%s-%s-%s-%s-%s-%s-%s-%s",
+                   TubeId,modbus_data[0],
+                   ((modbus_data[0] & SEQUENCE_EVENT_TUBE1)? "S_EV_T1 "  : " "),
+                   ((modbus_data[0] & SEQUENCE_EVENT_TUBE2)? "S_EV_T2 "  : " "),
+                   ((modbus_data[0] & INIT_HW_ERROR_TUBE1) ? "HW_ERR_T1 ": " "),
+                   ((modbus_data[0] & INIT_HW_ERROR_TUBE2) ? "HW_ERR_T2 ": " "),
+                   ((modbus_data[0] & TUBE1_NOT_PRESENT)   ? "NO_T1 "    : " "),
+                   ((modbus_data[0] & TUBE2_NOT_PRESENT)   ? "NO_T2 "    : " "),
+                   ((modbus_data[0] & TUBE1_LOGGING_READY) ? "LogT1 "    : " "),
+                   ((modbus_data[0] & TUBE2_LOGGING_READY) ? "LogT2 "    : " "));
+#endif
+      Tubeloop[TubeId].event_reg = modbus_data[0];
+      if(Tubeloop[TubeId].state == TUBE_NOT_INITIALIZED)/*No errors on current tube, set it to IDLE so its ready for use*/
+      {
+        Tubeloop[TubeId].state = TUBE_IDLE;
+        modbus_data[0]=1;
+        ExtIrqEnable(tube2heater[TubeId]);
+        DEBUG_PRINTF("ENABLE IRQ ON HEATER[%d]",tube2heater[TubeId]);
+        WriteTubeHeaterReg(TubeId,EVENT_REG,&modbus_data[0], 1); /*******TEST to force the heater to create an event*/
+      }
+#if 0
+      /* Handle datalogging request */
+      // Each log is DATA_LOG_SIZE + 1 sequence number.
+      if((TUBE1_LOGGING_READY & modbus_data[0]) && (TUBE2_LOGGING_READY & modbus_data[0]))
+      { //Request a read of the logged data from tube 1 & 2. The result is sent to logging task
+        ReadTubeHeaterReg(TubeId, DATA_LOG_T1, DATA_LOG_SIZE*2+2, LogQueueHandle, FALSE);
+      }
+      if((TUBE1_LOGGING_READY & modbus_data[0]) && !(TUBE2_LOGGING_READY & modbus_data[0]))
+      { //Request a read of the logged data from tube 1 only. The result is sent to logging task 
+        ReadTubeHeaterReg(TubeId, DATA_LOG_T1, DATA_LOG_SIZE+1, LogQueueHandle, FALSE);
+      }
+      if(!(TUBE1_LOGGING_READY & modbus_data[0]) && (TUBE2_LOGGING_READY & modbus_data[0]))
+      { //Request a read of the logged data  from tube 2 only. The result is sent to logging task
+        ReadTubeHeaterReg(TubeId, DATA_LOG_T2, DATA_LOG_SIZE+1, LogQueueHandle, FALSE);
+      }
+#endif
+    }
+  }else{
+    DEBUG_PRINTF("####Tube[%d]ERROR MODBUS TELEGRAM READ FAILED!!! %d",TubeId,modbus_result);
+}
+}
+
+
 
 /* ---------------------------------------------------------------------------*/
 /* TubeStateHandler sets up the next stage in a sequence, temperature and time*/
@@ -927,10 +1247,15 @@ void TubeStateHandler(long TubeId,xMessage *msg)
   int a = 0;
   uint16_t i = 0;
   Tubeloop_t *pTubeloop = &Tubeloop[TubeId];
-
+#ifdef MAIN_IF_REV2  
+   stageCmd_t *TSeq = NULL;
+   if (getseq(TubeId,  TSeq) == TRUE)
+  {
+#else
   if (pTubeloop->data != NULL)
   {
     stageCmd_t *TSeq = &(pTubeloop->data[pTubeloop->SeqIdx]);
+#endif
     switch (TSeq->stage)
     {
 #ifdef USE_IN_SEQUENCE_LOOPING
@@ -1002,17 +1327,22 @@ void TubeStateHandler(long TubeId,xMessage *msg)
         data = TSeq->temp;
         WriteTubeHeaterReg(TubeId,SETPOINT_REG,&data,sizeof(data)/2);
         pTubeloop->state = TUBE_WAIT_TEMP;
+        pTubeloop->curr.temp = TSeq->temp;
+        pTubeloop->curr.time = TSeq->time;
+        pTubeloop->curr.stage = TSeq->stage;
         if(pTubeloop->SeqIdx == 0) 
         {
           /*Set heater to automatic mode if a new sequence is started*/
           data = SET_AUTOMATIC_MODE;
           WriteTubeHeaterReg(TubeId,TUBE_COMMAND_REG,&data,sizeof(data)/2);
+#ifndef MAIN_IF_REV2 /*Cant see end of sequence in this mode*/
           while(pTubeloop->data[a].stage != End)
           { // find nof stages in sequence
             a++;
           }
           DEBUG_SEQ_PRINTF("\n\rTube[%d] Step %d of %d START Seq. New stage:%c, temp %d.%01dC",
             TubeId, pTubeloop->SeqIdx+1, a, stageToChar[TSeq->stage], TSeq->temp/10, TSeq->temp%10);
+#endif          
         }else
         {
           DEBUG_SEQ_PRINTF("\n\rTube[%d] Step %d Time reached. New stage:%c, temp %d.%01dC",
@@ -1071,8 +1401,8 @@ void TubeSequencerTask( void * pvParameter)
 
       switch(msg->ucMessageID)
       {
-      	case TUBE_TEST_SEQ:
-      		TubeId = *((long *)(msg->ucData));
+      case TUBE_TEST_SEQ:
+          TubeId = *((long *)(msg->ucData));
           Tubeloop[TubeId].ucMessageID = msg->ucMessageID; /*Log last state for tube*/
           modbus_data[0]=1;
           DEBUG_PRINTF("TUBE[%d] TUBE_TEST_SEQ",TubeId);
@@ -1087,19 +1417,14 @@ void TubeSequencerTask( void * pvParameter)
             xQueueSend(LogQueueHandle, &new_msg, portMAX_DELAY);
           }
 #endif
-          //while(heater != nExtiGpio) ####JRJ hvad var meningen med dette?
-          //{
-          //  heater++;
-          //}
-          // json_test();
         break;
-      	case INIT_TUBE_SEQ:
+        case INIT_TUBE_SEQ:
         {
           TubeId = *((long *)(msg->ucData));
           Tubeloop[TubeId].ucMessageID = msg->ucMessageID; /*Log last state for tube*/
-        	start_lid_heating();
+          start_lid_heating();
         }
-     		break;
+        break;
         case START_TUBE_SEQ:
           if((Tubeloop[TubeId].state == TUBE_IDLE) && (Tubeloop[TubeId].SeqIdx==0))
           {
@@ -1119,98 +1444,7 @@ void TubeSequencerTask( void * pvParameter)
           preg=(ReadModbusRegsRes *)msg->ucData;
           TubeId = preg->slave;
           Tubeloop[TubeId].ucMessageID = msg->ucMessageID; /*Log last state for tube*/
-          modbus_addr = preg->addr;
-          /*modbus_data =  preg->data[1];*/
-          modbus_result = preg->resultOk;
-          if(modbus_result != NO_ERROR)
-          {
-            DEBUG_PRINTF("####Tube[%d]ERROR MODBUS READ FAILED!!! %d",TubeId,modbus_result);
-          }
-          for(i=0;i<(preg->datasize);i++)
-          {
-            modbus_data[i] =(((u16)(preg->data[i*2])<<8)|(preg->data[(i*2)+1]));
-          }
-          DEBUG_SEQ_PRINTF("Tube[%d]@%s TubeSeq[%s]ADDR[%d]size[%d]data[%x]STATUS[%s]",
-            TubeId, tube_states[Tubeloop[TubeId].state], signals_txt[msg->ucMessageID],
-            preg->addr, preg->datasize,/*(((u16)(preg->data[0])<<8)|(preg->data[1]))*/modbus_data[0],
-            (preg->resultOk==NO_ERROR)?"PASS":"FAIL");
-          if(preg->addr == SETPOINT_REG)
-          {
-            DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s] SetPoint[%d]", TubeId, tube_states[Tubeloop[TubeId].state],
-                             signals_txt[msg->ucMessageID], modbus_data[0]/10);
-          }
-          if(preg->resultOk==NO_ERROR)
-          {
-            if(preg->addr == EVENT_REG)
-            {
-              if (TubeId == 7)
-              {
-                Heater4_irq_handled == FALSE; /*Now we have read the content of the event register and are ready to recieve a new IRQ from Heater4*/
-              }
-              /* Handle "Temperature reached" event */
-              if( ((Tubeloop[TubeId].state == TUBE_WAIT_TEMP) || (Tubeloop[TubeId].state == TUBE_WAIT_P_TEMP)) && 
-                  ((modbus_data[0] & SEQUENCE_EVENT_TUBE1)    || (modbus_data[0] & SEQUENCE_EVENT_TUBE2)))
-              {
-                Tubeloop_t *pTubeloop = &Tubeloop[TubeId];
-                stageCmd_t *TSeq = &(pTubeloop->data[pTubeloop->SeqIdx]);
-                modbus_id = TubeId%2;
-                if(modbus_id == 0) { modbus_id=2; }
-#ifdef USE_PAUSE_FEATURE
-                if(TUBE_WAIT_P_TEMP == Tubeloop[TubeId].state) {
-                  Tubeloop[TubeId].state = TUBE_PAUSED;
-                  Tubeloop[TubeId].pausePendingState = TUBE_P_NORM; //Pause is not pending anymore
-                  //do we check if all tubes are in pause and notify Linuxbox
-                  DEBUG_SEQ_PRINTF("Tube[%d] Pause temp reached:%d.%01dC - paused!", TubeId, modbus_data[modbus_id]/10, modbus_data[modbus_id]%10);
-                }
-                else
-#endif
-                {
-                  DEBUG_SEQ_PRINTF("\n\rTube[%d] Step %d Temp reached:%d.%01dC Start timer %d.%01d Sec, stage:%c", 
-                               TubeId, pTubeloop->SeqIdx+1, modbus_data[modbus_id]/10, modbus_data[modbus_id]%10, 
-                               TSeq->time/10, TSeq->time%10, stageToChar[TSeq->stage]);/*ASCII 155 norm 167*/
-                  StartTubeTimer(TubeId,TSeq->time);
-                  Tubeloop[TubeId].state = TUBE_WAIT_TIME;
-                }
-              }
-#if 0 // event debug out
-              DEBUG_SEQ_PRINTF("Tube[%d]EVENT[%04x]:%s-%s-%s-%s-%s-%s-%s-%s",
-                           TubeId,modbus_data[0],
-                           ((modbus_data[0] & SEQUENCE_EVENT_TUBE1)? "S_EV_T1 "  : " "),
-                           ((modbus_data[0] & SEQUENCE_EVENT_TUBE2)? "S_EV_T2 "  : " "),
-                           ((modbus_data[0] & INIT_HW_ERROR_TUBE1) ? "HW_ERR_T1 ": " "),
-                           ((modbus_data[0] & INIT_HW_ERROR_TUBE2) ? "HW_ERR_T2 ": " "),
-                           ((modbus_data[0] & TUBE1_NOT_PRESENT)   ? "NO_T1 "    : " "),
-                           ((modbus_data[0] & TUBE2_NOT_PRESENT)   ? "NO_T2 "    : " "),
-                           ((modbus_data[0] & TUBE1_LOGGING_READY) ? "LogT1 "    : " "),
-                           ((modbus_data[0] & TUBE2_LOGGING_READY) ? "LogT2 "    : " "));
-#endif
-              Tubeloop[TubeId].event_reg = modbus_data[0];
-              if(Tubeloop[TubeId].state == TUBE_NOT_INITIALIZED)/*No errors on current tube, set it to IDLE so its ready for use*/
-              {
-                Tubeloop[TubeId].state = TUBE_IDLE;
-                modbus_data[0]=1;
-                ExtIrqEnable(tube2heater[TubeId]);
-                DEBUG_PRINTF("ENABLE IRQ ON HEATER[%d]",tube2heater[TubeId]);
-                WriteTubeHeaterReg(TubeId,EVENT_REG,&modbus_data[0], 1); /*******TEST to force the heater to create an event*/
-              }
-#if 0
-              /* Handle datalogging request */
-              // Each log is DATA_LOG_SIZE + 1 sequence number.
-              if((TUBE1_LOGGING_READY & modbus_data[0]) && (TUBE2_LOGGING_READY & modbus_data[0]))
-              { //Request a read of the logged data from tube 1 & 2. The result is sent to logging task
-                ReadTubeHeaterReg(TubeId, DATA_LOG_T1, DATA_LOG_SIZE*2+2, LogQueueHandle, FALSE);
-              }
-              if((TUBE1_LOGGING_READY & modbus_data[0]) && !(TUBE2_LOGGING_READY & modbus_data[0]))
-              { //Request a read of the logged data from tube 1 only. The result is sent to logging task 
-                ReadTubeHeaterReg(TubeId, DATA_LOG_T1, DATA_LOG_SIZE+1, LogQueueHandle, FALSE);
-              }
-              if(!(TUBE1_LOGGING_READY & modbus_data[0]) && (TUBE2_LOGGING_READY & modbus_data[0]))
-              { //Request a read of the logged data  from tube 2 only. The result is sent to logging task
-                ReadTubeHeaterReg(TubeId, DATA_LOG_T2, DATA_LOG_SIZE+1, LogQueueHandle, FALSE);
-              }
-#endif
-            }
-          }
+          HeaterMessageHandler( preg->slave,msg);
         break;
         case TIMER_EXPIRED:                       /*Waiting time for tube ended*/
           TubeId = *((long *)(msg->ucData));
