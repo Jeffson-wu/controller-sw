@@ -252,10 +252,10 @@ void CooleAndLidTask( void * pvParameters )
 
   while(1)
   {
-	#ifdef DEBUG
+	#ifdef DEBUG_COOL
   		if (cnt == 10)
   		{
-  			DEBUG_PRINTF("%d,%d,%d,%d,%d,%d", dac_2_temp(adcCh[0]), pwmCh[0], dac_2_temp(adcCh[1]), pwmCh[1], dac_2_temp(adcCh[2]), pwmCh[2]);
+  			//DEBUG_PRINTF("%d,%d,%d,%d,%d,%d", dac_2_temp(adcCh[0]), pwmCh[0], dac_2_temp(adcCh[1]), pwmCh[1], dac_2_temp(adcCh[2]), pwmCh[2]);
   			cnt = 0;
   		}
   		cnt++;

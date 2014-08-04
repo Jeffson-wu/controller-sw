@@ -496,7 +496,7 @@ void gdi_map_to_functions()
 	u8 result, slave;
 	u16 addr, datasize;
 	u16 buffer[50];
-  char str[20];
+  char str[30];
   u16 seq_num,seq_id;
   				uint16_t temp; /*Settemp in 0.1 degrees*/
 				uint32_t time; /*time in secs*/
@@ -805,7 +805,7 @@ void gdi_map_to_functions()
             else if(!strncmp((*(gdi_req_func_info.parameters + i + 1)),"stop",strlen("stop")))
             {
               GDI_PRINTF("STOP SEQ on Tube:%d",TubeId);
-              if(stop_tube_seq(TubeId))    /*Start the seq*/
+              if(stop_tube_seq(TubeId))    /*Stop the seq*/
               {
                 gdi_send_data_response("OK", newline_end);
               }
@@ -852,7 +852,7 @@ void gdi_map_to_functions()
            else if(!strncmp((*(gdi_req_func_info.parameters + i + 1)),"pausetube",strlen("pausetube")))
             {
               GDI_PRINTF("pausetube on Tube:%d",TubeId);
-              if(/*pause_tube_state(TubeId)*/TRUE)    /*Start the seq*/
+              if(pause_tube_state(TubeId))    /*Start the seq*/
               {
                 gdi_send_data_response("OK", newline_end);
               }
@@ -864,16 +864,16 @@ void gdi_map_to_functions()
            else if(!strncmp((*(gdi_req_func_info.parameters + i + 1)),"tubestatus",strlen("tubestatus")))
             {
               GDI_PRINTF("tubestatus on Tube:%d",TubeId);
-              
-              if(getseq(TubeId, &data))
-              {
-                GDI_PRINTF("Tube:%d:TEMP %d.%02dC @ TIME %d.%02dsecs STATE:%s SEQ_ID:%d",TubeId,data.temp/10,data.temp%10,data.time/10,data.time%10,tube_st[data.stage],seq_num);
-                gdi_send_data_response("OK", newline_end);
-              }
-              else
-              {
-                gdi_send_data_response("NOK No sequence", newline_end);
-              }
+              if(0 == TubeId) 
+                 {
+                   gdi_send_data_response(get_system_state(str), newline_end);
+                 }
+                 else
+                 {
+                   GDI_PRINTF("GET STATE on Tube:%d",TubeId);
+                   gdi_send_data_response(get_tube_state(TubeId, str), newline_end);
+                 }
+
             }
            else if(!strncmp((*(gdi_req_func_info.parameters + i + 5)),"tubestage",strlen("tubestage")))
             {
