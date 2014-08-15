@@ -108,7 +108,9 @@ void eventPinSet(pin_state_t io)
 /* ---------------------------------------------------------------------------*/
 void SWU_SendMsg(u8 *buffer, int len)
 {
+#ifndef REV_2
   GPIO_SetBits(RS485_RE);//Remove on next PCB
+#endif
   GPIO_SetBits(RS485_DE);
   int i=0;
   while(i<len)
@@ -119,7 +121,9 @@ void SWU_SendMsg(u8 *buffer, int len)
   }
   while(USART_GetFlagStatus(USART2, USART_FLAG_TXE)==RESET);
   vTaskDelay(1); //Wait till last ch has actually been sent
+#ifndef REV_2
   GPIO_ResetBits(RS485_RE);
+#endif
   GPIO_ResetBits(RS485_DE);//Remove on next PCB
 }
 

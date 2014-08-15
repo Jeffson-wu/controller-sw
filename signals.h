@@ -35,6 +35,7 @@ enum
   LAST_MSG,
   START_LID_HEATING,
   STOP_LID_HEATING,
+  SET_LID_PWM,
   INIT_TUBE_SEQ
 };
 
@@ -101,3 +102,6 @@ WRONG_TEL_LENGHT
 }USART_ERROR;
 
 #endif
+
+void ResetHeaters();
+

@@ -9,8 +9,17 @@
 #define PWM_H_
 
 #include "stm32f10x.h"
-
-
+#ifdef REV_2
+typedef enum {
+	
+	TopHeaterCtrl1PWM,/* PB8 TIM4_CH3*/
+	FANctrlPWM,      /* PB9 TIM4_CH4*/
+	PeltierCtrlPWM1, /* PC6 TIM3_CH1*/
+	TopHeaterCtrl2PWM, /* PC7 TIM3_CH2*/
+	PeltierCtrlPWM3, /* PC8 TIM3_CH3*/
+	nPWMS
+} PWMPort_t;
+#else
 typedef enum {
 	
 	TopHeaterCtrlPWM,/* PB8 TIM4_CH3*/
@@ -20,7 +29,7 @@ typedef enum {
 	PeltierCtrlPWM3, /* PC8 TIM3_CH3*/
 	nPWMS
 } PWMPort_t;
-
+#endif
 extern void PWM_Init(uint32_t pwm_freq_TIM3,uint32_t pwm_freq_TIM4);
 extern void PWM_Set(uint16_t pwm_width,PWMPort_t pwm_port);
 extern void PWM_Test(void);
