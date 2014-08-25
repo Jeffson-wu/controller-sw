@@ -512,7 +512,7 @@ long GetTubeTimeLeft(long TubeNum)
   T = &Tubeloop[TubeNum];
   time_consumed = xTaskGetTickCount() - lStartTickCounters[ tube_idx ];
    DEBUG_PRINTF("TUBE[%d] GetTubeTimeLeft VAL[%d] EST LEFT[%d] PROGRESS[%d]%",TubeNum, T->curr.time,time_consumed/100,((time_consumed)/T->curr.time));
-   if( T->curr.time == 0)
+   if( (T->curr.time == 0)||(T->curr.stage==Pause))
     {
     time_left = 0;
     }else
@@ -521,6 +521,7 @@ long GetTubeTimeLeft(long TubeNum)
     }
 return time_left;
 }
+
 StopTubeTimer(long TubeNum)
 {
   long tube_idx = TubeNum -1;
@@ -1133,7 +1134,7 @@ char * get_tube_state(long TubeId, char *poutText)
     strncat(poutText,";stage_number=",strlen(";stage_number="));
     strncat(poutText,stage_nr,strlen(stage_nr));
     strncat(poutText,";log={",strlen(";log={"));
-    strncat(poutText,log,strlen(log));
+  //  strncat(poutText,getLog(poutText,TubeId),strlen(log));
     strncat(poutText,"}>",strlen("}>"));
 
   return poutText;
