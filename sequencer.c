@@ -61,6 +61,12 @@ extern xQueueHandle CoolAndLidQueueHandle;
 #define SET_TUBE_TEMP 0x01
 #define SET_TUBE_IDLE 0x02
 
+/*STATUS_REG Bit definitions */
+#define SEQUENCE_EVENT    ((uint16_t)0x01)  /* New temperature reached on tube              */
+#define INIT_HW_ERROR     ((uint16_t)0x02)  /* HW failure detected during start up on tube  */
+#define NOT_PRESENT       ((uint16_t)0x04)  /* Tube not present                             */
+#define LOGGING_READY     ((uint16_t)0x08)  /* Logging data buffer ready to be read         */
+#define EVENT_DATA_SIZE 5
 
 #define tube_status 0x1
 
@@ -1296,141 +1302,175 @@ bool res = FALSE;
 
 #endif
 
-void HeaterMessageHandler (long TubeId, xMessage *msg)
+/* ---------------------------------------------------------------------------*/
+/* Handle event for one tube */
+/* ---------------------------------------------------------------------------*/
+void TubeEventHandler (long TubeId, int event, xMessage *msg)
 {
   ReadModbusRegsRes *preg;
   u16 modbus_addr,modbus_id;
-  u16 modbus_data[5];
+  u16 modbus_data[EVENT_DATA_SIZE];
   bool modbus_result;
   long i=0;
 
   preg=(ReadModbusRegsRes *)msg->ucData;
- 
+
   modbus_addr = preg->addr;
   /*modbus_data =  preg->data[1];*/
   modbus_result = preg->resultOk;
-  if(modbus_result != NO_ERROR)
-  {
-    DEBUG_PRINTF("####Tube[%d]ERROR MODBUS READ FAILED!!! %d",TubeId,modbus_result);
-  }
+
+  Tubeloop_t *pTubeloop = &Tubeloop[TubeId];
   for(i=0;i<(preg->datasize);i++)
   {
     modbus_data[i] =(((u16)(preg->data[i*2])<<8)|(preg->data[(i*2)+1]));
   }
- // DEBUG_SEQ_PRINTF("Tube[%d]@%s TubeSeq[%s]ADDR[%d]size[%d]data[%x]STATUS[%s]",
- //   TubeId, tube_states[Tubeloop[TubeId].state], signals_txt[msg->ucMessageID],
- //   preg->addr, preg->datasize,/*(((u16)(preg->data[0])<<8)|(preg->data[1]))*/modbus_data[0],
- //   (preg->resultOk==NO_ERROR)?"PASS":"FAIL");
+#ifdef DEBUG
+  // If not logging event output debug data
+  if(((event & LOGGING_READY)==FALSE))
+  {
+    DEBUG_PRINTF("Tube[%d][%x]-EVENT %s - ST:%s",TubeId,modbus_data[0] ,(((event & SEQUENCE_EVENT)==TRUE)?"SEQ_EVENT":" "),stageToChar[pTubeloop->curr.stage]);
+  }
+#endif
+#ifndef REV_2
+  if (TubeId == 7)
+  {
+    Heater4_irq_handled == FALSE; /*Now we have read the content of the event register and are ready to recieve a new IRQ from Heater4*/
+  }
+#endif
+
+  /* Handle "Temperature reached" event */
+  if( ((pTubeloop->curr.stage == TUBE_WAIT_TEMP) || (pTubeloop->curr.stage == TUBE_WAIT_P_TEMP)) && 
+      (event & SEQUENCE_EVENT) )
+  {
+    modbus_id = TubeId%4;
+    if(modbus_id == 0) { modbus_id = 4; }
+#ifdef USE_PAUSE_FEATURE
+    if(TUBE_WAIT_P_TEMP == Tubeloop[TubeId].state) {
+      pTubeloop->curr.stage = TUBE_PAUSED;
+      pTubeloop->pausePendingState = TUBE_P_NORM; //Pause is not pending anymore
+      //do we check if all tubes are in pause and notify Linuxbox
+      DEBUG_SEQ_PRINTF("Tube[%d] Pause temp reached:%d.%01dC - paused!", TubeId, modbus_data[modbus_id]/10, modbus_data[modbus_id]%10);
+    }
+    else
+#endif
+    {
+      DEBUG_SEQ_PRINTF("\n\rTube[%d] Step %d Temp reached:%d.%01dC Start timer %d.%01d Sec, stage:%c\n\r", 
+                   TubeId, pTubeloop->SeqIdx+1, modbus_data[modbus_id]/10, modbus_data[modbus_id]%10, 
+                   pTubeloop->curr.time/10, pTubeloop->curr.time%10, stageToChar[pTubeloop->curr.stage]);/*ASCII 155 norm 167*/
+      StartTubeTimer(TubeId,pTubeloop->curr.time);
+      pTubeloop->curr.stage = TUBE_WAIT_TIME;
+    }
+  }
+  if(Tubeloop[TubeId].state == TUBE_NOT_INITIALIZED)/*No errors on current tube, set it to IDLE so its ready for use*/
+  {
+    Tubeloop[TubeId].state = TUBE_INIT;
+    modbus_data[0]=1;
+    #if defined(SIMULATE_HEATER)
+    ReadTubeHeaterReg(TubeId,EVENT_REG,1,TubeSequencerQueueHandle, FALSE);
+    #else
+    if(tube2heater[TubeId] != Heater3){
+      ExtIrqEnable(tube2heater[TubeId]);
+    }
+    DEBUG_PRINTF("ENABLE IRQ ON HEATER[%d]",tube2heater[TubeId]);
+    WriteTubeHeaterReg(TubeId,EVENT_REG,&modbus_data[0], 1); /*******TEST to force the heater to create an event*/
+    #endif
+  }
+      
+  if((LOGGING_READY) & modbus_data[0])
+  { //Request a read of the logged data from tube. The result is sent to logging task 
+    ReadTubeHeaterReg(TubeId, DATA_LOG, DATA_LOG_SIZE+1, LogQueueHandle, FALSE);
+  }
+  
+}
+
+/* ---------------------------------------------------------------------------*/
+/* Read event register and sort out events per tube and handle the events     */
+/* for each tube seperately
+/* ---------------------------------------------------------------------------*/
+void HeaterEventHandler (long TubeId, xMessage *msg)
+{
+  int i;
+  int n;
+  int event;
+  u16 modbus_data[EVENT_DATA_SIZE];
+  ReadModbusRegsRes *preg;
+  n = preg->datasize <=EVENT_DATA_SIZE ? preg->datasize : EVENT_DATA_SIZE;
+  for(i=0;i<(n);i++)
+  {
+    modbus_data[i] =(((u16)(preg->data[i*2])<<8)|(preg->data[(i*2)+1]));
+  }
+  Tubeloop[TubeId].event_reg = modbus_data[0];
+#if 0 // event debug out
+  DEBUG_SEQ_PRINTF("Tube[%d]EVENT[%04x]:%s-%s-%s-%s-%s-%s-%s-%s-%s-%s-%s-%s-%s-%s-%s-%s",
+        TubeId,modbus_data[0],
+        ((modbus_data[0] & SEQUENCE_EVENT_TUBE1)? "S_EV_T1 "  : " "),
+        ((modbus_data[0] & SEQUENCE_EVENT_TUBE2)? "S_EV_T2 "  : " "),
+        ((modbus_data[0] & SEQUENCE_EVENT_TUBE3)? "S_EV_T3 "  : " "),
+        ((modbus_data[0] & SEQUENCE_EVENT_TUBE4)? "S_EV_T4 "  : " "),
+        ((modbus_data[0] & INIT_HW_ERROR_TUBE1) ? "HW_ERR_T1 ": " "),
+        ((modbus_data[0] & INIT_HW_ERROR_TUBE2) ? "HW_ERR_T2 ": " "),
+        ((modbus_data[0] & INIT_HW_ERROR_TUBE3) ? "HW_ERR_T3 ": " "),
+        ((modbus_data[0] & INIT_HW_ERROR_TUBE4) ? "HW_ERR_T4 ": " "),
+        ((modbus_data[0] & TUBE1_NOT_PRESENT)   ? "NO_T1 "    : " "),
+        ((modbus_data[0] & TUBE2_NOT_PRESENT)   ? "NO_T2 "    : " "),
+        ((modbus_data[0] & TUBE3_NOT_PRESENT)   ? "NO_T3 "    : " "),
+        ((modbus_data[0] & TUBE4_NOT_PRESENT)   ? "NO_T4 "    : " "),
+        ((modbus_data[0] & TUBE1_LOGGING_READY) ? "LogT1 "    : " "),
+        ((modbus_data[0] & TUBE2_LOGGING_READY) ? "LogT2 "    : " "));
+        ((modbus_data[0] & TUBE3_LOGGING_READY) ? "LogT3 "    : " "),
+        ((modbus_data[0] & TUBE4_LOGGING_READY) ? "LogT4 "    : " "));
+#endif
+
+  event |= (modbus_data[0] & SEQUENCE_EVENT_TUBE1) ? SEQUENCE_EVENT : 0; 
+  event |= (modbus_data[0] & INIT_HW_ERROR_TUBE1)  ? INIT_HW_ERROR  : 0; 
+  event |= (modbus_data[0] & TUBE1_NOT_PRESENT)    ? NOT_PRESENT    : 0; 
+  event |= (modbus_data[0] & TUBE1_LOGGING_READY)  ? LOGGING_READY  : 0; 
+  if(event) TubeEventHandler (TubeId, event, msg);
+
+  event |= (modbus_data[0] & SEQUENCE_EVENT_TUBE2) ? SEQUENCE_EVENT : 0; 
+  event |= (modbus_data[0] & INIT_HW_ERROR_TUBE2)  ? INIT_HW_ERROR  : 0; 
+  event |= (modbus_data[0] & TUBE2_NOT_PRESENT)    ? NOT_PRESENT    : 0; 
+  event |= (modbus_data[0] & TUBE2_LOGGING_READY)  ? LOGGING_READY  : 0; 
+  if(event) TubeEventHandler (TubeId + 1, event, msg);
+
+  event |= (modbus_data[0] & SEQUENCE_EVENT_TUBE3) ? SEQUENCE_EVENT : 0; 
+  event |= (modbus_data[0] & INIT_HW_ERROR_TUBE3)  ? INIT_HW_ERROR  : 0; 
+  event |= (modbus_data[0] & TUBE3_NOT_PRESENT)    ? NOT_PRESENT    : 0; 
+  event |= (modbus_data[0] & TUBE3_LOGGING_READY)  ? LOGGING_READY  : 0; 
+  if(event) TubeEventHandler (TubeId + 2, event, msg);
+
+  event |= (modbus_data[0] & SEQUENCE_EVENT_TUBE4) ? SEQUENCE_EVENT : 0; 
+  event |= (modbus_data[0] & INIT_HW_ERROR_TUBE4)  ? INIT_HW_ERROR  : 0; 
+  event |= (modbus_data[0] & TUBE4_NOT_PRESENT)    ? NOT_PRESENT    : 0; 
+  event |= (modbus_data[0] & TUBE4_LOGGING_READY)  ? LOGGING_READY  : 0; 
+  if(event) TubeEventHandler (TubeId + 3, event, msg);
+
+}
+
+/* ---------------------------------------------------------------------------*/
+/* Handle any register read other than event register */
+/* ---------------------------------------------------------------------------*/
+
+void TubeMessageHandler (long TubeId, xMessage *msg)
+{
+  ReadModbusRegsRes *preg;
   if(preg->addr == SETPOINT_REG)
   {
- //   DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s] SetPoint[%d]", TubeId, tube_states[Tubeloop[TubeId].state],
- //                    signals_txt[msg->ucMessageID], modbus_data[0]/10);
+    //DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s] SetPoint[%d]", TubeId, tube_states[Tubeloop[TubeId].state],
+    //              signals_txt[msg->ucMessageID], modbus_data[0]/10);
   }
-  if(preg->resultOk==NO_ERROR)
-  {
-    if(preg->addr == EVENT_REG)
-    {
-    if(((modbus_data[0] & TUBE1_LOGGING_READY)==FALSE))
-      {
-      u8 offset = (modbus_data[0] & SEQUENCE_EVENT_TUBE1)?0:0 +(modbus_data[0] & SEQUENCE_EVENT_TUBE2)?1:0+
-           (modbus_data[0] & SEQUENCE_EVENT_TUBE3)?2:0 +(modbus_data[0] & SEQUENCE_EVENT_TUBE4)?3:0;
-      TubeId = TubeId+offset;
-        DEBUG_PRINTF("Tube[%d][%x]-EVENT %s - %s - %s - %s - ST:%d",TubeId,modbus_data[0] ,(((modbus_data[0] & SEQUENCE_EVENT_TUBE1)==TRUE)?"SEQ_EVENT_T1":" "),(((modbus_data[0] & SEQUENCE_EVENT_TUBE2)==TRUE)?"SEQ_EVENT_T2":" "),(((modbus_data[0] & SEQUENCE_EVENT_TUBE3)==TRUE)?"SEQ_EVENT_T3":" "),(((modbus_data[0] & SEQUENCE_EVENT_TUBE4)==TRUE)?"SEQ_EVENT_T4":" "),(Tubeloop[TubeId].state));
-      }
-#ifndef REV_2
-      if (TubeId == 7)
-      {
-        Heater4_irq_handled == FALSE; /*Now we have read the content of the event register and are ready to recieve a new IRQ from Heater4*/
-      }
-#endif
-      /* Handle "Temperature reached" event */
-
-
-      if( ((Tubeloop[TubeId].state == TUBE_WAIT_TEMP) || (Tubeloop[TubeId].state == TUBE_WAIT_P_TEMP)) && 
-          ((modbus_data[0] & SEQUENCE_EVENT_TUBE1)    || (modbus_data[0] & SEQUENCE_EVENT_TUBE2) ||
-           (modbus_data[0] & SEQUENCE_EVENT_TUBE3)    || (modbus_data[0] & SEQUENCE_EVENT_TUBE4)))
-      {
-        Tubeloop_t *pTubeloop = &Tubeloop[TubeId];
-        //stageCmd_t *TSeq = &(pTubeloop->data[pTubeloop->SeqIdx]);
-        modbus_id = TubeId%4;
-        if(modbus_id == 0) { modbus_id=2; }
-#ifdef USE_PAUSE_FEATURE
-        if(TUBE_WAIT_P_TEMP == Tubeloop[TubeId].state) {
-          Tubeloop[TubeId].state = TUBE_PAUSED;
-          Tubeloop[TubeId].pausePendingState = TUBE_P_NORM; //Pause is not pending anymore
-          //do we check if all tubes are in pause and notify Linuxbox
-          DEBUG_SEQ_PRINTF("Tube[%d] Pause temp reached:%d.%01dC - paused!", TubeId, modbus_data[modbus_id]/10, modbus_data[modbus_id]%10);
-        }
-        else
-#endif
-        {
-          DEBUG_SEQ_PRINTF("Tube[%d] Step %d Temp reached:%d.%01dC Start timer %d.%01d Sec, stage:%s", 
-                       TubeId, pTubeloop->SeqIdx+1, modbus_data[modbus_id]/10, modbus_data[modbus_id]%10, 
-                       pTubeloop->curr.time/10, pTubeloop->curr.time%10, stageToChar[pTubeloop->curr.stage]);/*ASCII 155 norm 167*/
-#ifdef MAIN_IF_REV2  
-          StartTubeTimer(TubeId,pTubeloop->curr.time);     
-#else
-          StartTubeTimer(TubeId,pTubeloop->curr.time);
-#endif
-          Tubeloop[TubeId].state = TUBE_WAIT_TIME;
-        }
-      }
-#if 0 // event debug out
-      DEBUG_SEQ_PRINTF("Tube[%d]EVENT[%04x]:%s-%s-%s-%s-%s-%s-%s-%s",
-                   TubeId,modbus_data[0],
-                   ((modbus_data[0] & SEQUENCE_EVENT_TUBE1)? "S_EV_T1 "  : " "),
-                   ((modbus_data[0] & SEQUENCE_EVENT_TUBE2)? "S_EV_T2 "  : " "),
-                   ((modbus_data[0] & INIT_HW_ERROR_TUBE1) ? "HW_ERR_T1 ": " "),
-                   ((modbus_data[0] & INIT_HW_ERROR_TUBE2) ? "HW_ERR_T2 ": " "),
-                   ((modbus_data[0] & TUBE1_NOT_PRESENT)   ? "NO_T1 "    : " "),
-                   ((modbus_data[0] & TUBE2_NOT_PRESENT)   ? "NO_T2 "    : " "),
-                   ((modbus_data[0] & TUBE1_LOGGING_READY) ? "LogT1 "    : " "),
-                   ((modbus_data[0] & TUBE2_LOGGING_READY) ? "LogT2 "    : " "));
-#endif
-      Tubeloop[TubeId].event_reg = modbus_data[0];
-      if(Tubeloop[TubeId].state == TUBE_NOT_INITIALIZED)/*No errors on current tube, set it to IDLE so its ready for use*/
-      {
-        Tubeloop[TubeId].state = TUBE_INIT;
-        modbus_data[0]=1;
-        #if defined(SIMULATE_HEATER)
-        ReadTubeHeaterReg(TubeId,EVENT_REG,1,TubeSequencerQueueHandle, FALSE);
-        #else
-        if(tube2heater[TubeId] != Heater3){
-        ExtIrqEnable(tube2heater[TubeId]);
-          }
-        DEBUG_PRINTF("ENABLE IRQ ON HEATER[%d]",tube2heater[TubeId]);
-        WriteTubeHeaterReg(TubeId,EVENT_REG,&modbus_data[0], 1); /*******TEST to force the heater to create an event*/
-        #endif
-      }
-#if 0
-      /* Handle datalogging request */
-      // Each log is DATA_LOG_SIZE + 1 sequence number.
-      if((TUBE1_LOGGING_READY & modbus_data[0]) && (TUBE2_LOGGING_READY & modbus_data[0]))
-      { //Request a read of the logged data from tube 1 & 2. The result is sent to logging task
-        ReadTubeHeaterReg(TubeId, DATA_LOG_T1, DATA_LOG_SIZE*2+2, LogQueueHandle, FALSE);
-      }
-      if((TUBE1_LOGGING_READY & modbus_data[0]) && !(TUBE2_LOGGING_READY & modbus_data[0]))
-      { //Request a read of the logged data from tube 1 only. The result is sent to logging task 
-        ReadTubeHeaterReg(TubeId, DATA_LOG_T1, DATA_LOG_SIZE+1, LogQueueHandle, FALSE);
-      }
-      if(!(TUBE1_LOGGING_READY & modbus_data[0]) && (TUBE2_LOGGING_READY & modbus_data[0]))
-      { //Request a read of the logged data  from tube 2 only. The result is sent to logging task
-        ReadTubeHeaterReg(TubeId, DATA_LOG_T2, DATA_LOG_SIZE+1, LogQueueHandle, FALSE);
-      }
-#endif
-    }
-  }else{
-    DEBUG_PRINTF("####Tube[%d]ERROR MODBUS TELEGRAM READ FAILED!!! %d",TubeId,modbus_result);
+  
+  // DEBUG_SEQ_PRINTF("Tube[%d]@%s TubeSeq[%s]ADDR[%d]size[%d]data[%x]STATUS[%s]",
+  //   TubeId, tube_states[Tubeloop[TubeId].state], signals_txt[msg->ucMessageID],
+  //   preg->addr, preg->datasize,/*(((u16)(preg->data[0])<<8)|(preg->data[1]))*/modbus_data[0],
+  //   (preg->resultOk==NO_ERROR)?"PASS":"FAIL");
 }
-}
-
-
 
 /* ---------------------------------------------------------------------------*/
 /* TubeStateHandler sets up the next stage in a sequence, temperature and time*/
 /* TubeStateHandler is called on reception of START_TUBE_SEQ and              */
 /* NEXT_TUBE_STAGE messages  */
-void TubeStateHandler(long TubeId,xMessage *msg)
+void TubeStateHandler(long TubeId, xMessage *msg)
 {
   xMessage *new_msg;
   long *p;
@@ -1659,7 +1699,16 @@ void TubeSequencerTask( void * pvParameter)
           preg=(ReadModbusRegsRes *)msg->ucData;
           TubeId = preg->slave;
           Tubeloop[TubeId].ucMessageID = msg->ucMessageID; /*Log last state for tube*/
-          HeaterMessageHandler( preg->slave,msg);
+          if(preg->resultOk == NO_ERROR)
+          {
+            if(preg->addr == EVENT_REG) {
+              HeaterEventHandler(preg->slave, msg);
+            } else {
+              TubeMessageHandler(preg->slave, msg);
+            }
+          } else {
+            DEBUG_PRINTF("####Tube[%d]ERROR MODBUS TELEGRAM READ FAILED!!! %d",TubeId,modbus_result);
+          }
         break;
         case TIMER_EXPIRED:                       /*Waiting time for tube ended*/
           TubeId = *((long *)(msg->ucData));
