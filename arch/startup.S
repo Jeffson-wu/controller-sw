@@ -93,7 +93,7 @@ __isr_vector:
     .long    Default_Handler            /* 4: FLASH */
     .long    Default_Handler            /* 5: RCC */
     .long    Default_Handler            /* 6: EXTI0 */
-    .long    EXTI_Handler            /* 7: EXTI1 */
+    .long    ADS_Handler            /* 7: EXTI1 */
     .long    EXTI_Handler            /* 8: EXTI2 */
     .long    EXTI_Handler            /* 9: EXTI3 */
     .long    EXTI_Handler            /* 10: EXTI4 */

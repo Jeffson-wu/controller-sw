@@ -22,6 +22,8 @@
 #include "timers.h"
 #include "task.h"
 #include "ads1148.h"
+#define DEBUG
+#define REV_2
 #ifdef DEBUG
 #include <stdio.h>
 #endif
@@ -37,8 +39,12 @@ static uint8_t rxbuf [4];
 __IO int16_t latestConv[4];
 
 #ifdef DEBUG
-char buf[50];
+char buf[20];
+#define DEBUG_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
+#else
+#define DEBUG_PRINTF(fmt, args...)    /* Don't do anything in release builds */
 #endif
+
 
 static xSemaphoreHandle ADSSemaphore = NULL;
 /* Private function prototypes -----------------------------------------------*/
@@ -135,8 +141,26 @@ void adsGPIOInit(void)
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_OD;
   GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
   GPIO_Init(GPIOA, &GPIO_InitStructure);
+#ifdef REV_2
+/* Configure the ADS_RESET pin */
+  GPIO_InitStructure.GPIO_Pin = ADS_RESET_PIN;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_OD;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
+  GPIO_Init(GPIOB, &GPIO_InitStructure);
 
-  /* Configure the ADS_DRDY pin */
+  /* Configure the ADS_START and ADS_RESET pins */
+  GPIO_InitStructure.GPIO_Pin = ADS_START_PIN ;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_OD;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
+  GPIO_Init(GPIOC, &GPIO_InitStructure);
+
+/* Configure the ADS_DRDY pin */
+  GPIO_InitStructure.GPIO_Pin = ADS_DRDY_PIN;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPU;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
+  GPIO_Init(GPIOC, &GPIO_InitStructure);
+
+#else  /* Configure the ADS_DRDY pin */
   GPIO_InitStructure.GPIO_Pin = ADS_DRDY_PIN;
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPU;
   GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
@@ -147,6 +171,7 @@ void adsGPIOInit(void)
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_OD;
   GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
   GPIO_Init(GPIOC, &GPIO_InitStructure);
+#endif
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -163,8 +188,11 @@ void adsIrqInit(void)
   EXTI_Init(&EXTI_InitStructure);
 
   GPIO_EXTILineConfig(ADS_EXTI_PORTSOURCE , ADS_DRDY_PINSOURCE);
-
+#ifdef REV_2
+  NVIC_InitStructure.NVIC_IRQChannel = EXTI1_IRQn;
+#else
   NVIC_InitStructure.NVIC_IRQChannel = EXTI15_10_IRQn;
+#endif
   NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
   NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0x0E; //Low prio
   NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0x0E; //Low prio
@@ -300,9 +328,7 @@ int adsDetectHW(void)
   {
     /* ADS failure means failure on both tubes */
     ret = FALSE;
-#ifdef DEBUG
-    gdi_send_msg_response("ADS detect failure\r\n");
-#endif
+    DEBUG_PRINTF("ADS detect failure\r\n");
   }
 
   /* Reset to analog input */
@@ -353,10 +379,7 @@ int adsDetectSensor(void)
     while(adsGetDrdy() == Bit_SET) {} //await /DRDY
     adsRead(&value);
 
-#ifdef DEBUG
-    sprintf(buf,"ADS sensor #%d detect: ADC val: 0x%08x", i, value);
-    gdi_send_msg_response(buf);
-#endif
+    DEBUG_PRINTF("ADS sensor #%d detect: ADC val: 0x%08x", i, value);
 
     if( (FS < value)/* open circuit */ /*|| (-FS > value) short circuit */) {
       if(2 > i) {
@@ -394,10 +417,18 @@ int ads1148Init(void)
   int ret = 0;
 
   adsGPIOInit();
+  #ifdef REV_2
+  GPIO_ResetBits(GPIOB, ADS_RESET_PIN);
+    // Keep ADS1148 reset active for 1,1us minimun using internal osc. Spend waiting time initialasing SPI.
+    spiInit();
+    GPIO_SetBits(GPIOB, ADS_RESET_PIN);
+
+  #else
   GPIO_ResetBits(GPIOC, ADS_RESET_PIN);
   // Keep ADS1148 reset active for 1,1us minimun using internal osc. Spend waiting time initialasing SPI.
   spiInit();
   GPIO_SetBits(GPIOC, ADS_RESET_PIN);
+#endif
   GPIO_ResetBits(GPIOA, ADS_CS_PIN); // Activate Chip Select pin
 
   // START needs to be high to enable all cmds
@@ -449,7 +480,11 @@ int ads1148Init(void)
 /* ---------------------------------------------------------------------------*/
 uint8_t adsGetDrdy(void)
 {
+#ifdef REV_2
+return GPIO_ReadInputDataBit(GPIOC, ADS_DRDY_PIN);
+#else
   return GPIO_ReadInputDataBit(GPIOB, ADS_DRDY_PIN);
+#endif
   //Bit_SET, Bit_RESET
 }
 

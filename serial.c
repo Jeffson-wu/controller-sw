@@ -47,6 +47,8 @@
 
 static void (*receiveDataCB)()=0;
 static void (*receiveUART1CB)()=0;
+static void (*receiveUART3CB)()=0;
+
 
 
 void UART_SendMsg(USART_TypeDef *uart, u8 *buffer, int len)
@@ -157,10 +159,34 @@ void UART_Init(USART_TypeDef *uart, void (*recvCallback)())
     NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1;
     NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
     NVIC_Init(&NVIC_InitStructure);
+  }else if(uart==USART3)
+  {
+    receiveUART3CB=recvCallback;
+    NVIC_InitStructure.NVIC_IRQChannel = USART3_IRQn;
+    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority =  configMAX_INTERRUPT_PRIORITY+1;
+    NVIC_InitStructure.NVIC_IRQChannelSubPriority = 2;
+    NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+    NVIC_Init(&NVIC_InitStructure);
   }
-  USART_ITConfig(uart, USART_IT_RXNE, ENABLE);
-  
+  if(uart!=USART3)
+    {
+    USART_ITConfig(uart, USART_IT_RXNE, ENABLE);
+    }
 }
+
+
+void UART3_Handler(void)
+{
+  vTraceStoreISRBegin(1);
+   if (USART_GetITStatus(USART3, USART_IT_RXNE) && receiveUART3CB)
+   {
+     receiveUART3CB();
+   }
+   USART_ClearITPendingBit(USART3,USART_IT_RXNE);
+   vTraceStoreISREnd();
+
+}
+
 
 void UART2_Handler(void)
 {

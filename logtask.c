@@ -143,6 +143,34 @@ int dataQueueAdd(u8 tubeId, u16 seqNumber, u8 data[])
   }
   taskEXIT_CRITICAL();
 }
+char * getLog(int tubeId, char *poutText)
+{
+  int i = 0;
+  logDataElement_t * pinData;
+  char str[20];
+
+  
+    taskENTER_CRITICAL(); //push irq state #### Kan critical section laves mindre!
+    // Send all available log elements for each tube
+    while(NULL != (pinData = dequeue(&logDataQueue[tubeId-1])) ) //idx=[0..15]
+    {
+      //? = pinData->seqNum;  Handle Seq# ?? Ignored for now
+       sprintf(str,"%03X,",pinData->seqNum); // 3 digits allows for temperatures up to 409,5 degrees
+       strcat(poutText,str);
+      for(i=0; i<LOG_ELEMENT_SIZE; i++)
+      {
+        sprintf(str,"%03X",pinData->data[i]); // 3 digits allows for temperatures up to 409,5 degrees
+        strcat(poutText,str);
+        if(LOG_ELEMENT_SIZE - 1 > i)
+        { 
+          sprintf(str,",");
+          strcat(poutText,str); 
+        }
+      }
+      //strcat(poutText,str);
+    }
+    taskEXIT_CRITICAL();
+ }
 
 /* ---------------------------------------------------------------------------*/
 /* at@gdi:seq_cmd(getlog)\n                                                   */
@@ -169,6 +197,7 @@ void sendLog()
       sprintf(str,"tube%d:",tubeId);
       SERIAL_String(str); 
       //? = pinData->seqNum;  Handle Seq# ?? Ignored for now
+       sprintf(str,"%03X,",pinData->seqNum); // 3 digits allows for temperatures up to 409,5 degrees
       for(i=0; i<LOG_ELEMENT_SIZE; i++)
       {
         sprintf(str,"%03X",pinData->data[i]); // 3 digits allows for temperatures up to 409,5 degrees
@@ -201,10 +230,16 @@ void vReadTubeTemp(xTimerHandle pxTimer )
       msg=pvPortMalloc(sizeof(xMessage)+sizeof(ReadModbusRegsReq));
       msg->ucMessageID=READ_MODBUS_REGS;
       p=(ReadModbusRegsReq *)msg->ucData;
-      if((tube%2) == 0)
+      if((tube%4) == 0)
       {
-        p->addr=TUBE2_TEMP_REG;      
-      }else
+        p->addr=TUBE4_TEMP_REG;      
+      }else if((tube%4) == 1)
+      {
+        p->addr=TUBE3_TEMP_REG;
+      }else if((tube%4) == 2)
+      {
+        p->addr=TUBE2_TEMP_REG;
+      }else if((tube%4) == 3)
       {
         p->addr=TUBE1_TEMP_REG;
       }

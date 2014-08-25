@@ -32,9 +32,10 @@
 
 /*-----------------------------------------------------------*/
 #define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
+//#define DEBUG_COOL
 #ifdef DEBUG
 char buf[20];
-#define DEBUG_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_response(buf);
+#define DEBUG_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
 #else
 #define DEBUG_PRINTF(fmt, args...)    /* Don't do anything in release builds */
 #endif
@@ -48,6 +49,7 @@ char buf[20];
 
 typedef enum {
 	STOP_STATE,
+  MANUAL_STATE,
 	CTRL_OPEN_LOOP_STATE,
   CTRL_CLOSED_LOOP_STATE,
   nCTRL_STATES
@@ -185,6 +187,11 @@ lid(lidData_t *lidData)
     	reg->hysteresisActiveFlag = 0;
     } 
     break;
+    case MANUAL_STATE:
+    {
+      msgSent = FALSE;
+    } 
+    break;
     case CTRL_CLOSED_LOOP_STATE:
     {
     	/*
@@ -232,9 +239,8 @@ void CooleAndLidTask( void * pvParameters )
 #if 1
   if(0 == ads1148Init())
   {
-#ifdef DEBUG
-    gdi_send_msg_response("ADS1148 OK\r\n");
-#endif
+    DEBUG_PRINTF("ADS1148 OK\r\n");
+
     adsStartSeq();
     adsIrqEnable();
   }
@@ -253,9 +259,9 @@ void CooleAndLidTask( void * pvParameters )
   while(1)
   {
 	#ifdef DEBUG_COOL
-  		if (cnt == 10)
+  		if (cnt == 50)
   		{
-  			//DEBUG_PRINTF("%d,%d,%d,%d,%d,%d", dac_2_temp(adcCh[0]), pwmCh[0], dac_2_temp(adcCh[1]), pwmCh[1], dac_2_temp(adcCh[2]), pwmCh[2]);
+  			DEBUG_PRINTF("PEL:%d,%d,LID1:%d,%d,ST:%dLID2:%d,%d,ST:%d", dac_2_temp(adcCh[0]), pwmCh[0], dac_2_temp(adcCh[1]), pwmCh[1],lidData[0].regulator.state, dac_2_temp(adcCh[2]), pwmCh[2],lidData[1].regulator.state);
   			cnt = 0;
   		}
   		cnt++;
@@ -270,7 +276,7 @@ void CooleAndLidTask( void * pvParameters )
     adsGetLatest(&adcCh[0], &adcCh[1], &adcCh[2], &adcCh[3]);
 
     peltier(&peltierData[0]);
-
+#if 0
 		if ( !msgSent
 				&& lidData[0].regulator.state == CTRL_CLOSED_LOOP_STATE
 				//&& (*peltierData[0].regulator.adcVal < peltierData[0].regulator.setPointHL)		//ToDo: Incomment again!!
@@ -286,15 +292,18 @@ void CooleAndLidTask( void * pvParameters )
 			}
 		}
 
+#endif
+
+
     for(i = 0; i < 2; i ++)
     {
       lid(&lidData[i]);
     }
     
     PWM_Set(pwmCh[0], PeltierCtrlPWM1);
-    PWM_Set(pwmCh[1], PeltierCtrlPWM2);
-    PWM_Set(pwmCh[2], PeltierCtrlPWM3);
-    PWM_Set(pwmCh[3], TopHeaterCtrlPWM);
+    PWM_Set(pwmCh[1], TopHeaterCtrl1PWM);
+    PWM_Set(pwmCh[2], TopHeaterCtrl2PWM);
+    //PWM_Set(pwmCh[3], TopHeaterCtrlPWM);
     PWM_Set(pwmCh[4], FANctrlPWM);
 
     if( xQueueReceive( CoolAndLidQueueHandle, &msg, /*Do not block*/ 0) == pdPASS )
@@ -320,6 +329,16 @@ void CooleAndLidTask( void * pvParameters )
           SetCooleAndLidReq *p;
           p=(SetCooleAndLidReq *)(msg->ucData);
           lidData[p->idx-1].regulator.setPoint = temp_2_dac(p->value);
+          lidData[0].regulator.state = CTRL_CLOSED_LOOP_STATE;
+        	lidData[1].regulator.state = CTRL_CLOSED_LOOP_STATE;
+        }
+        break;
+        case SET_LID_PWM:
+        {
+        SetCooleAndLidReq *p;
+        p=(SetCooleAndLidReq *)(msg->ucData);
+        *(lidData[p->idx-1].regulator.pwmVal) = (p->value);
+        lidData[p->idx-1].regulator.state = MANUAL_STATE;
         }
         break;
         case START_LID_HEATING:

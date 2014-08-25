@@ -35,21 +35,21 @@ extern xQueueHandle CoolAndLidQueueHandle;
 
 #define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
 #ifdef DEBUG
-#define DEBUG_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_response(buf);
+#define DEBUG_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
 #else
 #define DEBUG_PRINTF(fmt, args...)    /* Don't do anything in release builds */
 #endif
 
 #define DEBUG_SEQ /*Debug of sequencer, to follow state of sequencer*/
 #ifdef DEBUG_SEQ
-#define DEBUG_SEQ_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_response(buf);
+#define DEBUG_SEQ_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
 #else
 #define DEBUG_SEQ_PRINTF(fmt, args...)    /* Don't do anything in release builds */
 #endif
 
 //#define DEBUG_IF /*Debug of external interfaces modbus, IRQ and serial */
 #ifdef DEBUG_IF
-#define DEBUG_IF_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_response(buf);
+#define DEBUG_IF_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
 #else
 #define DEBUG_IF_PRINTF(fmt, args...)    /* Don't do anything in release builds */
 #endif
@@ -78,6 +78,9 @@ extern xQueueHandle CoolAndLidQueueHandle;
  /* An array to hold a count of the number of times each timer expires. */
  long lExpireCounters[ NUM_TIMERS ] = { 0 };
  
+ /* An array to hold a count of the number of times each timer starts. */
+ long lStartTickCounters[ NUM_TIMERS ] = { 0 };
+
  char buf[300];                     /*buffer for debug printf*/
  bool Heater4_irq_handled = FALSE;  /* To block for interrupts from ADC since Heater 4 and ADC share same IRQ line*/
 
@@ -267,7 +270,7 @@ Heater8,
 nExtiGpio
 }ExtiGpioTypeDef;
 #endif
-char stageToChar[] = {'M','A','E','I','P','x','y','z'};
+const char *  stageToChar[] = {"Melting","Anealing","Extention","Incubation","Pause","LoopStart","LoopEnd","End"};
 
 #ifdef DEBUG_IF
 /* For debug to */
@@ -474,6 +477,9 @@ void StartTubeTimer( long TubeNum, long time  )
   }
   else
   {
+   lStartTickCounters[ tube_idx ]= xTaskGetTickCount();
+
+  
     /* Start the timer.  No block time is specified, and even if one was
     it would be ignored because the RTOS scheduler has not yet been
     started. */
@@ -497,7 +503,24 @@ if(time > 1)
 }
 
 
-
+long GetTubeTimeLeft(long TubeNum)
+{
+  long tube_idx = TubeNum -1;
+  long time_consumed;
+  long time_left;
+  Tubeloop_t *T;
+  T = &Tubeloop[TubeNum];
+  time_consumed = xTaskGetTickCount() - lStartTickCounters[ tube_idx ];
+   DEBUG_PRINTF("TUBE[%d] GetTubeTimeLeft VAL[%d] EST LEFT[%d] PROGRESS[%d]%",TubeNum, T->curr.time,time_consumed/100,((time_consumed)/T->curr.time));
+   if( T->curr.time == 0)
+    {
+    time_left = 0;
+    }else
+    {
+      time_left = ((time_consumed)/T->curr.time); 
+    }
+return time_left;
+}
 StopTubeTimer(long TubeNum)
 {
   long tube_idx = TubeNum -1;
@@ -632,6 +655,7 @@ void ReadTubeHeaterReg(u8 tube, u16 reg, u16 datasize, xQueueHandle xQueue, bool
   preg->datasize = 1;
   //preg->data
   preg->resultOk =  NO_ERROR;
+  Tubeloop[tube].state = TUBE_IDLE;
   DEBUG_IF_PRINTF("Tube[%d]MODBUS READ_REG[%d] ",tube,reg);
   xQueueSend(TubeSequencerQueueHandle,&msg,portMAX_DELAY);
   if( xHigherPriorityTaskWoken )
@@ -685,12 +709,12 @@ void Heater_PinConfig(void)
   RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOD, ENABLE);
 
   /* GPIOD Configuration: Channel 3 and 4 as alternate function push-pull */
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_2;
-  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPD;
-  GPIO_Init(GPIOD, &GPIO_InitStructure);
+ // GPIO_InitStructure.GPIO_Pin = GPIO_Pin_2;
+ // GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPD;
+ // GPIO_Init(GPIOD, &GPIO_InitStructure);
 
   /* GPIOC Configuration: Channel 1, 2 and 3 as alternate function push-pull */
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_3 | GPIO_Pin_4 | GPIO_Pin_5 | GPIO_Pin_10 | GPIO_Pin_11 | GPIO_Pin_12 | GPIO_Pin_13;
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_3 | GPIO_Pin_4/* | GPIO_Pin_5 | GPIO_Pin_10*/ | GPIO_Pin_11 | GPIO_Pin_12 /*| GPIO_Pin_13*/;
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPD;
   GPIO_Init(GPIOC, &GPIO_InitStructure);
 }
@@ -1044,40 +1068,51 @@ char * get_tube_state(long TubeId, char *poutText)
 #ifdef DEBUG
   char tube_state[10]="IDLE";
 #endif
+    char state[20]="idle";
+    char progress[5]="50";
+    char stage_nr[5]="3";
+    char log[50]="2070,18";
+    
+
     *poutText = 0;
 
     if(Tubeloop[TubeId].data != NULL)
     {
       if(Tubeloop[TubeId].state==TUBE_OUT_OF_DATA)
       {
-        strcpy(poutText,"running waiting for data");
+        strcpy(state,"waiting for data");
       }
       else if((Tubeloop[TubeId].state==TUBE_WAIT_TEMP)||(Tubeloop[TubeId].state==TUBE_WAIT_TIME)||(Tubeloop[TubeId].state==TUBE_WAIT_P_TEMP))
       {
         // Tube is considered running untill the pause temperature is actually reached.
         if(tubequefree(TubeId) > 0)
           {
-            strcpy(poutText,"waiting for data");
+            strcpy(state,"running waiting for data");
           }
           else
           {
-            strcpy(tube_state,"running");
+            strcpy(state,"running");
           }
       }
       else if(Tubeloop[TubeId].state == TUBE_PAUSED)
       {
-        strcpy(poutText,"paused");
+        strcpy(state,"paused");
 #ifdef DEBUG
         strcpy(tube_state,"PAUSED");
 #endif
       }
       else if(Tubeloop[TubeId].state == TUBE_IDLE)
       {
-        strcpy(poutText,"stopped");
+        strcpy(state,"stopped");
 #ifdef DEBUG
         strcpy(tube_state,"STOPPED");
 #endif
       }
+      sprintf(stage_nr,"%d",Tubeloop[TubeId].SeqIdx);
+      sprintf(progress,"%d",GetTubeTimeLeft(TubeId));
+       ;
+
+   
       DEBUG_PRINTF("Tube[%d] %s @Step %d state:%s Stage:%c PState:%d CURR temp:%d time:%d LAST MSG:%s EVENT:%x",
         TubeId, tube_state, Tubeloop[TubeId].SeqIdx+1, tube_states[Tubeloop[TubeId].state], 
         stageToChar[Tubeloop[TubeId].data[Tubeloop[TubeId].SeqIdx].stage], Tubeloop[TubeId].pausePendingState,
@@ -1091,6 +1126,16 @@ char * get_tube_state(long TubeId, char *poutText)
         TubeId,Tubeloop[TubeId].SeqIdx, tube_states[Tubeloop[TubeId].state], signals_txt[Tubeloop[TubeId].ucMessageID],
         Tubeloop[TubeId].event_reg);
     }
+    strcpy(poutText,"OK<state=\"");
+    strncat(poutText,state,strlen(state));
+    strncat(poutText,"\";progress=",strlen("\";progress="));
+    strncat(poutText,progress,strlen(progress));
+    strncat(poutText,";stage_number=",strlen(";stage_number="));
+    strncat(poutText,stage_nr,strlen(stage_nr));
+    strncat(poutText,";log={",strlen(";log={"));
+    strncat(poutText,log,strlen(log));
+    strncat(poutText,"}>",strlen("}>"));
+
   return poutText;
 }
 #ifdef MAIN_IF_REV2  
@@ -1180,7 +1225,7 @@ bool result = FALSE;
            //   DEBUG_PRINTF("ENQUE:Tube:%d:TEMP %d.%02dC @ TIME %d.%02dsecs STATE:%d ",tubeId,data->temp/10,data->temp%10,data->time/10,data->time%10,data->stage);  
   if(NULL != (poutData = tubeenqueue(&Tubeloop[tubeId-1]))) //tubeId=[1..16],idx=[0..15]
   {
-DEBUG_PRINTF("QUE ADD Tube:%d:TEMP %d.%02dC @ TIME %d.%02dsecs STATE:%c FREE:%d CURR T ST:%d ",tubeId,data->temp/10,data->temp%10,data->time/10,data->time%10,state,tubequefree(tubeId),pTubeloop->state);   
+DEBUG_PRINTF("Tube[%d]@QUE ADD:TEMP %d.%02dC @ TIME %d.%02dsecs STATE:%c FREE:%d CURR T ST:%d ",tubeId,data->temp/10,data->temp%10,data->time/10,data->time%10,state,tubequefree(tubeId),pTubeloop->state);   
    poutData->temp  = data->temp;
    poutData->time  = data->time;
 
@@ -1318,7 +1363,7 @@ void HeaterMessageHandler (long TubeId, xMessage *msg)
         else
 #endif
         {
-          DEBUG_SEQ_PRINTF("\n\rTube[%d] Step %d Temp reached:%d.%01dC Start timer %d.%01d Sec, stage:%c\n\r", 
+          DEBUG_SEQ_PRINTF("Tube[%d] Step %d Temp reached:%d.%01dC Start timer %d.%01d Sec, stage:%s", 
                        TubeId, pTubeloop->SeqIdx+1, modbus_data[modbus_id]/10, modbus_data[modbus_id]%10, 
                        pTubeloop->curr.time/10, pTubeloop->curr.time%10, stageToChar[pTubeloop->curr.stage]);/*ASCII 155 norm 167*/
 #ifdef MAIN_IF_REV2  
@@ -1344,12 +1389,14 @@ void HeaterMessageHandler (long TubeId, xMessage *msg)
       Tubeloop[TubeId].event_reg = modbus_data[0];
       if(Tubeloop[TubeId].state == TUBE_NOT_INITIALIZED)/*No errors on current tube, set it to IDLE so its ready for use*/
       {
-        Tubeloop[TubeId].state = TUBE_IDLE;
+        Tubeloop[TubeId].state = TUBE_INIT;
         modbus_data[0]=1;
         #if defined(SIMULATE_HEATER)
         ReadTubeHeaterReg(TubeId,EVENT_REG,1,TubeSequencerQueueHandle, FALSE);
         #else
+        if(tube2heater[TubeId] != Heater3){
         ExtIrqEnable(tube2heater[TubeId]);
+          }
         DEBUG_PRINTF("ENABLE IRQ ON HEATER[%d]",tube2heater[TubeId]);
         WriteTubeHeaterReg(TubeId,EVENT_REG,&modbus_data[0], 1); /*******TEST to force the heater to create an event*/
         #endif
@@ -1552,7 +1599,10 @@ void TubeSequencerTask( void * pvParameter)
   	/*wait for queue msg*/
     if( xQueueReceive( TubeSequencerQueueHandle, &msg, portMAX_DELAY) == pdPASS )
     {
+      //UART_SendMsg(USART3, "OK\r" , 6);
+
      // DEBUG_PRINTF("TubeSeq[%s]",signals_txt[msg->ucMessageID]);
+    //  USART_SendData(USART3,'T');
 
       switch(msg->ucMessageID)
       {
@@ -1652,6 +1702,26 @@ void TubeSequencerTask( void * pvParameter)
           DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s] Tube[%d]ADDR[%d]size[%d]STATUS[%s]", 
             TubeId, tube_states[Tubeloop[TubeId].state], signals_txt[msg->ucMessageID], wres->slave, wres->addr, 
             wres->datasize, (wres->resultOk==NO_ERROR)?"PASS":"FAIL");
+
+           if(Tubeloop[TubeId].state == TUBE_INIT)/*No errors on current tube, set it to IDLE so its ready for use*/
+            {
+              Tubeloop[TubeId].state = TUBE_IDLE;
+              bool Initialized = TRUE;
+              i=1;
+              while(i<nTubes)
+              {
+                if(Tubeloop[i].state != TUBE_IDLE)
+                {
+                  Initialized = FALSE;
+                  break;
+                }
+                i++;
+              }
+              if (Initialized == TRUE)
+              {
+                gdi_send_msg_response("READY FOR OPERATION");
+              }
+            }        
         break;
         default:
           DEBUG_SEQ_PRINTF("Tube[%d]@%s TubeSeq[%s]State[%s] ***UNHANDLED STATE***", 
