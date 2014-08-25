@@ -47,6 +47,8 @@
 
 
 #define QUEUESIZE 10
+#define REV_2
+
 
 //#define DEBUG_CLOCK_MSO /*Set mux to output sysclk or other clocks on PA8*/
 //#define GDI_ON_USART3
@@ -75,7 +77,7 @@ extern xTaskHandle pvSWUpdateTask;
 
 /* ---------------------------------------------------------------------------*/
 
-xTimerHandle yTimer[3];
+xTimerHandle yTimer[4];
 uint32_t load=0xA5A5 ;
 
 extern gdi_init();
@@ -150,6 +152,14 @@ void HeartBeat_ErrorLed_Pinconfig()
   GPIO_Init(GPIOB, &GPIO_InitStructure);
   GPIO_ResetBits(GPIOB,GPIO_Pin_0);/*RX LED*/
   GPIO_ResetBits(GPIOB,GPIO_Pin_1);/*TX LED*/
+
+  #ifdef REV_2
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0;/*M0_RESET*/
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_Init(GPIOA, &GPIO_InitStructure);
+  GPIO_SetBits(GPIOA,GPIO_Pin_0);
+  #endif
 }
 
 
@@ -200,13 +210,24 @@ void HW_Init(void)
   GPIO_InitStructure.GPIO_Pin = GPIO_Pin_3;/*RX*/
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
   GPIO_Init(GPIOA, &GPIO_InitStructure);
-
+#ifndef REV_2
   GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0;/*CTS*/
-  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_OD;
   GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
   GPIO_Init(GPIOA, &GPIO_InitStructure);
   GPIO_ResetBits(GPIOA,GPIO_Pin_0);
-
+#else
+   /*Setup for USART3 - MONITOR SEQ*/
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10;
+  RCC->APB2ENR |= RCC_APB2ENR_AFIOEN | RCC_APB2Periph_GPIOC;
+  AFIO->MAPR |= AFIO_MAPR_USART3_REMAP_PARTIALREMAP;
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOC, ENABLE);
+  RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART3, ENABLE);
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10;/*TX*/
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_Init(GPIOC, &GPIO_InitStructure);
+#endif
   GPIO_InitStructure.GPIO_Pin = GPIO_Pin_1;/*RTS*/
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
   GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
@@ -290,6 +311,20 @@ void HW_Init(void)
 
 }
 
+
+void ResetHeaters()
+{
+  if( xTimerStart(yTimer[3], 0 ) != pdPASS );
+  GPIO_ResetBits(GPIOA,GPIO_Pin_0);
+}
+
+void vHeatersReset(xTimerHandle pxTimer )
+{
+  GPIO_SetBits(GPIOA,GPIO_Pin_0);
+  if( xTimerStop( yTimer[3], 0 ) != pdPASS );
+}
+
+
 void ErrorOn()
 {
   if( xTimerStart(yTimer[1], 0 ) != pdPASS );
@@ -330,6 +365,7 @@ void ConfigOSTimer ()
   int z = 100;
   int y = 2;
   int x= 5;
+  int r= 5; 
   int i = 0;
   yTimer[0]= xTimerCreate("HeartbeatTimer", // Just a text name, not used by the kernel.
               ( 100 * x ),   // The timer period in ticks.
@@ -348,6 +384,12 @@ void ConfigOSTimer ()
               pdTRUE,     // The timers will auto-reload themselves when they expire.
               ( void * ) 103,   // Assign each timer a unique id equal to its array index.
               vReadTubeTemp   // Each timer calls the same callback when it expires.
+              );
+  yTimer[3]= xTimerCreate("ResetHeaters",       // Just a text name, not used by the kernel.
+              ( 100 * r ),     // The timer period in ticks.
+              pdTRUE,     // The timers will auto-reload themselves when they expire.
+              ( void * ) 104,   // Assign each timer a unique id equal to its array index.
+              vHeatersReset   // Each timer calls the same callback when it expires.
               );
 
   for (i=0;i<1;i++)/*Only start Heartbeat timer, error timer will be started when needed to flash errorled*/
@@ -472,6 +514,11 @@ int main(void)
   PWM_Init(1500,1500);
 
   gdi_init(); /*Setup debug uart*/
+ // UART_Init(USART3,NULL);
+  //USART_SendData(USART3,'A');
+  
+  
+  UART_SendMsg(USART3, "Monitor Port UP\r\n" , 16);
 
 #ifdef GDI_ON_USART3
 //  UART_Init(USART3,recieveCMD);

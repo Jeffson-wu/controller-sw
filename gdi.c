@@ -47,8 +47,8 @@ int uid;
 char a = 0;
 char input_buffer[2][INPUT_BUF_SIZE];
 
-//static u8 gdiEcho = FALSE;
-static u8 gdiEcho = TRUE;
+static u8 gdiEcho = FALSE;
+//static u8 gdiEcho = TRUE;
 
 const char *  tube_st[] = {
 "Melting",
@@ -74,7 +74,7 @@ USART_TypeDef *uart = USART1;
 #endif
 u32 test_variable= 9876543;
 
-#if 1
+#if 0
 #define GDI_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_response(buf);
 #else
 #define GDI_PRINTF(fmt, args...)    /* Don't do anything in release builds */
@@ -103,6 +103,7 @@ enum gdi_func_type
 	coolandlid,
 	cool,
 	lid,
+	lidpwm,
 	fan,
 	seq,
 	seq_set,
@@ -142,6 +143,7 @@ gdi_func_table_type gdi_func_info_table[] =
   {"coolandlid", " Set temperatures and fan speed", "at@gdi:coolandlid(idx, setpoint)",coolandlid },
   {"cool", " Set cooling temperature", "at@gdi:cool(idx, setpoint)",cool },
   {"lid",   " Set lid temperature",    "at@gdi:lid(idx, setpoint)",lid },
+  {"lidpwm",   " Set lid pwm value",    "at@gdi:lid(idx, pwm)",lidpwm },
   {"fan",   " Set fan speed % ",       "at@gdi:fan(idx, setpoint)",fan },
   {"seq",   " Set tube seq temperatures and time", "at@gdi:seq(tube,[temp,time],..)",seq },
   {"seq_set", " Set tube seq: stage,temperatures,time", "at@gdi:seq_set(tube,pauseTemp,[stage,temp,time],..)",seq_set },
@@ -213,7 +215,7 @@ void gdi_send_response_seq(void)
 {
   char str[10];
   int i;
-  sprintf(str, "%d,", uid);
+  sprintf(str, "<%d>,", uid);
   
   for(i=0;i<strlen(str);i++)
   {
@@ -270,6 +272,33 @@ void gdi_send_msg_response(char * response)
 		USART_SendData(uart, *(message+i));
 //     	while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
 	}
+}
+
+
+void gdi_send_msg_on_monitor(char * response)
+{
+	char i=0;
+   int len = strlen(response)+5;
+	char message[strlen(response)+5];
+	strcpy(message, "\0");
+	strcat(message, response);
+	strcat(message, "\r\n");
+	for(i=0;i<strlen(message);i++)
+	{
+     	while(USART_GetFlagStatus(USART3, USART_FLAG_TXE)==RESET);
+//     	UART_SendMsg(uart, message , strlen(message));
+		USART_SendData(USART3, *(message+i));
+//     	while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
+	}
+
+
+  
+     while(i<len)
+     {
+       while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
+       USART_SendData(USART3,*(message+i));
+       i++;
+     }
 }
 
 
@@ -496,7 +525,7 @@ void gdi_map_to_functions()
 	u8 result, slave;
 	u16 addr, datasize;
 	u16 buffer[50];
-  char str[30];
+  char str[200];
   u16 seq_num,seq_id;
   				uint16_t temp; /*Settemp in 0.1 degrees*/
 				uint32_t time; /*time in secs*/
@@ -523,7 +552,8 @@ void gdi_map_to_functions()
 			break;
 
     case reset :
-      Reset_Handler();
+      ResetHeaters();
+      //Reset_Handler();
       break;
 
     case echo :
@@ -621,7 +651,7 @@ void gdi_map_to_functions()
   				fn_idx   = (u8)atoi(*(gdi_req_func_info.parameters + i));
           i++;
   				setpoint = (s16)atoi(*(gdi_req_func_info.parameters + i));
-          if((3>fn_idx) && (setpoint >= 0) && (setpoint <= 1300))
+          if((3>fn_idx) && (setpoint >= 0) && (setpoint <= 1200))
           {
             msg->ucMessageID = SET_LID_TEMP;
           } else {
@@ -636,6 +666,42 @@ void gdi_map_to_functions()
       }
 			if(result) { gdi_send_data_response("OK", newline_end); }
       break;
+
+    case lidpwm:
+      {
+        s16 pwm;
+        u8 fn_idx;
+        xMessage *msg;        
+        int result = TRUE;
+
+        if(!gdiEcho) {
+          uid = (u16) atoi(*(gdi_req_func_info.parameters + i));
+          i++;
+        }
+        SetCooleAndLidReq *p;
+        msg = pvPortMalloc(sizeof(xMessage)+sizeof(SetCooleAndLidReq)+20);
+        if(msg)
+        {
+
+  				fn_idx   = (u8)atoi(*(gdi_req_func_info.parameters + i));
+          i++;
+  				pwm = (s16)atoi(*(gdi_req_func_info.parameters + i));
+          if((3>fn_idx) && (pwm >= 0) && (pwm <= 65535))
+          {
+            msg->ucMessageID = SET_LID_PWM;
+          } else {
+            result = FALSE;
+            gdi_send_data_response("NOK invalid fn", newline_end);
+          }
+          p = (SetCooleAndLidReq *)msg->ucData;
+          p->value = pwm;
+          p->idx   = fn_idx;
+          xQueueSend(CoolAndLidQueueHandle, &msg, portMAX_DELAY);
+        }
+      }
+			if(result) { gdi_send_data_response("OK", newline_end); }
+      break;
+
 
     case fan:
       {
@@ -788,6 +854,7 @@ void gdi_map_to_functions()
               {
                 GDI_PRINTF("GET STATE on Tube:%d",TubeId);
                 gdi_send_data_response(get_tube_state(TubeId, str), newline_end);
+                
               }
             }
             else if(!strncmp((*(gdi_req_func_info.parameters + i + 1)),"start",strlen("start")))
@@ -849,9 +916,9 @@ void gdi_map_to_functions()
                 gdi_send_data_response("NOK No sequence", newline_end);
               }
             }
-           else if(!strncmp((*(gdi_req_func_info.parameters + i + 1)),"pausetube",strlen("pausetube")))
+           else if(!strncmp((*(gdi_req_func_info.parameters +gdi_req_func_info.number_of_parameters-1)),"tubepause",strlen("tubepause")))
             {
-              GDI_PRINTF("pausetube on Tube:%d",TubeId);
+              GDI_PRINTF("tubepause on Tube:%d",TubeId);
               if(pause_tube_state(TubeId))    /*Start the seq*/
               {
                 gdi_send_data_response("OK", newline_end);
@@ -875,19 +942,23 @@ void gdi_map_to_functions()
                  }
 
             }
-           else if(!strncmp((*(gdi_req_func_info.parameters + i + 5)),"tubestage",strlen("tubestage")))
+           else if(!strncmp((*(gdi_req_func_info.parameters + gdi_req_func_info.number_of_parameters-1)),"tubestage",strlen("tubestage")))
             {
             // GDI_PRINTF("tubestage[%s-%s-%s-%s-%s-%s]#%d",(*(gdi_req_func_info.parameters + 0)),(*(gdi_req_func_info.parameters + 1)),(*(gdi_req_func_info.parameters + 2)),(*(gdi_req_func_info.parameters + 3)),(*(gdi_req_func_info.parameters + 4)),(*(gdi_req_func_info.parameters + 5)),(*(gdi_req_func_info.number_of_parameters)));
 
 
-
+i=i-1;
                         nParams = (gdi_req_func_info.number_of_parameters);
+                        i=i+1;
                         seq_num = (u16) atoi(*(gdi_req_func_info.parameters + i + 1));
                         data.temp = (u16) atoi(*(gdi_req_func_info.parameters + 2 + i));
                         data.time = (u32) atoi(*(gdi_req_func_info.parameters + 3 + i));
                         state =  (**(gdi_req_func_info.parameters + 4 + i));
                   //      GDI_PRINTF("%c-%c",(*(gdi_req_func_info.parameters + 4 + i),state));
-               //  GDI_PRINTF("Tube:%d:TEMP %d.%02dC @ TIME %d.%02dsecs STATE:%d SEQ_ID:%d",TubeId,data.temp/10,data.temp%10,data.time/10,data.time%10,data.stage,seq_num);
+//                 GDI_PRINTF("Tube:%d:TEMP %d.%02dC @ TIME %d.%02dsecs STATE:%d SEQ_ID:%d",TubeId,data.temp/10,data.temp%10,data.time/10,data.time%10,data.stage,seq_num);
+                  sprintf(buf, "Tube:%d:TEMP %d.%02dC @ TIME %d.%02dsecs STATE:%d SEQ_ID:%d",TubeId,data.temp/10,data.temp%10,data.time/10,data.time%10,data.stage,seq_num); 
+                  gdi_send_msg_on_monitor(buf);
+
                #if 1   
               
                  if(tubedataQueueAdd(TubeId,seq_num,state, &data)== TRUE) //Insert next state into sequence
@@ -896,12 +967,24 @@ void gdi_map_to_functions()
                  }
                  else
                  {
-                  gdi_send_data_response("NOK No sequence", newline_end);
+                  gdi_send_data_response("NOK Queue full", newline_end);
                  }
               #endif   
             }else
               {
-                gdi_send_data_response("SEQ_CMD not found", newline_end);
+                gdi_send_data_response("NOK SEQ_CMD not found", newline_end);
+                i = 0;
+                char temp[10];
+                sprintf(buf, "CMD NOT FOUND-%d ",gdi_req_func_info.number_of_parameters );
+
+                while(gdi_req_func_info.number_of_parameters > i)
+                  {
+                sprintf(temp, "%s-",*(gdi_req_func_info.parameters + i));
+                strcat(buf,temp);
+                i++;
+                }
+                gdi_send_msg_on_monitor(buf);
+
               }
             #endif
            
@@ -1235,13 +1318,14 @@ extern void* xStart;
 void gdi_init()
 {
   UART_Init(uart, recieveCMD);
+  UART_Init(USART3,recieveCMD); /*Only for monitoring no RX*/
 
 }
 void gdi_task(void *pvParameters)
 {
    GDI_RXSemaphore = xSemaphoreCreateMutex();
    xSemaphoreTake( GDI_RXSemaphore, portMAX_DELAY );
-  
+  gdi_send_msg_response("HEATER CONTROLLER BOOTING ...");
 
   while(1)
   {

@@ -23,7 +23,7 @@
 
 /* Exported types ------------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
-
+#define REV_2
 #define SCALE_CONTROLLER (1L<<16)
 
 /* BSC Burnout current, 0 = off */
@@ -57,11 +57,19 @@
 #define ADS_CALIB_SELFOCAL 2
 
 #define ADS_START_PIN GPIO_Pin_2 //PC2
+#ifdef REV_2
+#define ADS_RESET_PIN GPIO_Pin_10 //PB10
+#define ADS_DRDY_PIN GPIO_Pin_1 //PC1
+#define ADS_EXTI_LINE EXTI_Line1
+#define ADS_DRDY_PINSOURCE GPIO_PinSource1
+#define ADS_EXTI_PORTSOURCE GPIO_PortSourceGPIOC
+#else
 #define ADS_RESET_PIN GPIO_Pin_1 //PC1
 #define ADS_DRDY_PIN GPIO_Pin_10 //PB10
 #define ADS_EXTI_LINE EXTI_Line10
 #define ADS_DRDY_PINSOURCE GPIO_PinSource10
 #define ADS_EXTI_PORTSOURCE GPIO_PortSourceGPIOB
+#endif
 
 #define ADS_MISO_PIN GPIO_Pin_6
 #define ADS_MOSI_PIN GPIO_Pin_7
