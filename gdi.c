@@ -48,7 +48,7 @@ char a = 0;
 char input_buffer[2][INPUT_BUF_SIZE];
 
 static u8 gdiEcho = FALSE;
-//static u8 gdiEcho = TRUE;
+// static u8 gdiEcho = TRUE;
 
 const char *  tube_st[] = {
 "Melting",
@@ -947,16 +947,16 @@ void gdi_map_to_functions()
             // GDI_PRINTF("tubestage[%s-%s-%s-%s-%s-%s]#%d",(*(gdi_req_func_info.parameters + 0)),(*(gdi_req_func_info.parameters + 1)),(*(gdi_req_func_info.parameters + 2)),(*(gdi_req_func_info.parameters + 3)),(*(gdi_req_func_info.parameters + 4)),(*(gdi_req_func_info.parameters + 5)),(*(gdi_req_func_info.number_of_parameters)));
 
 
-i=i-1;
+                         // i=i-1;
                         nParams = (gdi_req_func_info.number_of_parameters);
-                        i=i+1;
+                       // i=i+1;
                         seq_num = (u16) atoi(*(gdi_req_func_info.parameters + i + 1));
                         data.temp = (u16) atoi(*(gdi_req_func_info.parameters + 2 + i));
                         data.time = (u32) atoi(*(gdi_req_func_info.parameters + 3 + i));
                         state =  (**(gdi_req_func_info.parameters + 4 + i));
                   //      GDI_PRINTF("%c-%c",(*(gdi_req_func_info.parameters + 4 + i),state));
 //                 GDI_PRINTF("Tube:%d:TEMP %d.%02dC @ TIME %d.%02dsecs STATE:%d SEQ_ID:%d",TubeId,data.temp/10,data.temp%10,data.time/10,data.time%10,data.stage,seq_num);
-                  sprintf(buf, "Tube:%d:TEMP %d.%02dC @ TIME %d.%02dsecs STATE:%d SEQ_ID:%d",TubeId,data.temp/10,data.temp%10,data.time/10,data.time%10,data.stage,seq_num); 
+                  sprintf(buf, "Tube:%d:TEMP %d.%02dC @ TIME %d.%02dsecs STATE:%c SEQ_ID:%d",TubeId,data.temp/10,data.temp%10,data.time/10,data.time%10,data.stage,seq_num); 
                   gdi_send_msg_on_monitor(buf);
 
                #if 1   

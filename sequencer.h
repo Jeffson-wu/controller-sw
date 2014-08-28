@@ -33,6 +33,7 @@ typedef enum
 
 typedef struct
 {
+  u16 seq_num;
   uint16_t temp;      /*Settemp in 0.1 degrees*/
   Tubestage_t stage;  /*Current stage:[M]elting(1), [A]nnealing(2), [E]xtension(3) or [I]ncubation(4) #### [P]aused #### */
   uint32_t time;      /*time in 0.1 secs*/

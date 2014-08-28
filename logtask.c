@@ -38,15 +38,21 @@ extern xQueueHandle ModbusQueueHandle;
 extern xTimerHandle yTimer[];
 xQueueHandle LogQueueHandle;
 
+
+
 /* Private define ------------------------------------------------------------*/
 #define NUM_OF_TUBES 16+1
 #define LOG_QUEUE_SIZE 4
 #define LOG_ELEMENT_SIZE 10
+typedef struct ldata {
+  u16 stage_num;
+  u16 temp;
+}ldata_t;
 
 /* Private typedef -----------------------------------------------------------*/
 typedef struct LOG_DATA_ELEMENT {
   u16 seqNum;
-  u16 data[LOG_ELEMENT_SIZE];
+  ldata_t ldata[LOG_ELEMENT_SIZE];
 } logDataElement_t;
 
 typedef struct LOG_DATA_QUEUE {
@@ -57,9 +63,9 @@ typedef struct LOG_DATA_QUEUE {
 } logDataQueue_t;
 
 /* Private macro -------------------------------------------------------------*/
-//#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
+#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
 #ifdef DEBUG
-#define DEBUG_LOG_PRINTF(fmt, args...)      sprintf(message, fmt, ## args);  gdi_send_msg_response(message);
+#define DEBUG_LOG_PRINTF(fmt, args...)      sprintf(message, fmt, ## args);  gdi_send_msg_on_monitor(message);
 #else
 #define DEBUG_LOG_PRINTF(fmt, args...)    /* Don't do anything in release builds */
 #endif
@@ -69,6 +75,8 @@ bool log_tubes[NUM_OF_TUBES]={FALSE};
 static logDataQueue_t __attribute__ ((aligned (16))) logDataQueue[NUM_OF_TUBES]; // #### Aligned for debug
 
 static char message[40];   /*buffer for printf*/
+int logcount[NUM_OF_TUBES]={0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+
 
 /* Private function prototypes -----------------------------------------------*/
 void SERIAL_String(const char *string);
@@ -136,16 +144,19 @@ int dataQueueAdd(u8 tubeId, u16 seqNumber, u8 data[])
   if(NULL != (poutData = enqueue(&logDataQueue[tubeId-1]))) //tubeId=[1..16],idx=[0..15]
   {
     poutData->seqNum = seqNumber;
-    for(i=0; i<LOG_ELEMENT_SIZE; i++)
+    for(i=0; i<LOG_ELEMENT_SIZE*2; i=+2)
     {
-      poutData->data[i] = (((u16)(data[i*2])<<8)|(data[i*2+1]));
+      poutData->ldata[i].stage_num = (((u16)(data[i*2])<<8)|(data[i*2+1]));
+      poutData->ldata[i].temp = (((u16)(data[i*2+2])<<8)|(data[i*2+3]));
+      DEBUG_LOG_PRINTF("dataQueueAdd Tube(%d)-seq[%d][%d]", tubeId,poutData->ldata[i].stage_num,poutData->ldata[i].temp);
     }
   }
   taskEXIT_CRITICAL();
 }
-char * getLog(int tubeId, char *poutText)
+int getLog(char *poutText,int tubeId )
 {
   int i = 0;
+  int nElements = 0;
   logDataElement_t * pinData;
   char str[20];
 
@@ -155,11 +166,20 @@ char * getLog(int tubeId, char *poutText)
     while(NULL != (pinData = dequeue(&logDataQueue[tubeId-1])) ) //idx=[0..15]
     {
       //? = pinData->seqNum;  Handle Seq# ?? Ignored for now
-       sprintf(str,"%03X,",pinData->seqNum); // 3 digits allows for temperatures up to 409,5 degrees
-       strcat(poutText,str);
+      if(nElements == 0)
+        {
+         strncat(poutText,";log={",strlen(";log={"));
+         sprintf(str,"%d,",logcount[tubeId]); /*total number of log elements*/
+         strncat(poutText,str,strlen(str));
+        }
+    //   sprintf(str,"%03D,",pinData->seqNum); // 3 digits allows for temperatures up to 409,5 degrees
+    //   strcat(poutText,str);
+#if 1       
       for(i=0; i<LOG_ELEMENT_SIZE; i++)
       {
-        sprintf(str,"%03X",pinData->data[i]); // 3 digits allows for temperatures up to 409,5 degrees
+        sprintf(str,"%d,",pinData->ldata[i].stage_num); // 3 digits allows for temperatures up to 409,5 degrees
+        strcat(poutText,str);
+        sprintf(str,"%d",pinData->ldata[i].temp); // 3 digits allows for temperatures up to 409,5 degrees
         strcat(poutText,str);
         if(LOG_ELEMENT_SIZE - 1 > i)
         { 
@@ -167,9 +187,18 @@ char * getLog(int tubeId, char *poutText)
           strcat(poutText,str); 
         }
       }
+       sprintf(str,",");
+          strcat(poutText,str); 
+          #endif
       //strcat(poutText,str);
+      nElements+=LOG_ELEMENT_SIZE;
     }
+    poutText[strlen(poutText)-1]=0;
     taskEXIT_CRITICAL();
+    sprintf(str,"}");
+    strcat(poutText,str); 
+    logcount[tubeId]=logcount[tubeId]+nElements; 
+    return nElements;
  }
 
 /* ---------------------------------------------------------------------------*/
@@ -200,7 +229,7 @@ void sendLog()
        sprintf(str,"%03X,",pinData->seqNum); // 3 digits allows for temperatures up to 409,5 degrees
       for(i=0; i<LOG_ELEMENT_SIZE; i++)
       {
-        sprintf(str,"%03X",pinData->data[i]); // 3 digits allows for temperatures up to 409,5 degrees
+        sprintf(str,"%03X",pinData->ldata[i].temp); // 3 digits allows for temperatures up to 409,5 degrees
         SERIAL_String(str);
         if(LOG_ELEMENT_SIZE - 1 > i)
         { 
@@ -265,7 +294,7 @@ void LogTask( void * pvParameters )
 #ifdef GDI_ON_USART3
   USART_TypeDef *uart = USART3;
 #else
-  USART_TypeDef *uart = USART1;
+  USART_TypeDef *uart = USART3;
 #endif
 
   initQueue();
@@ -305,7 +334,7 @@ void LogTask( void * pvParameters )
         TubeId = preg->slave;
         modbus_addr = preg->addr;
         if(preg->resultOk == NO_ERROR) {
-          if( (TUBE1_TEMP_REG == modbus_addr) || (TUBE2_TEMP_REG == modbus_addr) )
+          if( (TUBE1_TEMP_REG == modbus_addr) || (TUBE2_TEMP_REG == modbus_addr)||(TUBE3_TEMP_REG == modbus_addr) || (TUBE4_TEMP_REG == modbus_addr) )
           {
             modbus_data =(((u16)(preg->data[0])<<8)|(preg->data[1]));
             sprintf(message,"T%d:%d.%01dC ",TubeId,modbus_data/10,modbus_data%10); //####sprintf(message,"T%d:%d.%01dC ",TubeId,dac_2_temp(modbus_data)/10,dac_2_temp(modbus_data)%10);
@@ -330,7 +359,7 @@ void LogTask( void * pvParameters )
           //  DATALOG_T2_end = DATA_LOG_T2 + DATA_LOG_SIZE + 1,
           // Data log is {{seq#Tube1,t1.1,t1.2,t1.3,t1.4,t1.5,t1.6,t1.7,t1.8,t1.9,t1.10},
           //              {seq#Tube2,t2.1,t2.2,t2.3,t2.4,t2.5,t2.6,t2.7,t2.8,t2.9,t2.10}}
-          else if((modbus_addr == DATA_LOG_T1) || (modbus_addr == DATA_LOG_T2))
+          else if((modbus_addr == DATA_LOG_T1) || (modbus_addr == DATA_LOG_T2) ||(modbus_addr == DATA_LOG_T3) || (modbus_addr == DATA_LOG_T4))
           { // Auto Logging
             if( (modbus_addr == DATA_LOG_T1) && (DATA_LOG_SIZE*2 + 2 == preg->datasize) )
             { // Logs for tube 1 and tube 2 from that M0
@@ -343,16 +372,30 @@ void LogTask( void * pvParameters )
 
             if( (modbus_addr == DATA_LOG_T1) && (DATA_LOG_SIZE+1) == preg->datasize)
             { // Logs for tube 1 only from that M0
-              DEBUG_LOG_PRINTF("Enqueue T1 (%d)", TubeId);
               modbus_data =(((u16)(preg->data[0])<<8)|(preg->data[1])); //Seq num
+              DEBUG_LOG_PRINTF("Enqueue T1 (%d)-[%d]", TubeId,modbus_data);
               dataQueueAdd(TubeId, modbus_data, &preg->data[2] );       //data after seq num
             }
 
             if( (modbus_addr == DATA_LOG_T2) && (DATA_LOG_SIZE+1) == preg->datasize)
             { // Logs for tube 2 only from that M0
               DEBUG_LOG_PRINTF("Enqueue T2 (%d)", TubeId + 1);
-              modbus_data =(((u16)(preg->data[0])<<8)|(preg->data[1])); //Seq num
+              modbus_data =(((u16)(preg->data[2])<<8)|(preg->data[1])); //Seq num
               dataQueueAdd(TubeId + 1, modbus_data, &preg->data[2] );   //data after seq num
+            }
+
+             if( (modbus_addr == DATA_LOG_T3) && (DATA_LOG_SIZE+1) == preg->datasize)
+            { // Logs for tube 2 only from that M0
+              DEBUG_LOG_PRINTF("Enqueue T3 (%d)", TubeId + 2);
+              modbus_data =(((u16)(preg->data[0])<<8)|(preg->data[1])); //Seq num
+              dataQueueAdd(TubeId + 2, modbus_data, &preg->data[2] );   //data after seq num
+            }
+
+              if( (modbus_addr == DATA_LOG_T4) && (DATA_LOG_SIZE+1) == preg->datasize)
+            { // Logs for tube 2 only from that M0
+              DEBUG_LOG_PRINTF("Enqueue T4 (%d)", TubeId + 3);
+              modbus_data =(((u16)(preg->data[0])<<8)|(preg->data[1])); //Seq num
+              dataQueueAdd(TubeId + 3, modbus_data, &preg->data[2] );   //data after seq num
             }
           }
           else
