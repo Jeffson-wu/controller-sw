@@ -33,21 +33,21 @@ extern xQueueHandle CoolAndLidQueueHandle;
 #define REV_2
 
 
-#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
+//#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
 #ifdef DEBUG
 #define DEBUG_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
 #else
 #define DEBUG_PRINTF(fmt, args...)    /* Don't do anything in release builds */
 #endif
 
-#define DEBUG_SEQ /*Debug of sequencer, to follow state of sequencer*/
+//#define DEBUG_SEQ /*Debug of sequencer, to follow state of sequencer*/
 #ifdef DEBUG_SEQ
 #define DEBUG_SEQ_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
 #else
 #define DEBUG_SEQ_PRINTF(fmt, args...)    /* Don't do anything in release builds */
 #endif
 
-#define DEBUG_IF /*Debug of external interfaces modbus, IRQ and serial */
+//#define DEBUG_IF /*Debug of external interfaces modbus, IRQ and serial */
 #ifdef DEBUG_IF
 #define DEBUG_IF_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
 #else
@@ -283,14 +283,10 @@ const char *  stageToChar[] = {"Melting","Anealing","Extention","Incubation","Pa
 /* For debug to */
 const char *  heater[] = {
 /*ADS_DRDY,*/
-"Heater4-Tube[7-8]",
-"Heater1-Tube[1-2]",
-"Heater2-Tube[3-4]",
-"Heater3-Tube[5-6]",
-"Heater6-Tube[11-12]",
-"Heater5-Tube[9-10]",
-"Heater7-Tube[13-14]",
-"Heater8-Tube[15-16]",
+"M0.1-Tube[1-4]",
+"M0.2-Tube[5-8]",
+"M0.3-Tube[9-12]",
+"M0.4-Tube[13-16]",
 "nExtiGpio"
 };
 #endif
@@ -1442,25 +1438,25 @@ void HeaterEventHandler (ReadModbusRegsRes *preg, xMessage *msg)
         ((modbus_data[0] & TUBE3_LOGGING_READY) ? "LogT3 "    : " "),
         ((modbus_data[0] & TUBE4_LOGGING_READY) ? "LogT4 "    : " "));
 #endif
-
+  event = 0;
   event |= (modbus_data[0] & SEQUENCE_EVENT_TUBE1) ? SEQUENCE_EVENT : 0; 
   event |= (modbus_data[0] & INIT_HW_ERROR_TUBE1)  ? INIT_HW_ERROR  : 0; 
   event |= (modbus_data[0] & TUBE1_NOT_PRESENT)    ? NOT_PRESENT    : 0; 
   event |= (modbus_data[0] & TUBE1_LOGGING_READY)  ? LOGGING_READY  : 0; 
   if(event) TubeEventHandler (TubeId, event, msg);
-
+  event = 0;
   event |= (modbus_data[0] & SEQUENCE_EVENT_TUBE2) ? SEQUENCE_EVENT : 0; 
   event |= (modbus_data[0] & INIT_HW_ERROR_TUBE2)  ? INIT_HW_ERROR  : 0; 
   event |= (modbus_data[0] & TUBE2_NOT_PRESENT)    ? NOT_PRESENT    : 0; 
   event |= (modbus_data[0] & TUBE2_LOGGING_READY)  ? LOGGING_READY  : 0; 
   if(event) TubeEventHandler (TubeId + 1, event, msg);
-
+  event = 0;
   event |= (modbus_data[0] & SEQUENCE_EVENT_TUBE3) ? SEQUENCE_EVENT : 0; 
   event |= (modbus_data[0] & INIT_HW_ERROR_TUBE3)  ? INIT_HW_ERROR  : 0; 
   event |= (modbus_data[0] & TUBE3_NOT_PRESENT)    ? NOT_PRESENT    : 0; 
   event |= (modbus_data[0] & TUBE3_LOGGING_READY)  ? LOGGING_READY  : 0; 
   if(event) TubeEventHandler (TubeId + 2, event, msg);
-
+  event = 0;
   event |= (modbus_data[0] & SEQUENCE_EVENT_TUBE4) ? SEQUENCE_EVENT : 0; 
   event |= (modbus_data[0] & INIT_HW_ERROR_TUBE4)  ? INIT_HW_ERROR  : 0; 
   event |= (modbus_data[0] & TUBE4_NOT_PRESENT)    ? NOT_PRESENT    : 0; 
@@ -1663,8 +1659,9 @@ void TubeSequencerTask( void * pvParameter)
 
   InitTubeTimers();
   vTaskDelay(1000);/*Wait for heaters to boot*/
- 
-
+#ifdef SIMULATE_HEATER 
+  gdi_send_msg_on_monitor("System is using SIMULATE_HEATER!!");
+#endif
   while(1)
   {
   	/*wait for queue msg*/

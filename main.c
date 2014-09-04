@@ -51,8 +51,6 @@
 
 
 //#define DEBUG_CLOCK_MSO /*Set mux to output sysclk or other clocks on PA8*/
-//#define GDI_ON_USART3
-//also in gdi.c
 
 /* ---------------------------------------------------------------------------*/
 /* Task Message Queues -------------------------------------------------------*/
@@ -238,20 +236,6 @@ void HW_Init(void)
   /* Enable the GPIO_LED Clock */
   HeartBeat_ErrorLed_Pinconfig();
 
-#ifdef GDI_ON_USART3
-  /* Configure USART3 for GDI (debug) interface */
-  RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
-  RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART3, ENABLE);
-
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10;
-  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
-  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-  GPIO_Init(GPIOB, &GPIO_InitStructure);
-
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_11;
-  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
-  GPIO_Init(GPIOB, &GPIO_InitStructure);
-#else
   /* Configure USART1 for GDI (debug) interface */
   RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA, ENABLE);
   RCC_APB2PeriphClockCmd(RCC_APB2Periph_USART1, ENABLE);
@@ -275,7 +259,6 @@ void HW_Init(void)
   GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
   GPIO_Init(GPIOA, &GPIO_InitStructure);
   GPIO_ResetBits(GPIOA,GPIO_Pin_12);
-#endif
 
   /* Configure pin for lid lock ctrl.(PA8), M0 reset (PA15) */
   GPIO_InitStructure.GPIO_Pin = GPIO_Pin_8 | GPIO_Pin_15;
@@ -520,11 +503,7 @@ int main(void)
   
   UART_SendMsg(USART3, "Monitor Port UP\r\n" , 16);
 
-#ifdef GDI_ON_USART3
-//  UART_Init(USART3,recieveCMD);
-#else
 //  UART_Init(USART1,recieveCMD);
-#endif
   init_os_trace(); /*GDB CMD:dump binary memory gdb_dump_23.txt 0x20000000 0x20010000  -- http://percepio.com/*/
   Modbus_init(USART2);
   PWM_Set(0,TopHeaterCtrlPWM);
@@ -552,9 +531,7 @@ int main(void)
   result=xTaskCreate( ModbusTask, ( const signed char * ) "Modbus task", ( unsigned short ) 400, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &modbusCreatedTask );
   result=xTaskCreate( LogTask, ( const signed char * ) "Log task", ( unsigned short ) 300, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvLogTask );
   result=xTaskCreate( gdi_task, ( const signed char * ) "Debug task", ( unsigned short ) 400, NULL, ( ( unsigned portBASE_TYPE ) 1 ) | portPRIVILEGE_BIT, &gdiCreatedTask );
-#ifndef GDI_ON_USART3
   result=xTaskCreate( CooleAndLidTask, (const signed char *) "CooleAndLid task", 300, NULL, ( (unsigned portBASE_TYPE) 4 ) | portPRIVILEGE_BIT, &pvCooleAndLidTask );
-#endif
   result=xTaskCreate( TubeSequencerTask, ( const signed char * ) "TubeSeq task", ( unsigned short ) 1000, NULL, ( ( unsigned portBASE_TYPE ) 4 ) | portPRIVILEGE_BIT, &pvTubeSequencerTaskTask );
 
 #if 1

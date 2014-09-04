@@ -32,9 +32,6 @@
 
 #define MAIN_IF_REV2
 
-//#define GDI_ON_USART3
-//also in main.c
-
 /* '\n'=0x0D=13, '\r'=0x0A=10 */
 #define CHAR_ENTER '\r'
 #define CHAR_BACKSPACE '\b'
@@ -67,15 +64,11 @@ extern xQueueHandle ModbusQueueHandle;
 extern xQueueHandle CoolAndLidQueueHandle;
 extern xQueueHandle SwuQueueHandle;
 
-#ifdef GDI_ON_USART3
-USART_TypeDef *uart = USART3;
-#else
 USART_TypeDef *uart = USART1;
-#endif
 u32 test_variable= 9876543;
 
-#if 0
-#define GDI_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_response(buf);
+#if 1
+#define GDI_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
 #else
 #define GDI_PRINTF(fmt, args...)    /* Don't do anything in release builds */
 #endif
@@ -285,20 +278,21 @@ void gdi_send_msg_on_monitor(char * response)
 	strcat(message, "\r\n");
 	for(i=0;i<strlen(message);i++)
 	{
-     	while(USART_GetFlagStatus(USART3, USART_FLAG_TXE)==RESET);
-//     	UART_SendMsg(uart, message , strlen(message));
+    while(USART_GetFlagStatus(USART3, USART_FLAG_TXE)==RESET);
+    //UART_SendMsg(uart, message , strlen(message));
 		USART_SendData(USART3, *(message+i));
-//     	while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
+    //while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
 	}
-
-
-  
-     while(i<len)
-     {
-       while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
-       USART_SendData(USART3,*(message+i));
-       i++;
-     }
+  while(i<len)
+  {
+    while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
+    USART_SendData(USART3,*(message+i));
+    i++;
+  }
+  while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
+  USART_SendData(USART3,'\r');
+  while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
+  USART_SendData(USART3,'\n');
 }
 
 
@@ -813,8 +807,6 @@ void gdi_map_to_functions()
         int i = 0;
         
        // gdi_send_data_response("SEQ_CMD", newline_end);
-        
-        
      //   GDI_PRINTF("DATA:%s - %s",(*(gdi_req_func_info.parameters + 0)),(*(gdi_req_func_info.parameters + 1)));
         if(!gdiEcho) {
           uid = (u16) atoi(*(gdi_req_func_info.parameters + i));
@@ -843,10 +835,10 @@ void gdi_map_to_functions()
           TubeId = (u16) atoi(*(gdi_req_func_info.parameters + i));
           if((TubeId < 17)||(TubeId > 0))
           {
-            //GDI_PRINTF("SEQ CMD[%s][%d]",(*(gdi_req_func_info.parameters + 1)),strlen((*(gdi_req_func_info.parameters + 1))));
+            GDI_PRINTF("SEQ CMD[%s][%d]",(*(gdi_req_func_info.parameters + 1)),strlen((*(gdi_req_func_info.parameters + 1))));
             if(!strncmp((*(gdi_req_func_info.parameters + i + 1)),"status",strlen("status")))
             {
-            if(0 == TubeId) 
+              if(0 == TubeId) 
               {
                 gdi_send_data_response(get_system_state(str), newline_end);
               }
@@ -854,7 +846,6 @@ void gdi_map_to_functions()
               {
                 GDI_PRINTF("GET STATE on Tube:%d",TubeId);
                 gdi_send_data_response(get_tube_state(TubeId, str), newline_end);
-                
               }
             }
             else if(!strncmp((*(gdi_req_func_info.parameters + i + 1)),"start",strlen("start")))
@@ -892,7 +883,7 @@ void gdi_map_to_functions()
               gdi_send_data_response("OK", newline_end);
             }
 #ifdef MAIN_IF_REV2            
-           else if(!strncmp((*(gdi_req_func_info.parameters + i + 1)),"tubestart",strlen("tubestart")))
+            else if(!strncmp((*(gdi_req_func_info.parameters + i + 1)),"tubestart",strlen("tubestart")))
             {
               GDI_PRINTF("tubestart on Tube:%d",TubeId);
               if(start_tube_seq(TubeId))    /*Start the seq*/
@@ -904,7 +895,7 @@ void gdi_map_to_functions()
                 gdi_send_data_response("NOK No sequence", newline_end);
               }
             }
-           else if(!strncmp((*(gdi_req_func_info.parameters + i + 1)),"tubestop",strlen("tubestop")))
+            else if(!strncmp((*(gdi_req_func_info.parameters + i + 1)),"tubestop",strlen("tubestop")))
             {
               GDI_PRINTF("tubestop on Tube:%d",TubeId);
               if(stop_tube_seq(TubeId))    /*Start the seq*/
@@ -916,7 +907,7 @@ void gdi_map_to_functions()
                 gdi_send_data_response("NOK No sequence", newline_end);
               }
             }
-           else if(!strncmp((*(gdi_req_func_info.parameters +gdi_req_func_info.number_of_parameters-1)),"tubepause",strlen("tubepause")))
+            else if(!strncmp((*(gdi_req_func_info.parameters +gdi_req_func_info.number_of_parameters-1)),"tubepause",strlen("tubepause")))
             {
               GDI_PRINTF("tubepause on Tube:%d",TubeId);
               if(pause_tube_state(TubeId))    /*Start the seq*/
@@ -928,7 +919,7 @@ void gdi_map_to_functions()
                 gdi_send_data_response("NOK No sequence", newline_end);
               }
             }
-           else if(!strncmp((*(gdi_req_func_info.parameters + i + 1)),"tubestatus",strlen("tubestatus")))
+            else if(!strncmp((*(gdi_req_func_info.parameters + i + 1)),"tubestatus",strlen("tubestatus")))
             {
               GDI_PRINTF("tubestatus on Tube:%d",TubeId);
               if(0 == TubeId) 
@@ -942,25 +933,21 @@ void gdi_map_to_functions()
                  }
 
             }
-           else if(!strncmp((*(gdi_req_func_info.parameters + gdi_req_func_info.number_of_parameters-1)),"tubestage",strlen("tubestage")))
+            else if(!strncmp((*(gdi_req_func_info.parameters + gdi_req_func_info.number_of_parameters-1)),"tubestage",strlen("tubestage")))
             {
             // GDI_PRINTF("tubestage[%s-%s-%s-%s-%s-%s]#%d",(*(gdi_req_func_info.parameters + 0)),(*(gdi_req_func_info.parameters + 1)),(*(gdi_req_func_info.parameters + 2)),(*(gdi_req_func_info.parameters + 3)),(*(gdi_req_func_info.parameters + 4)),(*(gdi_req_func_info.parameters + 5)),(*(gdi_req_func_info.number_of_parameters)));
-
-
-                         // i=i-1;
-                        nParams = (gdi_req_func_info.number_of_parameters);
-                       // i=i+1;
-                        seq_num = (u16) atoi(*(gdi_req_func_info.parameters + i + 1));
-                        data.temp = (u16) atoi(*(gdi_req_func_info.parameters + 2 + i));
-                        data.time = (u32) atoi(*(gdi_req_func_info.parameters + 3 + i));
-                        state =  (**(gdi_req_func_info.parameters + 4 + i));
-                  //      GDI_PRINTF("%c-%c",(*(gdi_req_func_info.parameters + 4 + i),state));
-//                 GDI_PRINTF("Tube:%d:TEMP %d.%02dC @ TIME %d.%02dsecs STATE:%d SEQ_ID:%d",TubeId,data.temp/10,data.temp%10,data.time/10,data.time%10,data.stage,seq_num);
-                  sprintf(buf, "Tube:%d:TEMP %d.%02dC @ TIME %d.%02dsecs STATE:%c SEQ_ID:%d",TubeId,data.temp/10,data.temp%10,data.time/10,data.time%10,data.stage,seq_num); 
-                  gdi_send_msg_on_monitor(buf);
-
-               #if 1   
-              
+            // i=i-1;
+               nParams = (gdi_req_func_info.number_of_parameters);
+            // i=i+1;
+               seq_num = (u16) atoi(*(gdi_req_func_info.parameters + i + 1));
+               data.temp = (u16) atoi(*(gdi_req_func_info.parameters + 2 + i));
+               data.time = (u32) atoi(*(gdi_req_func_info.parameters + 3 + i));
+               state =  (**(gdi_req_func_info.parameters + 4 + i));
+            // GDI_PRINTF("%c-%c",(*(gdi_req_func_info.parameters + 4 + i),state));
+            // GDI_PRINTF("Tube:%d:TEMP %d.%02dC @ TIME %d.%02dsecs STATE:%d SEQ_ID:%d",TubeId,data.temp/10,data.temp%10,data.time/10,data.time%10,data.stage,seq_num);
+               sprintf(buf, "Tube:%d:TEMP %d.%02dC @ TIME %d.%02dsecs STATE:%c SEQ_ID:%d",TubeId,data.temp/10,data.temp%10,data.time/10,data.time%10,data.stage,seq_num); 
+               gdi_send_msg_on_monitor(buf);
+        #if 1
                  if(tubedataQueueAdd(TubeId,seq_num,state, &data)== TRUE) //Insert next state into sequence
                  {
                   gdi_send_data_response("OK", newline_end);
@@ -969,7 +956,7 @@ void gdi_map_to_functions()
                  {
                   gdi_send_data_response("NOK Queue full", newline_end);
                  }
-              #endif   
+        #endif   
             }else
               {
                 gdi_send_data_response("NOK SEQ_CMD not found", newline_end);
@@ -1299,7 +1286,6 @@ extern void* xStart;
   if (gdi_req_func_info.parameters)
   {
  //   GDI_PRINTF("GDI deinit params:%x",gdi_req_func_info.number_of_parameters);
-
     int i;
     for (i = 0; *(gdi_req_func_info.parameters + i); i++)
     {
@@ -1310,7 +1296,6 @@ extern void* xStart;
    //   GDI_PRINTF("%d",i);
     }
    // GDI_PRINTF("free struct %x",gdi_req_func_info.parameters);
-
     vPortFree(gdi_req_func_info.parameters);
 
   }
