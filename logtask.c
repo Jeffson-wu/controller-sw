@@ -63,7 +63,7 @@ typedef struct LOG_DATA_QUEUE {
 } logDataQueue_t;
 
 /* Private macro -------------------------------------------------------------*/
-//#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
+#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
 #ifdef DEBUG
 #define DEBUG_LOG_PRINTF(fmt, args...)      sprintf(message, fmt, ## args);  gdi_send_msg_on_monitor(message);
 #else

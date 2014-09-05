@@ -33,14 +33,14 @@ extern xQueueHandle CoolAndLidQueueHandle;
 #define REV_2
 
 
-//#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
+#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
 #ifdef DEBUG
 #define DEBUG_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
 #else
 #define DEBUG_PRINTF(fmt, args...)    /* Don't do anything in release builds */
 #endif
 
-//#define DEBUG_SEQ /*Debug of sequencer, to follow state of sequencer*/
+#define DEBUG_SEQ /*Debug of sequencer, to follow state of sequencer*/
 #ifdef DEBUG_SEQ
 #define DEBUG_SEQ_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
 #else
