@@ -163,35 +163,6 @@ void HeartBeat_ErrorLed_Pinconfig()
 
 void HW_Init(void)
 {
-#ifdef STM32F10C_EVAL
-  /*Setup for USART2 - MODBUS*/
-  GPIO_InitTypeDef GPIO_InitStructure;
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_5;
-  RCC->APB2ENR |= RCC_APB2ENR_AFIOEN | RCC_APB2Periph_GPIOD;
-  AFIO->MAPR |= AFIO_MAPR_USART2_REMAP;
-  RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART2, ENABLE);
-  RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA1, ENABLE);
-  
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_5; /*TX*/
-  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
-  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-  GPIO_Init(GPIOD, &GPIO_InitStructure);
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_6;/*RX*/
-  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
-  GPIO_Init(GPIOD, &GPIO_InitStructure);
-
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_3;/*CTS*/
-  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
-  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-  GPIO_Init(GPIOD, &GPIO_InitStructure);
-  GPIO_ResetBits(GPIOD,GPIO_Pin_3);
-  
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_4;/*RTS*/
-  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
-  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-  GPIO_Init(GPIOD, &GPIO_InitStructure);
-  GPIO_ResetBits(GPIOD,GPIO_Pin_4);
- #else
    /*Setup for USART2 - MODBUS*/
   GPIO_InitTypeDef GPIO_InitStructure;
   GPIO_InitStructure.GPIO_Pin = GPIO_Pin_2;
@@ -231,7 +202,7 @@ void HW_Init(void)
   GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
   GPIO_Init(GPIOA, &GPIO_InitStructure);
   GPIO_ResetBits(GPIOA,GPIO_Pin_1);
- #endif
+
   /*HeartBeatLED PC9 to test*/
   /* Enable the GPIO_LED Clock */
   HeartBeat_ErrorLed_Pinconfig();
@@ -494,7 +465,7 @@ int main(void)
   xMessage *msg;
   
   HW_Init();
-  PWM_Init(1500,1500);
+  PWM_Init(24000,24000);
 
   gdi_init(); /*Setup debug uart*/
  // UART_Init(USART3,NULL);

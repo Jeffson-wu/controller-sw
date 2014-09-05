@@ -197,7 +197,7 @@ int getLog(char *poutText,int tubeId )
     if(nElements == 0)
     {
       strncat(poutText,";log={",strlen(";log={"));
-      sprintf(str,"%d,",logcount[tubeId]); /*total number of log elements*/
+      sprintf(str,"%d,", pinData->seqNum /*####JRJlogcount[tubeId]*/); /*total number of log elements*/
       strncat(poutText,str,strlen(str));
     }
     //   sprintf(str,"%03D,",pinData->seqNum); // 3 digits allows for temperatures up to 409,5 degrees
