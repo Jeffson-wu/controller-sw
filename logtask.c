@@ -43,7 +43,7 @@ xQueueHandle LogQueueHandle;
 /* Private define ------------------------------------------------------------*/
 #define NUM_OF_TUBES 16+1
 #define LOG_QUEUE_SIZE 4
-#define LOG_ELEMENT_SIZE 10
+#define LOG_ELEMENT_SIZE (DATA_LOG_SIZE/2)
 typedef struct ldata {
   u16 stage_num;
   u16 temp;
@@ -84,11 +84,7 @@ void SERIAL_String(const char *string);
 
 void SERIAL_String(const char *string)
 {
-#ifdef GDI_ON_USART3
-    USART_TypeDef *uart = USART3;
-#else
-    USART_TypeDef *uart = USART1;
-#endif
+  USART_TypeDef *uart = USART1;
   if (string) {
     while (*string != '\0') {
       USART_SendData(uart, *(string++));
@@ -111,26 +107,52 @@ void initQueue()
 }
 
 /* ---------------------------------------------------------------------------*/
-// Data log is {{seq#Tube1,t1.1,t1.2,t1.3,t1.4,t1.5,t1.6,t1.7,t1.8,t1.9,t1.10},
-//              {seq#Tube2,t2.1,t2.2,t2.3,t2.4,t2.5,t2.6,t2.7,t2.8,t2.9,t2.10}}
-// Enqueue elament. Return pointer to element so it can be written to.
+// Data log is {seq#,stage#,t1,stage#,t2,stage#,t3,stage#,t4,stage#,t5,stage#,t6,stage#,t7,stage#,t8,stage#,t9,stage#,t10}
+// Enqueue elament. Return pointer to element so it can be written.
 logDataElement_t * enqueue(logDataQueue_t * pQueue)
 {
-	if((pQueue->tail - LOG_QUEUE_SIZE) == pQueue->head) { return NULL; } // Return null if queue is full
-	pQueue->tail++;
-	return &pQueue->logDataElement[pQueue->tail % LOG_QUEUE_SIZE];
+#ifdef DEBUG
+  int h, t;
+#endif
+  logDataElement_t * pElement;
+
+  taskENTER_CRITICAL(); //push irq state
+	if((pQueue->tail - LOG_QUEUE_SIZE) == pQueue->head) { pElement = NULL; } // Return null if queue is full
+	else {
+	  pQueue->tail++;
+    pElement = &pQueue->logDataElement[pQueue->tail % LOG_QUEUE_SIZE];
+	}
+#ifdef DEBUG
+  h = pQueue->head; 
+  t = pQueue->tail;
+#endif
+  taskEXIT_CRITICAL();
+  DEBUG_LOG_PRINTF("enqueue: head %d tail %d", h, t);
+  return pElement;
 }
 
 /* ---------------------------------------------------------------------------*/
-// Dequeue elament. Return pointer to element so it can be read from.
+// Dequeue elament. Return pointer to element so it can be read.
 logDataElement_t * dequeue(logDataQueue_t * pQueue)
 {
-	if(pQueue->tail == pQueue->head) {return '\0';}  // Return null if queue is empty
-	else
-	{
+#ifdef DEBUG
+    int h, t;
+#endif
+  logDataElement_t * pElement;
+
+  taskENTER_CRITICAL(); //push irq state
+	if(pQueue->tail == pQueue->head) {pElement = NULL; } // Return null if queue is empty
+  else {
 		pQueue->head++;
-		return &pQueue->logDataElement[pQueue->head % LOG_QUEUE_SIZE];
+		pElement = &pQueue->logDataElement[pQueue->head % LOG_QUEUE_SIZE];
 	}
+#ifdef DEBUG
+  h = pQueue->head; 
+  t = pQueue->tail;
+#endif
+  taskEXIT_CRITICAL();
+  DEBUG_LOG_PRINTF("dequeue: head %d tail %d", h, t);
+  return pElement;
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -140,66 +162,68 @@ int dataQueueAdd(u8 tubeId, u16 seqNumber, u8 data[])
   int i;
   logDataElement_t * poutData;
   
-  taskENTER_CRITICAL(); //push irq state
-  if(NULL != (poutData = enqueue(&logDataQueue[tubeId-1]))) //tubeId=[1..16],idx=[0..15]
+  poutData = enqueue(&logDataQueue[tubeId-1]); //tubeId=[1..16],idx=[0..15]
+  if(NULL != poutData)
   {
+    DEBUG_LOG_PRINTF("dataQueueAdd @0x%08X", poutData);
     poutData->seqNum = seqNumber;
-    for(i=0; i<LOG_ELEMENT_SIZE*2; i=+2)
+    for(i = 0; i < LOG_ELEMENT_SIZE; i ++)
     {
-      poutData->ldata[i].stage_num = (((u16)(data[i*2])<<8)|(data[i*2+1]));
-      poutData->ldata[i].temp = (((u16)(data[i*2+2])<<8)|(data[i*2+3]));
-      DEBUG_LOG_PRINTF("dataQueueAdd Tube(%d)-seq[%d][%d]", tubeId,poutData->ldata[i].stage_num,poutData->ldata[i].temp);
+      poutData->ldata[i].stage_num = (((u16)(data[i*4])<<8)  |(data[i*4+1]));
+      poutData->ldata[i].temp =      (((u16)(data[i*4+2])<<8)|(data[i*4+3]));
+      //DEBUG_LOG_PRINTF("dataQueueAdd Tube %d - stage %d, %d", tubeId,poutData->ldata[i].stage_num,poutData->ldata[i].temp);
     }
   }
-  taskEXIT_CRITICAL();
+  else
+  {
+    DEBUG_LOG_PRINTF("dataQueueAdd - No buffer");
+  }
 }
+
+/* ---------------------------------------------------------------------------*/
 int getLog(char *poutText,int tubeId )
 {
   int i = 0;
   int nElements = 0;
   logDataElement_t * pinData;
   char str[20];
-
+  int dataAdded = 0;
   
-    taskENTER_CRITICAL(); //push irq state #### Kan critical section laves mindre!
-    // Send all available log elements for each tube
-    while(NULL != (pinData = dequeue(&logDataQueue[tubeId-1])) ) //idx=[0..15]
+  // Send all available log elements for each tube
+  while(NULL != (pinData = dequeue(&logDataQueue[tubeId-1])) ) //idx=[0..15]
+  {
+    dataAdded = 1;
+    //? = pinData->seqNum;  Handle Seq# ?? Ignored for now
+    if(nElements == 0)
     {
-      //? = pinData->seqNum;  Handle Seq# ?? Ignored for now
-      if(nElements == 0)
-        {
-         strncat(poutText,";log={",strlen(";log={"));
-         sprintf(str,"%d,",logcount[tubeId]); /*total number of log elements*/
-         strncat(poutText,str,strlen(str));
-        }
+      strncat(poutText,";log={",strlen(";log={"));
+      sprintf(str,"%d,", pinData->seqNum /*####JRJlogcount[tubeId]*/); /*total number of log elements*/
+      strncat(poutText,str,strlen(str));
+    }
     //   sprintf(str,"%03D,",pinData->seqNum); // 3 digits allows for temperatures up to 409,5 degrees
     //   strcat(poutText,str);
 #if 1       
-      for(i=0; i<LOG_ELEMENT_SIZE; i++)
-      {
-        sprintf(str,"%d,",pinData->ldata[i].stage_num); // 3 digits allows for temperatures up to 409,5 degrees
-        strcat(poutText,str);
-        sprintf(str,"%d",pinData->ldata[i].temp); // 3 digits allows for temperatures up to 409,5 degrees
-        strcat(poutText,str);
-        if(LOG_ELEMENT_SIZE - 1 > i)
-        { 
-          sprintf(str,",");
-          strcat(poutText,str); 
-        }
+    for(i=0; i<LOG_ELEMENT_SIZE; i++)
+    {
+      sprintf(str,"%d,%d",pinData->ldata[i].stage_num, pinData->ldata[i].temp);
+      strcat(poutText,str);
+      if(LOG_ELEMENT_SIZE - 1 > i)
+      { 
+        strcat(poutText, ","); 
       }
-       sprintf(str,",");
-          strcat(poutText,str); 
-          #endif
-      //strcat(poutText,str);
-      nElements+=LOG_ELEMENT_SIZE;
     }
-    poutText[strlen(poutText)-1]=0;
-    taskEXIT_CRITICAL();
-    sprintf(str,"}");
-    strcat(poutText,str); 
-    logcount[tubeId]=logcount[tubeId]+nElements; 
-    return nElements;
- }
+    strcat(poutText, ","); 
+#endif
+    //strcat(poutText,str);
+    nElements+=LOG_ELEMENT_SIZE;
+  }
+  poutText[strlen(poutText)-1]=0;
+  if(dataAdded) { 
+    strcat(poutText, "}");
+  } 
+  logcount[tubeId] = logcount[tubeId] + nElements; 
+  return nElements;
+}
 
 /* ---------------------------------------------------------------------------*/
 /* at@gdi:seq_cmd(getlog)\n                                                   */
@@ -219,9 +243,9 @@ void sendLog()
   SERIAL_String("LOG:(");
   for(tubeId = 1; tubeId < NUM_OF_TUBES; tubeId++) //tubeId=[1..16]
   {    
-    taskENTER_CRITICAL(); //push irq state #### Kan critical section laves mindre!
+    pinData = dequeue(&logDataQueue[tubeId-1]); //idx=[0..15]
     // Send all available log elements for each tube
-    while(NULL != (pinData = dequeue(&logDataQueue[tubeId-1])) ) //idx=[0..15]
+    while(NULL != pinData )
     {
       sprintf(str,"tube%d:",tubeId);
       SERIAL_String(str); 
@@ -238,7 +262,6 @@ void sendLog()
       }
       SERIAL_String(";");
     }
-    taskEXIT_CRITICAL();
   }
   SERIAL_String(")");
 }
@@ -291,11 +314,7 @@ void LogTask( void * pvParameters )
   int i = 1;
   static long last_tube_to_log;
   
-#ifdef GDI_ON_USART3
   USART_TypeDef *uart = USART3;
-#else
-  USART_TypeDef *uart = USART3;
-#endif
 
   initQueue();
 
@@ -335,10 +354,9 @@ void LogTask( void * pvParameters )
         modbus_addr = preg->addr;
         if(preg->resultOk == NO_ERROR) {
           if( (TUBE1_TEMP_REG == modbus_addr) || (TUBE2_TEMP_REG == modbus_addr)||(TUBE3_TEMP_REG == modbus_addr) || (TUBE4_TEMP_REG == modbus_addr) )
-          {
+          { // Debug Logging
             modbus_data =(((u16)(preg->data[0])<<8)|(preg->data[1]));
-            sprintf(message,"T%d:%d.%01dC ",TubeId,modbus_data/10,modbus_data%10); //####sprintf(message,"T%d:%d.%01dC ",TubeId,dac_2_temp(modbus_data)/10,dac_2_temp(modbus_data)%10);
-
+            sprintf(message,"T%d:%d.%01dC ",TubeId,modbus_data/10,modbus_data%10);
             for(i=0;i<strlen(message);i++)
             {
               while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
@@ -352,51 +370,11 @@ void LogTask( void * pvParameters )
               while (USART_GetFlagStatus(uart, USART_FLAG_TXE) == RESET);
             }
           }
-          //#### handle tube 1 logs and tube 2 logs separately or jointly
-          //  DATA_LOG_T1 = 50,
-          //  DATALOG_T1_end = DATA_LOG_T1 + DATA_LOG_SIZE + 1,
-          //  DATA_LOG_T2 = DATALOG_T1_end,
-          //  DATALOG_T2_end = DATA_LOG_T2 + DATA_LOG_SIZE + 1,
-          // Data log is {{seq#Tube1,t1.1,t1.2,t1.3,t1.4,t1.5,t1.6,t1.7,t1.8,t1.9,t1.10},
-          //              {seq#Tube2,t2.1,t2.2,t2.3,t2.4,t2.5,t2.6,t2.7,t2.8,t2.9,t2.10}}
-          else if((modbus_addr == DATA_LOG_T1) || (modbus_addr == DATA_LOG_T2) ||(modbus_addr == DATA_LOG_T3) || (modbus_addr == DATA_LOG_T4))
+          else if(modbus_addr == DATA_LOG)
           { // Auto Logging
-            if( (modbus_addr == DATA_LOG_T1) && (DATA_LOG_SIZE*2 + 2 == preg->datasize) )
-            { // Logs for tube 1 and tube 2 from that M0
-            DEBUG_LOG_PRINTF("Enqueue both (%d)", TubeId);
-              modbus_data =(((u16)(preg->data[0])<<8)|(preg->data[1]));   //Seq num1
-              dataQueueAdd(TubeId,     modbus_data, &preg->data[2] );     //data after seq num
-              modbus_data =(((u16)(preg->data[22])<<8)|(preg->data[23])); //Seq num2 
-              dataQueueAdd(TubeId + 1, modbus_data, &preg->data[24]);     //data after seq num1 and 10 data and seq num2
-            }
-
-            if( (modbus_addr == DATA_LOG_T1) && (DATA_LOG_SIZE+1) == preg->datasize)
-            { // Logs for tube 1 only from that M0
-              modbus_data =(((u16)(preg->data[0])<<8)|(preg->data[1])); //Seq num
-              DEBUG_LOG_PRINTF("Enqueue T1 (%d)-[%d]", TubeId,modbus_data);
-              dataQueueAdd(TubeId, modbus_data, &preg->data[2] );       //data after seq num
-            }
-
-            if( (modbus_addr == DATA_LOG_T2) && (DATA_LOG_SIZE+1) == preg->datasize)
-            { // Logs for tube 2 only from that M0
-              DEBUG_LOG_PRINTF("Enqueue T2 (%d)", TubeId + 1);
-              modbus_data =(((u16)(preg->data[2])<<8)|(preg->data[1])); //Seq num
-              dataQueueAdd(TubeId + 1, modbus_data, &preg->data[2] );   //data after seq num
-            }
-
-             if( (modbus_addr == DATA_LOG_T3) && (DATA_LOG_SIZE+1) == preg->datasize)
-            { // Logs for tube 2 only from that M0
-              DEBUG_LOG_PRINTF("Enqueue T3 (%d)", TubeId + 2);
-              modbus_data =(((u16)(preg->data[0])<<8)|(preg->data[1])); //Seq num
-              dataQueueAdd(TubeId + 2, modbus_data, &preg->data[2] );   //data after seq num
-            }
-
-              if( (modbus_addr == DATA_LOG_T4) && (DATA_LOG_SIZE+1) == preg->datasize)
-            { // Logs for tube 2 only from that M0
-              DEBUG_LOG_PRINTF("Enqueue T4 (%d)", TubeId + 3);
-              modbus_data =(((u16)(preg->data[0])<<8)|(preg->data[1])); //Seq num
-              dataQueueAdd(TubeId + 3, modbus_data, &preg->data[2] );   //data after seq num
-            }
+            // Data log is {seq#,stage#,t1,stage#,t2,stage#,t3,stage#,t4,stage#,t5,stage#,t6,stage#,t7,stage#,t8,stage#,t9,stage#,t10}
+            modbus_data =(((u16)(preg->data[0])<<8)|(preg->data[1])); //Seq num
+            dataQueueAdd(TubeId, modbus_data, &preg->data[2] );       //data after seq num
           }
           else
           {
@@ -417,6 +395,7 @@ void LogTask( void * pvParameters )
       break;
       }
     }
+    DEBUG_LOG_PRINTF("msg done");
     vPortFree(msg);
   }
 }
