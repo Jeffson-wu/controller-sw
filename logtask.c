@@ -76,7 +76,7 @@ static logDataQueue_t __attribute__ ((aligned (16))) logDataQueue[NUM_OF_TUBES];
 
 static char message[40];   /*buffer for printf*/
 int logcount[NUM_OF_TUBES]={0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
-
+u8 cur_tubeid = 0;
 
 /* Private function prototypes -----------------------------------------------*/
 void SERIAL_String(const char *string);
@@ -127,7 +127,7 @@ logDataElement_t * enqueue(logDataQueue_t * pQueue)
   t = pQueue->tail;
 #endif
   taskEXIT_CRITICAL();
-  DEBUG_LOG_PRINTF("enqueue: head %d tail %d", h, t);
+  DEBUG_LOG_PRINTF("T%d:enqueue: head %d tail %d",cur_tubeid, h, t);
   return pElement;
 }
 
@@ -151,7 +151,7 @@ logDataElement_t * dequeue(logDataQueue_t * pQueue)
   t = pQueue->tail;
 #endif
   taskEXIT_CRITICAL();
-  DEBUG_LOG_PRINTF("dequeue: head %d tail %d", h, t);
+  DEBUG_LOG_PRINTF("T%d:dequeue: head %d tail %d",cur_tubeid, h, t);
   return pElement;
 }
 
@@ -159,6 +159,7 @@ logDataElement_t * dequeue(logDataQueue_t * pQueue)
 int dataQueueAdd(u8 tubeId, u16 seqNumber, u8 data[])
 {
   uint16_t modbus_data;
+  cur_tubeid = tubeId;
   int i;
   logDataElement_t * poutData;
   
@@ -176,15 +177,22 @@ int dataQueueAdd(u8 tubeId, u16 seqNumber, u8 data[])
   }
   else
   {
-    DEBUG_LOG_PRINTF("dataQueueAdd - No buffer");
+    DEBUG_LOG_PRINTF("T%d:dataQueueAdd - buffer full",tubeId);
   }
 }
+
+void emptyLog(int tubeId)
+{
+  while(NULL != dequeue(&logDataQueue[tubeId-1]));  //idx=[0..15]
+}
+
 
 /* ---------------------------------------------------------------------------*/
 int getLog(char *poutText,int tubeId )
 {
   int i = 0;
   int nElements = 0;
+  cur_tubeid = tubeId;
   logDataElement_t * pinData;
   char str[20];
   int dataAdded = 0;
@@ -202,7 +210,8 @@ int getLog(char *poutText,int tubeId )
     }
     //   sprintf(str,"%03D,",pinData->seqNum); // 3 digits allows for temperatures up to 409,5 degrees
     //   strcat(poutText,str);
-#if 1       
+#if 1    
+    // strncpy(str,"22,33",strlen("22,33"));
     for(i=0; i<LOG_ELEMENT_SIZE; i++)
     {
       sprintf(str,"%d,%d",pinData->ldata[i].stage_num, pinData->ldata[i].temp);
@@ -216,12 +225,15 @@ int getLog(char *poutText,int tubeId )
 #endif
     //strcat(poutText,str);
     nElements+=LOG_ELEMENT_SIZE;
+
   }
-  poutText[strlen(poutText)-1]=0;
+  
   if(dataAdded) { 
+    poutText[strlen(poutText)-1]=0;
     strcat(poutText, "}");
   } 
   logcount[tubeId] = logcount[tubeId] + nElements; 
+  DEBUG_LOG_PRINTF("Lenght of log %d",strlen(poutText));
   return nElements;
 }
 
@@ -395,7 +407,7 @@ void LogTask( void * pvParameters )
       break;
       }
     }
-    DEBUG_LOG_PRINTF("msg done");
+   // DEBUG_LOG_PRINTF("msg done");
     vPortFree(msg);
   }
 }

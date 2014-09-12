@@ -39,7 +39,7 @@ char *command_prefix = "at@gdi:";
 int uid;
 // longest command is "at@gdi:seq_cmd(<tube>,<PauseTemp>,<stage1>,<Temp1>,<Time1>,<stage2>,<Temp2>,<Time2>,.,.,.,.,.,., )\n"
 // wich is 25 + 36 * 35 (for 35 cycles of 3 stages) 
-#define INPUT_BUF_SIZE 1300
+#define INPUT_BUF_SIZE 500
   u8 data;
 char a = 0;
 char input_buffer[2][INPUT_BUF_SIZE];
@@ -518,8 +518,9 @@ void gdi_map_to_functions()
 	u16 p = 9876;
 	u8 result, slave;
 	u16 addr, datasize;
+#define SIZE_OF_STR_RESULT 400
 	u16 buffer[50];
-  char str[200];
+  char str[SIZE_OF_STR_RESULT];
   u16 seq_num,seq_id;
   				uint16_t temp; /*Settemp in 0.1 degrees*/
 				uint32_t time; /*time in secs*/
@@ -835,7 +836,7 @@ void gdi_map_to_functions()
           TubeId = (u16) atoi(*(gdi_req_func_info.parameters + i));
           if((TubeId < 17)||(TubeId > 0))
           {
-            GDI_PRINTF("SEQ CMD[%s][%d]",(*(gdi_req_func_info.parameters + 1)),strlen((*(gdi_req_func_info.parameters + 1))));
+           // GDI_PRINTF("SEQ CMD[%s][%d]",(*(gdi_req_func_info.parameters + 1)),strlen((*(gdi_req_func_info.parameters + 1))));
             if(!strncmp((*(gdi_req_func_info.parameters + i + 1)),"status",strlen("status")))
             {
               if(0 == TubeId) 
@@ -885,7 +886,7 @@ void gdi_map_to_functions()
 #ifdef MAIN_IF_REV2            
             else if(!strncmp((*(gdi_req_func_info.parameters + i + 1)),"tubestart",strlen("tubestart")))
             {
-              GDI_PRINTF("tubestart on Tube:%d",TubeId);
+              GDI_PRINTF("T%d: Start seq",TubeId);
               if(start_tube_seq(TubeId))    /*Start the seq*/
               {
                 gdi_send_data_response("OK", newline_end);
@@ -921,15 +922,20 @@ void gdi_map_to_functions()
             }
             else if(!strncmp((*(gdi_req_func_info.parameters + i + 1)),"tubestatus",strlen("tubestatus")))
             {
-              GDI_PRINTF("tubestatus on Tube:%d",TubeId);
+              GDI_PRINTF("T%d: GET STATE",TubeId);
               if(0 == TubeId) 
                  {
                    gdi_send_data_response(get_system_state(str), newline_end);
                  }
                  else
                  {
-                   GDI_PRINTF("GET STATE on Tube:%d",TubeId);
+                  // GDI_PRINTF("T%d: GET STATE",TubeId);
                    gdi_send_data_response(get_tube_state(TubeId, str), newline_end);
+                  if (strlen(str)>SIZE_OF_STR_RESULT)
+                    {
+                     sprintf(buf, "###WARNING T%d: GET STATE return strn len:%d > buffer:%d LARGER THAN ALLOCATED RET BUFFER",TubeId,strlen(str),SIZE_OF_STR_RESULT); 
+                    }
+               gdi_send_msg_on_monitor(buf);
                  }
 
             }
@@ -945,7 +951,7 @@ void gdi_map_to_functions()
                state =  (**(gdi_req_func_info.parameters + 4 + i));
             // GDI_PRINTF("%c-%c",(*(gdi_req_func_info.parameters + 4 + i),state));
             // GDI_PRINTF("Tube:%d:TEMP %d.%02dC @ TIME %d.%02dsecs STATE:%d SEQ_ID:%d",TubeId,data.temp/10,data.temp%10,data.time/10,data.time%10,data.stage,seq_num);
-               sprintf(buf, "Tube:%d:TEMP %d.%02dC @ TIME %d.%02dsecs STATE:%c SEQ_ID:%d",TubeId,data.temp/10,data.temp%10,data.time/10,data.time%10,data.stage,seq_num); 
+               sprintf(buf, "T%d: NEW STAGE TEMP %d.%02dC @ TIME %d.%02dsecs STATE:%c SEQ_ID:%d",TubeId,data.temp/10,data.temp%10,data.time/10,data.time%10,state,seq_num); 
                gdi_send_msg_on_monitor(buf);
         #if 1
                  if(tubedataQueueAdd(TubeId,seq_num,state, &data)== TRUE) //Insert next state into sequence
@@ -960,17 +966,18 @@ void gdi_map_to_functions()
             }else
               {
                 gdi_send_data_response("NOK SEQ_CMD not found", newline_end);
-                i = 0;
-                char temp[10];
-                sprintf(buf, "CMD NOT FOUND-%d ",gdi_req_func_info.number_of_parameters );
+              //  i = 0;
+              //  char temp[10];
+               // sprintf(buf, "CMD NOT FOUND-%s ",(*(gdi_req_func_info.parameters + gdi_req_func_info.number_of_parameters-1) );
 
-                while(gdi_req_func_info.number_of_parameters > i)
-                  {
-                sprintf(temp, "%s-",*(gdi_req_func_info.parameters + i));
-                strcat(buf,temp);
-                i++;
-                }
-                gdi_send_msg_on_monitor(buf);
+              //  while(gdi_req_func_info.number_of_parameters > i)
+              //    {
+              //  sprintf(temp, "%s-",*(gdi_req_func_info.parameters + i));
+              //  strcat(buf,temp);
+              //  i++;
+              //  }
+              //   sprintf(buf, "CMD NOT FOUND-%s ",(*(gdi_req_func_info.parameters + gdi_req_func_info.number_of_parameters-1) );
+              //  gdi_send_msg_on_monitor(buf);
 
               }
             #endif
