@@ -63,7 +63,7 @@ typedef struct LOG_DATA_QUEUE {
 } logDataQueue_t;
 
 /* Private macro -------------------------------------------------------------*/
-#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
+//#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
 #ifdef DEBUG
 #define DEBUG_LOG_PRINTF(fmt, args...)      sprintf(message, fmt, ## args);  gdi_send_msg_on_monitor(message);
 #else
@@ -201,12 +201,13 @@ int getLog(char *poutText,int tubeId )
   while(NULL != (pinData = dequeue(&logDataQueue[tubeId-1])) ) //idx=[0..15]
   {
     dataAdded = 1;
-    //? = pinData->seqNum;  Handle Seq# ?? Ignored for now
     if(nElements == 0)
     {
-      strncat(poutText,";log={",strlen(";log={"));
-      sprintf(str,"%d,", pinData->seqNum /*####JRJlogcount[tubeId]*/); /*total number of log elements*/
-      strncat(poutText,str,strlen(str));
+      strcat(poutText,";log={");
+      Itoa(pinData->seqNum*LOG_ELEMENT_SIZE, str);
+      //sprintf(str,"%d,", pinData->seqNum /*####JRJlogcount[tubeId]*/); /*total number of log elements*/
+      strcat(poutText,str);
+      strcat(poutText,",");
     }
     //   sprintf(str,"%03D,",pinData->seqNum); // 3 digits allows for temperatures up to 409,5 degrees
     //   strcat(poutText,str);
@@ -214,7 +215,12 @@ int getLog(char *poutText,int tubeId )
     // strncpy(str,"22,33",strlen("22,33"));
     for(i=0; i<LOG_ELEMENT_SIZE; i++)
     {
-      sprintf(str,"%d,%d",pinData->ldata[i].stage_num, pinData->ldata[i].temp);
+      int templen=0;
+      //sprintf(str,"%d,%d",pinData->ldata[i].stage_num, pinData->ldata[i].temp);
+      Itoa(pinData->ldata[i].stage_num, str);
+      templen = strlen(str);
+      str[templen]=',';
+      Itoa(pinData->ldata[i].temp, &str[templen+1]);
       strcat(poutText,str);
       if(LOG_ELEMENT_SIZE - 1 > i)
       { 
@@ -260,6 +266,7 @@ void sendLog()
     while(NULL != pinData )
     {
       sprintf(str,"tube%d:",tubeId);
+      
       SERIAL_String(str); 
       //? = pinData->seqNum;  Handle Seq# ?? Ignored for now
        sprintf(str,"%03X,",pinData->seqNum); // 3 digits allows for temperatures up to 409,5 degrees

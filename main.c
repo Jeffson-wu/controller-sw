@@ -186,6 +186,7 @@ void HW_Init(void)
   GPIO_Init(GPIOA, &GPIO_InitStructure);
   GPIO_ResetBits(GPIOA,GPIO_Pin_0);
 #else
+#if 1
    /*Setup for USART3 - MONITOR SEQ*/
   GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10;
   RCC->APB2ENR |= RCC_APB2ENR_AFIOEN | RCC_APB2Periph_GPIOC;
@@ -196,6 +197,7 @@ void HW_Init(void)
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
   GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
   GPIO_Init(GPIOC, &GPIO_InitStructure);
+#endif
 #endif
   GPIO_InitStructure.GPIO_Pin = GPIO_Pin_1;/*RTS*/
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
@@ -498,7 +500,6 @@ int main(void)
   vQueueAddToRegistry(SwuQueueHandle,"SWUpdate");
   
 
-  heaterIrqInit();
   result=xTaskCreate( ModbusTask, ( const signed char * ) "Modbus task", ( unsigned short ) 400, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &modbusCreatedTask );
   result=xTaskCreate( LogTask, ( const signed char * ) "Log task", ( unsigned short ) 400, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvLogTask );
   result=xTaskCreate( gdi_task, ( const signed char * ) "Debug task", ( unsigned short ) 600, NULL, ( ( unsigned portBASE_TYPE ) 1 ) | portPRIVILEGE_BIT, &gdiCreatedTask );
@@ -558,5 +559,37 @@ void HardFault_Handler(void)
   GPIO_SetBits(GPIOB,GPIO_Pin_1); /* Turn on TX LED */
   while (1) {}
 }
+
+
+/*Util functions*/
+
+void reverse(char s[])
+{
+ int i, j;
+ char c;
+
+ for (i = 0, j = strlen(s)-1; i<j; i++, j--) {
+     c = s[i];
+     s[i] = s[j];
+     s[j] = c;
+ }
+}
+
+void Itoa(int n, char s[])
+ {
+ int i, sign;
+
+ if ((sign = n) < 0)  
+     n = -n;         
+ i = 0;
+ do {
+     s[i++] = n % 10 + '0';
+ } while ((n /= 10) > 0);
+ if (sign < 0)
+     s[i++] = '-';
+ s[i] = '\0';
+ reverse(s);
+ }
+
 
 

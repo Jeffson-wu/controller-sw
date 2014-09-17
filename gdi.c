@@ -40,9 +40,8 @@ int uid;
 // longest command is "at@gdi:seq_cmd(<tube>,<PauseTemp>,<stage1>,<Temp1>,<Time1>,<stage2>,<Temp2>,<Time2>,.,.,.,.,.,., )\n"
 // wich is 25 + 36 * 35 (for 35 cycles of 3 stages) 
 #define INPUT_BUF_SIZE 500
-  u8 data;
-char a = 0;
-char input_buffer[2][INPUT_BUF_SIZE];
+static char inputCmdBuf = 0;
+static char input_buffer[2][INPUT_BUF_SIZE];
 
 static u8 gdiEcho = FALSE;
 // static u8 gdiEcho = TRUE;
@@ -67,7 +66,7 @@ extern xQueueHandle SwuQueueHandle;
 USART_TypeDef *uart = USART1;
 u32 test_variable= 9876543;
 
-#if 1
+#if 0
 #define GDI_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
 #else
 #define GDI_PRINTF(fmt, args...)    /* Don't do anything in release builds */
@@ -931,11 +930,11 @@ void gdi_map_to_functions()
                  {
                   // GDI_PRINTF("T%d: GET STATE",TubeId);
                    gdi_send_data_response(get_tube_state(TubeId, str), newline_end);
-                  if (strlen(str)>SIZE_OF_STR_RESULT)
+/*                  if (strlen(str)>SIZE_OF_STR_RESULT)
                     {
                      sprintf(buf, "###WARNING T%d: GET STATE return strn len:%d > buffer:%d LARGER THAN ALLOCATED RET BUFFER",TubeId,strlen(str),SIZE_OF_STR_RESULT); 
                     }
-               gdi_send_msg_on_monitor(buf);
+                    gdi_send_msg_on_monitor(buf);*/
                  }
 
             }
@@ -951,8 +950,8 @@ void gdi_map_to_functions()
                state =  (**(gdi_req_func_info.parameters + 4 + i));
             // GDI_PRINTF("%c-%c",(*(gdi_req_func_info.parameters + 4 + i),state));
             // GDI_PRINTF("Tube:%d:TEMP %d.%02dC @ TIME %d.%02dsecs STATE:%d SEQ_ID:%d",TubeId,data.temp/10,data.temp%10,data.time/10,data.time%10,data.stage,seq_num);
-               sprintf(buf, "T%d: NEW STAGE TEMP %d.%02dC @ TIME %d.%02dsecs STATE:%c SEQ_ID:%d",TubeId,data.temp/10,data.temp%10,data.time/10,data.time%10,state,seq_num); 
-               gdi_send_msg_on_monitor(buf);
+            //   sprintf(buf, "T%d: NEW STAGE TEMP %d.%02dC @ TIME %d.%02dsecs STATE:%c SEQ_ID:%d",TubeId,data.temp/10,data.temp%10,data.time/10,data.time%10,state,seq_num); 
+            //   gdi_send_msg_on_monitor(buf);
         #if 1
                  if(tubedataQueueAdd(TubeId,seq_num,state, &data)== TRUE) //Insert next state into sequence
                  {
@@ -966,6 +965,9 @@ void gdi_map_to_functions()
             }else
               {
                 gdi_send_data_response("NOK SEQ_CMD not found", newline_end);
+                gdi_send_data_response(input_buffer[0], newline_end);
+                gdi_send_data_response(input_buffer[1], newline_end);
+
               //  i = 0;
               //  char temp[10];
                // sprintf(buf, "CMD NOT FOUND-%s ",(*(gdi_req_func_info.parameters + gdi_req_func_info.number_of_parameters-1) );
@@ -1223,6 +1225,8 @@ void gdi_map_to_functions()
 			  gdi_send_data_response("Invalid Command - type at@gdi:help()", newline_end);
       }else{
 			  gdi_send_data_response("NOK Invalid Command", newline_end);
+              gdi_send_data_response(input_buffer[0], newline_end);
+              gdi_send_data_response(input_buffer[1], newline_end);
       }
 			break;
 	}
@@ -1232,11 +1236,12 @@ void gdi_map_to_functions()
 void recieveCMD(void)
 {
   static u8 index=0;
-	/*
-	 * xSemaphoreGiveFromISR() will set *pxHigherPriorityTaskWoken to pdTRUE 
-	 * if giving the semaphoree caused a task to unblock, and the unblocked 
-	 * task has a priority higher than the currently running task.
-	 */
+  u8 data;
+/*
+ * xSemaphoreGiveFromISR() will set *pxHigherPriorityTaskWoken to pdTRUE 
+ * if giving the semaphoree caused a task to unblock, and the unblocked 
+ * task has a priority higher than the currently running task.
+ */
   portBASE_TYPE xHigherPriorityTaskWoken;
 
   while(USART_GetFlagStatus(uart, USART_FLAG_RXNE)==RESET);
@@ -1244,12 +1249,12 @@ void recieveCMD(void)
 
   if (CHAR_ENTER == data)/*Enter detected interpret CMD */
   {
-    input_buffer[a][index] = '\0';
+    input_buffer[inputCmdBuf][index] = '\0';
     /*unlock mutex to continue in GDI task*/
     xSemaphoreGiveFromISR( GDI_RXSemaphore, &xHigherPriorityTaskWoken);
     
     portEND_SWITCHING_ISR( xHigherPriorityTaskWoken );
-    a = !a;
+    inputCmdBuf = !inputCmdBuf;
     index = 0;
   }
   else
@@ -1263,7 +1268,7 @@ void recieveCMD(void)
     {
       if((' ' <= data) && ('~' >= data))
       {
-        input_buffer[a][index++] = data;
+        input_buffer[inputCmdBuf][index++] = data;
         if(INPUT_BUF_SIZE <= index)
         {
           gdi_send_msg_response("NOK INPUT BUFFER OVERRUN !!!");
@@ -1324,7 +1329,7 @@ void gdi_task(void *pvParameters)
     /*wait for mutex*/
     xSemaphoreTake( GDI_RXSemaphore, portMAX_DELAY );
     gdi_init_req_func_info();
-    gdi_parse_command(input_buffer[!a]);
+    gdi_parse_command(input_buffer[!inputCmdBuf]);
     gdi_map_to_functions();
     if(gdiEcho) {
       gdi_send_data_response("", newline_end);

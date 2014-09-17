@@ -33,21 +33,21 @@ extern xQueueHandle CoolAndLidQueueHandle;
 #define REV_2
 
 
-#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
+//#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
 #ifdef DEBUG
 #define DEBUG_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
 #else
 #define DEBUG_PRINTF(fmt, args...)    /* Don't do anything in release builds */
 #endif
 
-#define DEBUG_SEQ /*Debug of sequencer, to follow state of sequencer*/
+//#define DEBUG_SEQ /*Debug of sequencer, to follow state of sequencer*/
 #ifdef DEBUG_SEQ
 #define DEBUG_SEQ_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
 #else
 #define DEBUG_SEQ_PRINTF(fmt, args...)    /* Don't do anything in release builds */
 #endif
 
-#define DEBUG_IF /*Debug of external interfaces modbus, IRQ and serial */
+//#define DEBUG_IF /*Debug of external interfaces modbus, IRQ and serial */
 #ifdef DEBUG_IF
 #define DEBUG_IF_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
 #else
@@ -328,7 +328,6 @@ heater_tubes_t heater2tube[]={
 };
 
 /*const*/ gpio_extint_t gpio_EXTI_CNF[nExtiGpio+1]={
-/*{ADS_DRDY_PINSOURCE ,ADS_EXTI_PORTSOURCE,ADS_EXTI_LINE, EXTI15_10_IRQn},*//*ADS DRDY*/
 {GPIO_PinSource3 ,GPIO_PortSourceGPIOC,EXTI_Line3, EXTI3_IRQn    },/*Heater1*/
 {GPIO_PinSource4 ,GPIO_PortSourceGPIOC,EXTI_Line4, EXTI4_IRQn    },/*Heater2*/
 {GPIO_PinSource11,GPIO_PortSourceGPIOC,EXTI_Line11,EXTI15_10_IRQn},/*Heater3*/
@@ -549,9 +548,9 @@ void heaterIrqInit(void)
   gpio_extint_t *p =  gpio_EXTI_CNF;
   EXTI_StructInit(&EXTI_InitStructure);
 
-  //while(p->PINSOURCE != 0xFF)
-//  {
-  if(GPIO_PinSource11 != p->PINSOURCE){
+  while(p->PINSOURCE != 0xFF)
+  {
+    //if(GPIO_PinSource11 != p->PINSOURCE){
     EXTI_InitStructure.EXTI_Line = p->EXTI_LINE;
     EXTI_InitStructure.EXTI_LineCmd = DISABLE;
     EXTI_InitStructure.EXTI_Mode = EXTI_Mode_Interrupt;
@@ -567,8 +566,8 @@ void heaterIrqInit(void)
     NVIC_InitStructure.NVIC_IRQChannel = p->IRQ_CH;
     NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
     NVIC_Init(&NVIC_InitStructure);
-  //  }
-p++;
+    //}
+    p++;
   }
 }
 
@@ -722,7 +721,7 @@ void Heater_PinConfig(void)
   //RCC->APB2ENR |= RCC_APB2ENR_AFIOEN | RCC_APB2Periph_GPIOB | RCC_APB2Periph_GPIOC;
   /* GPIOB-GPIOC Clocks enable */
   RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOC, ENABLE);
-  RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOD, ENABLE);
+  //RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOD, ENABLE);
 
   /* GPIOD Configuration: Channel 3 and 4 as alternate function push-pull */
  // GPIO_InitStructure.GPIO_Pin = GPIO_Pin_2;
@@ -1104,12 +1103,14 @@ char * get_tube_state(long TubeId, char *poutText)
       if(Tubeloop[TubeId].state==TUBE_OUT_OF_DATA)
       {
         strcpy(state,"waiting for data");
-        sprintf(progress,"0");
+        //sprintf(progress,"0");
+        strcpy(progress, "0");
       }
       else if((Tubeloop[TubeId].state==TUBE_WAIT_TEMP)||(Tubeloop[TubeId].state==TUBE_WAIT_TIME)||(Tubeloop[TubeId].state==TUBE_WAIT_P_TEMP))
       {
         // Tube is considered running untill the pause temperature is actually reached.
-        sprintf(progress,"%d",GetTubeTimeLeft(TubeId));
+        //sprintf(progress,"%d",GetTubeTimeLeft(TubeId));
+        Itoa(GetTubeTimeLeft(TubeId), progress);
         if(tubequefree(TubeId) > 0)
           {
             strcpy(state,"running waiting for data");
@@ -1135,19 +1136,20 @@ char * get_tube_state(long TubeId, char *poutText)
         strcpy(tube_state,"IDLE");
 #endif
       }
-      sprintf(stage_nr,"%d",Tubeloop[TubeId].curr.seq_num);
+      //sprintf(stage_nr,"%d",Tubeloop[TubeId].curr.seq_num);
+      Itoa(Tubeloop[TubeId].curr.seq_num, stage_nr);
       strcpy(poutText,"OK<state=\"");
-      strncat(poutText,state,strlen(state));
+      strcat(poutText,state);
       if(Tubeloop[TubeId].state != TUBE_IDLE)
       {
-        strncat(poutText,"\";progress=",strlen("\";progress="));
-        strncat(poutText,progress,strlen(progress));
-        strncat(poutText,";stage_number=",strlen(";stage_number="));
-        strncat(poutText,stage_nr,strlen(stage_nr));
+        strcat(poutText,"\";progress=");
+        strcat(poutText,progress);
+        strcat(poutText,";stage_number=");
+        strcat(poutText,stage_nr);
         //strncat(poutText,";log={",strlen(";log={"));
         getLog(poutText,TubeId);
       }
-      strncat(poutText,">",strlen(">"));
+      strcat(poutText,">");
    
       DEBUG_PRINTF("T%d: %s @Step %d state:%s Stage:%s PState:%d CURR temp:%d time:%d LAST MSG:%s EVENT:%x",
         TubeId, tube_state, Tubeloop[TubeId].SeqIdx+1, tube_states[Tubeloop[TubeId].state], 
@@ -1658,7 +1660,9 @@ void TubeSequencerTask( void * pvParameter)
   WriteModbusRegsRes *wres;
   ExtiGpioTypeDef heater;
   Tubeloop_t *T; 
-  
+
+  Heater_PinConfig();
+  heaterIrqInit();
  //  stageCmd_t *TSeq; 
 
   InitTubeTimers();
