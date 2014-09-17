@@ -540,6 +540,8 @@ void assert_failed(uint8_t* file, uint32_t line)
 	  ErrorOn();/*Turn on error led to show that sequence has ended*/
     vTraceConsoleMessage("Assertion: %s line: %d", file, line);
 
+  GPIO_SetBits(GPIOB,GPIO_Pin_11); /* Turn on error LED */
+  GPIO_ResetBits(GPIOC,GPIO_Pin_9); /* Turn off hartbeat LED */
   /* Infinite loop */
   while (1)
   {
@@ -550,6 +552,10 @@ void assert_failed(uint8_t* file, uint32_t line)
 void HardFault_Handler(void)
 {
   GPIO_SetBits(GPIOB,GPIO_Pin_11); /* Turn on error LED */
+  GPIO_ResetBits(GPIOC,GPIO_Pin_9); /* Turn off hartbeat LED */
+  
+  GPIO_SetBits(GPIOB,GPIO_Pin_0); /* Turn on RX LED */
+  GPIO_SetBits(GPIOB,GPIO_Pin_1); /* Turn on TX LED */
   while (1) {}
 }
 
