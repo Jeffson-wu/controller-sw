@@ -24,7 +24,7 @@
 #include "util.h"
 
 //#define SIMULATE_HEATER /*Disable communication to M0 CPU's return temperature reached when temp is requested*/
-#define USE_DEVELOPMENT_LOGGING
+//#define USE_DEVELOPMENT_LOGGING
 
 extern xQueueHandle CoolAndLidQueueHandle;
 
@@ -749,8 +749,10 @@ bool start_tube_seq( long TubeId)
 bool stop_tube_seq( long TubeId)
 {
   u16 data;
+#ifdef USE_DEVELOPMENT_LOGGING
   long *p;
   xMessage *new_msg;
+#endif
   bool result = TRUE;
   stageCmd_t STAGE;
    stageCmd_t *TSeq = &STAGE;
@@ -1328,8 +1330,10 @@ void TubeMessageHandler (long TubeId, xMessage *msg)
 /* NEXT_TUBE_STAGE messages  */
 void TubeStateHandler(long TubeId, xMessage *msg)
 {
+#ifdef USE_DEVELOPMENT_LOGGING
   xMessage *new_msg;
   long *p;
+#endif
   u16 data;
   Tubeloop_t *pTubeloop = &Tubeloop[TubeId];
   
