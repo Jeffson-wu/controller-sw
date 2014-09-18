@@ -4,8 +4,9 @@
 #include "jsmn.h"
 
 #include "json.h"
-//#include "log.h"
+#include "log.h"
 //#include "buf.h"
+#include "gdi.h"
 
 char URL[] = "https://api.twitter.com/1/trends/1.json";
 
@@ -94,11 +95,12 @@ char js[] ="[ {	\"pcrName\" : \"#Reverse transcription and PCR\",	\"scriptName\"
      *
      */
 
-	const char* jsmn_type[]= {
-		"JSMN_PRIMITIVE",
-		"JSMN_OBJECT",
-		"JSMN_ARRAY",
-		"JSMN_STRING"};
+//  const char* jsmn_type[]= {
+//    "JSMN_PRIMITIVE",
+//    "JSMN_OBJECT",
+//    "JSMN_ARRAY",
+//    "JSMN_STRING"
+//  };
 
 
     // state is the current state of the parser
@@ -117,7 +119,6 @@ char js[] ="[ {	\"pcrName\" : \"#Reverse transcription and PCR\",	\"scriptName\"
     size_t tubes = 0;
     size_t tube_temp_time = 0;
 	size_t i,j;
-	int tubes_affected[16]={0xFF};
 
     for ( i = 0, j = 1; j > 0; i++, j--)
     {
@@ -226,7 +227,6 @@ char js[] ="[ {	\"pcrName\" : \"#Reverse transcription and PCR\",	\"scriptName\"
      			{
      			  char *str = json_token_tostr(js, t);
      			  result("FOUND TUBE: %d",atoi(str));
-                  tubes_affected[tubes]=atoi(str);
 				  // Last tube value
                   if (tubes == 0)
    				      state = pull();

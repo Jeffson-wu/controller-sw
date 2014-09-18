@@ -19,11 +19,11 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "FreeRTOS.h"
+#include "semphr.h"
 #include "timers.h"
 
 /* Exported types ------------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
-#define REV_2
 #define SCALE_CONTROLLER (1L<<16)
 
 /* BSC Burnout current, 0 = off */
@@ -57,19 +57,11 @@
 #define ADS_CALIB_SELFOCAL 2
 
 #define ADS_START_PIN GPIO_Pin_2 //PC2
-#ifdef REV_2
 #define ADS_RESET_PIN GPIO_Pin_10 //PB10
 #define ADS_DRDY_PIN GPIO_Pin_1 //PC1
 #define ADS_EXTI_LINE EXTI_Line1
 #define ADS_DRDY_PINSOURCE GPIO_PinSource1
 #define ADS_EXTI_PORTSOURCE GPIO_PortSourceGPIOC
-#else
-#define ADS_RESET_PIN GPIO_Pin_1 //PC1
-#define ADS_DRDY_PIN GPIO_Pin_10 //PB10
-#define ADS_EXTI_LINE EXTI_Line10
-#define ADS_DRDY_PINSOURCE GPIO_PinSource10
-#define ADS_EXTI_PORTSOURCE GPIO_PortSourceGPIOB
-#endif
 
 #define ADS_MISO_PIN GPIO_Pin_6
 #define ADS_MOSI_PIN GPIO_Pin_7
@@ -127,28 +119,31 @@
 /* Exported functions ------------------------------------------------------- */
 
 // Set up as we use it.
-extern int ads1148Init(void);
+int ads1148Init(void);
 // Get state of DRDY
-extern uint8_t adsGetDrdy(void);
+uint8_t adsGetDrdy(void);
 // Start conversion on one of the four channels
-extern void adsStart(const uint8_t ch);
+void adsStart(const uint8_t ch);
 // Read last conversion
-extern void adsRead(int16_t * value);
+void adsRead(int16_t * value);
 // Start sequential convertion all four ch.
-extern void adsStartSeq(void);
+void adsStartSeq(void);
 // Re-start conversion
-extern void adsContiniueSeq(void);
+void adsContiniueSeq(void);
 
-extern void adsTimerCallback(xTimerHandle xTimer);
+void adsTimerCallback(xTimerHandle xTimer);
 // Stop sequential convertion.
-extern void adsStoptSeq(void);
+void adsStoptSeq(void);
 // Retrieve latest value from all ADC channels.
-extern void adsGetLatest(int16_t * ch0value, int16_t * ch1value, int16_t * ch2value, int16_t * ch3value);
+void adsGetLatest(int16_t * ch0value, int16_t * ch1value, int16_t * ch2value, int16_t * ch3value);
 
-extern void adsConfigConversionTimer(tmrTIMER_CALLBACK convStartFn);
+void adsConfigConversionTimer(tmrTIMER_CALLBACK convStartFn);
 
-extern int32_t dac_2_temp(signed short dac);
-extern signed short temp_2_dac(int16_t temp);
+int32_t dac_2_temp(signed short dac);
+signed short temp_2_dac(int16_t temp);
+void adsIrqEnable(void);
+void adsSetIsrSemaphore(xSemaphoreHandle sem);
+
 
 #endif /* __ADS1148_H */
 

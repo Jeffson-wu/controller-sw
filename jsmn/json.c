@@ -3,8 +3,9 @@
 #include <string.h>
 
 #include "json.h"
-//#include "log.h"
+#include "log.h"
 //#include "buf.h"
+#include "FreeRTOS.h"
 
 #define BUFFER_SIZE 32768
 #define JSON_TOKENS 256

@@ -596,7 +596,7 @@ __attribute__(( weak )) void vPortSetupTimerInterrupt( void )
 		{
 			/* Look up the interrupt's priority. */
 			ucCurrentPriority = pcInterruptPriorityRegisters[ ulCurrentInterrupt ];
-
+      ucCurrentPriority = ucCurrentPriority; // Remove warning
 			/* The following assertion will fail if a service routine (ISR) for
 			an interrupt that has been assigned a priority above
 			configMAX_SYSCALL_INTERRUPT_PRIORITY calls an ISR safe FreeRTOS API

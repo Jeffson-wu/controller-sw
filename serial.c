@@ -30,8 +30,7 @@
 #include "queue.h"
 #include "semphr.h"
 #include "string.h"
-#define REV_2
-
+#include "serial.h"
 
 #ifdef STM32F10C_EVAL
 #define  RS485_RE GPIOD,GPIO_Pin_3
@@ -59,9 +58,6 @@ void UART_SendMsg(USART_TypeDef *uart, u8 *buffer, int len)
      DMA_InitTypeDef         DMA_InitStructure;
      NVIC_InitTypeDef NVIC_InitStructure;
      len+=2;/*Delay to wait RS485 to settle*/
-     #ifndef REV_2
-     GPIO_SetBits(RS485_RE);
-     #endif
      GPIO_SetBits(RS485_DE);
      GPIO_SetBits(RS485_TX_LED);/*TX LED*/
      if(len > 255)
@@ -116,9 +112,6 @@ void UART2_TX_Handler(void)
 
    if(DMA_GetITStatus(DMA1_IT_TC7)==SET)
    {
-   #ifndef REV_2
-     GPIO_ResetBits(RS485_RE);
-   #endif
      GPIO_ResetBits(RS485_DE);
      GPIO_ResetBits(RS485_TX_LED);/*TX LED*/
      DMA_ClearITPendingBit(DMA1_IT_TC7);

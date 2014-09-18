@@ -24,7 +24,6 @@
 #include <string.h>
 #include "stm32f10x.h"
 #include "stm3210c-eval.h"
-#include "stm32f10x_usart.h"
 #include "stm32f10x_dma.h"
 #include "stm32f10x_tim.h"
 #include "FreeRTOS.h"
@@ -33,6 +32,7 @@
 #include "semphr.h"
 #include "signals.h"
 #include "timers.h"
+#include "serial.h"
 
 #define CHARS_IN_FRAME 10 /*1 startbit, 8 data, 1 stopbit*/
 #define CHARS_TO_WAIT 3.5 /* Silence on modbus to detect end of telegram*/
@@ -63,7 +63,6 @@ int debug_cnt = 0;
 
 void UART_SendMsg(USART_TypeDef *uart, u8 *buffer, int len);
 
-static  xSemaphoreHandle xSemaphore;
 xQueueHandle ModbusQueueHandle;
 static  xTimerHandle TimerHandle;
 
@@ -106,10 +105,6 @@ void configTimerModbusTimeout( void )
 
 }
 
-
-
-
-
 static uint16_t gen_crc16(const uint8_t *buf, int len)
 {
   uint16_t crc = 0xFFFF;
@@ -130,48 +125,6 @@ static uint16_t gen_crc16(const uint8_t *buf, int len)
   // Note, this number has low and high bytes swapped, so use it accordingly (or swap bytes)
   return crc;  
 }
-
-static bool handleModbusTelegram(u8 *telegram, u16 size)
-{
-    bool result=FALSE;
-    u8 bytecount;
-    u16 crc;
-    u8 slaveID=telegram[0];
-    switch(telegram[1])
-    {
-      case READ_HOLDINGS_REGISTERS:
-      {
-         u16 addr, datasize;
-         bytecount=telegram[2];
-         crc=telegram[3+bytecount];
-         crc+=telegram[4+bytecount]<<8;
-         if(gen_crc16(&telegram[0], 3+bytecount) == crc)
-         {
-           result=TRUE;
-         }
-      }
-      break;
-     case WRITE_MULTIPLE_REGISTERS: /*write regs*/
-     {
-         u16 addr, datasize;
-         addr=telegram[2];
-         addr+=telegram[3]<<8;
-         datasize=telegram[4];
-         datasize+=telegram[5]<<8;
-         crc=telegram[6];
-         crc+=telegram[7]<<8;
-         if(gen_crc16(&telegram[0], 6) == crc)
-         {
-           result=TRUE;
-         }
-      }
-      break;
-     default:
-     break;
-    };
-    return result;
-}
-
 
 void modbus_end_of_telegram()
 {/*end of telegram 3.5 chars of silence*/
@@ -259,7 +212,7 @@ USART_ERROR waitForRespons(u8 *telegram, int *telegramSize)
   return modbus_err;
 }
 
-static u8 ModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer)
+static USART_ERROR ModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer)
 {
   u16 crc;
   USART_ERROR ERR;
@@ -297,7 +250,7 @@ static u8 ModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer)
   }
 }
 
-static bool ModbusWriteRegs(u8 slave, u16 addr, u8 *data, u16 datasize)
+static USART_ERROR ModbusWriteRegs(u8 slave, u16 addr, u8 *data, u16 datasize)
 {
   u16 crc;
   u8 telegram[255];
@@ -321,12 +274,12 @@ static bool ModbusWriteRegs(u8 slave, u16 addr, u8 *data, u16 datasize)
   return ERR;
 }
 
-static bool ModbusBroadcast(u16 addr, u8 *data, u16 datasize)
+static USART_ERROR ModbusBroadcast(u16 addr, u8 *data, u16 datasize)
 {
   u16 crc;
   u8 telegram[255];
   int telegramsize=255;
-  USART_ERROR ERR;
+
   telegram[0]=0; // Id 0 is broadcast
   telegram[1]=WRITE_MULTIPLE_REGISTERS;/*write multiple regs*/
   telegram[2]=(addr & 0xFF00)>>8;
@@ -347,7 +300,6 @@ static bool ModbusBroadcast(u16 addr, u8 *data, u16 datasize)
 
 void ModbusTask( void * pvParameters )
 {
-  short usData;
   xMessage *msg;
   xMessage *msgout;
   while(1)
@@ -431,7 +383,7 @@ void ModbusTask( void * pvParameters )
 void Modbus_init(USART_TypeDef *uart)
 {
   usedUart=uart;
-  TimerHandle=xTimerCreate("Modbus Response timer", MODBUS_RESPONSE_TIMEOUT, pdTRUE, NULL, response_timeoutCB);
+  TimerHandle=xTimerCreate((signed char*)"Modbus Response timer", MODBUS_RESPONSE_TIMEOUT, pdTRUE, NULL, response_timeoutCB);
   xModbusSemaphore = xSemaphoreCreateMutex();
   xSemaphoreTake( xModbusSemaphore, portMAX_DELAY );
   UART_Init(USART2, recieveChar);

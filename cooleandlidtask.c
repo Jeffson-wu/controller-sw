@@ -29,6 +29,7 @@
 #include "ads1148.h"
 #include "pid.h"
 #include "pwm.h"
+#include "gdi.h"
 
 /*-----------------------------------------------------------*/
 #define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
@@ -135,44 +136,47 @@ void standAlone() //These settings should be made from the Linux Box
 /* ---------------------------------------------------------------------------*/
 /* Peltier handling */
 /* ---------------------------------------------------------------------------*/
-peltier(peltierData_t *peltierData){
+void peltier(peltierData_t *peltierData){
   regulatorData_t *reg;
   reg = &peltierData->regulator;
   reg->setPointLL = reg->setPoint - 200;
   reg->setPointHL = reg->setPoint + 200;
 
   switch (reg->state) {
-		case STOP_STATE:
-		{
-			*reg->pwmVal = 0;
-    	reg->hysteresisActiveFlag = 0;
-			reg->state = CTRL_CLOSED_LOOP_STATE; //Starts when power on
-		}
-		break;
-    case CTRL_CLOSED_LOOP_STATE:
+    case STOP_STATE:
     {
-    	/*
-    	 * Hysteresis Control
-    	 */
-    	if (*reg->adcVal > reg->setPointHL)// || reg->hysteresisActiveFlag == 0)
-    	{
-    		*reg->pwmVal = 32767;
-    	//	reg->hysteresisActiveFlag = 0;
-    	}
-    	if (*reg->adcVal < reg->setPointLL)// || reg->hysteresisActiveFlag == 1)
-    	{
-    		*reg->pwmVal = 0;
-    	//	reg->hysteresisActiveFlag = 1;
-    	}
+      *reg->pwmVal = 0;
+      reg->hysteresisActiveFlag = 0;
+      reg->state = CTRL_CLOSED_LOOP_STATE; //Starts when power on
     }
     break;
+    case CTRL_CLOSED_LOOP_STATE:
+    {
+      /*
+       * Hysteresis Control
+       */
+      if (*reg->adcVal > reg->setPointHL)// || reg->hysteresisActiveFlag == 0)
+      {
+        *reg->pwmVal = 32767;
+      //	reg->hysteresisActiveFlag = 0;
+      }
+      if (*reg->adcVal < reg->setPointLL)// || reg->hysteresisActiveFlag == 1)
+      {
+        *reg->pwmVal = 0;
+      //	reg->hysteresisActiveFlag = 1;
+      }
+    }
+    break;
+    default:
+    break;
+
   }
 }
 
 /* ---------------------------------------------------------------------------*/
 /* Lid handling */
 /* ---------------------------------------------------------------------------*/
-lid(lidData_t *lidData)
+void lid(lidData_t *lidData)
 {
   regulatorData_t *reg;
   reg = &lidData->regulator;
@@ -182,9 +186,9 @@ lid(lidData_t *lidData)
   switch (reg->state) {
     case STOP_STATE:
     {
-    	msgSent = FALSE;
-    	*reg->pwmVal = 0;
-    	reg->hysteresisActiveFlag = 0;
+      msgSent = FALSE;
+      *reg->pwmVal = 0;
+      reg->hysteresisActiveFlag = 0;
     } 
     break;
     case MANUAL_STATE:
@@ -194,20 +198,22 @@ lid(lidData_t *lidData)
     break;
     case CTRL_CLOSED_LOOP_STATE:
     {
-    	/*
-    	 * Hysteresis Control
-    	 */
-    	if (*reg->adcVal < reg->setPointLL) // || reg->hysteresisActiveFlag == 0)
-    	{
-    		*reg->pwmVal = 32767;
-    		//reg->hysteresisActiveFlag = 0;
-    	}
-    	if (*reg->adcVal > reg->setPointHL)// || reg->hysteresisActiveFlag == 1)
-    	{
-    		*reg->pwmVal = 0;
-    		//reg->hysteresisActiveFlag = 1;
-    	}
+      /*
+       * Hysteresis Control
+       */
+      if (*reg->adcVal < reg->setPointLL) // || reg->hysteresisActiveFlag == 0)
+      {
+        *reg->pwmVal = 32767;
+        //reg->hysteresisActiveFlag = 0;
+      }
+      if (*reg->adcVal > reg->setPointHL)// || reg->hysteresisActiveFlag == 1)
+      {
+        *reg->pwmVal = 0;
+        //reg->hysteresisActiveFlag = 1;
+      }
     }
+    break;
+    default:
     break;
   }
 }
@@ -218,12 +224,12 @@ lid(lidData_t *lidData)
 void CooleAndLidTask( void * pvParameters )
 {
   xSemaphoreHandle xADSSemaphore = NULL;
-  short usData;
+
   xMessage *msg;
   int i; //iterator
 
-#ifdef DEBUG
-	int8_t cnt = 0;
+#ifdef DEBUG_COOL
+  int8_t cnt = 0;
   int count = 0;
   char str[20];
 #endif
@@ -258,14 +264,14 @@ void CooleAndLidTask( void * pvParameters )
 
   while(1)
   {
-	#ifdef DEBUG_COOL
-  		if (cnt == 50)
-  		{
-  			DEBUG_PRINTF("PEL:%d,%d,LID1:%d,%d,ST:%dLID2:%d,%d,ST:%d", dac_2_temp(adcCh[0]), pwmCh[0], dac_2_temp(adcCh[1]), pwmCh[1],lidData[0].regulator.state, dac_2_temp(adcCh[2]), pwmCh[2],lidData[1].regulator.state);
-  			cnt = 0;
-  		}
-  		cnt++;
-	#endif
+  #ifdef DEBUG_COOL
+      if (cnt == 50)
+      {
+        DEBUG_PRINTF("PEL:%d,%d,LID1:%d,%d,ST:%dLID2:%d,%d,ST:%d", dac_2_temp(adcCh[0]), pwmCh[0], dac_2_temp(adcCh[1]), pwmCh[1],lidData[0].regulator.state, dac_2_temp(adcCh[2]), pwmCh[2],lidData[1].regulator.state);
+        cnt = 0;
+      }
+      cnt++;
+  #endif
     /* The control task is synchronized to the ADC interrupt by semaphore        */
     /* The ADC is startet by a timer that determines the sampling frequency      */
     /* wait indefinitely for the semaphore to become free i.e. the ISR frees it. */
@@ -312,7 +318,7 @@ void CooleAndLidTask( void * pvParameters )
       {
         case SET_FAN_SPEED:
         {
-        	long p;
+          long p;
           p = *((uint16_t *)(msg->ucData));
           *fanData[0].regulator.pwmVal = p * 32768/100;
         }

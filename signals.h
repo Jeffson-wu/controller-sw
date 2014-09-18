@@ -39,7 +39,13 @@ enum
   INIT_TUBE_SEQ
 };
 
-
+typedef enum 
+{
+  NO_ERROR = 0,
+  TIMEOUT,
+  OVERRUN,
+  WRONG_TEL_LENGHT
+}USART_ERROR;
 
 typedef struct 
 {
@@ -61,7 +67,7 @@ typedef struct
   u8 slave;
   u16 addr;
   u16 datasize;
-  bool resultOk;
+  USART_ERROR resultOk;
 }WriteModbusRegsRes;
 
 typedef struct
@@ -89,19 +95,12 @@ typedef struct
   u8 slave;
   u16 addr;
   u16 datasize;
-  bool resultOk;
+  USART_ERROR resultOk;
   u8 data[1];
 }ReadModbusRegsRes;
 
-typedef enum 
-{
-NO_ERROR = 0,
-TIMEOUT,
-OVERRUN,
-WRONG_TEL_LENGHT
-}USART_ERROR;
+void ResetHeaters();
+
 
 #endif
-
-void ResetHeaters();
 

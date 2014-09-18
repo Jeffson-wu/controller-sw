@@ -29,8 +29,9 @@
 #include "swupdatetask.h"
 #include "signals.h"
 #include "../heater-sw/heater_reg.h"
-
-#define MAIN_IF_REV2
+#include "gdi.h"
+#include "serial.h"
+#include <ctype.h>
 
 /* '\n'=0x0D=13, '\r'=0x0A=10 */
 #define CHAR_ENTER '\r'
@@ -61,7 +62,6 @@ xSemaphoreHandle GDI_RXSemaphore = NULL;
 
 extern xQueueHandle ModbusQueueHandle;
 extern xQueueHandle CoolAndLidQueueHandle;
-extern xQueueHandle SwuQueueHandle;
 
 USART_TypeDef *uart = USART1;
 u32 test_variable= 9876543;
@@ -105,7 +105,6 @@ enum gdi_func_type
 	modbus_write_regs,
 	modbus_Synchronize_LED,
 	modbus_LED,
-	swupdate,
 	invalid_command
 };
 
@@ -145,7 +144,6 @@ gdi_func_table_type gdi_func_info_table[] =
   {"modbus_write_regs", " Write register values", "at@gdi:modbus_write_regs(slave,addr,[data1,data2,..],datasize)",modbus_write_regs},
   {"synchronizeled", " Synchronize tube LEDs", "at@gdi:SynchronizeLED()",modbus_Synchronize_LED},
   {"led", " Set tube LED function", "at@gdi:led(tube,fn)",modbus_LED},
-  {"swupdate", " Start M0 SW update", "at@gdi:swupdate(tube,fn)",swupdate},
   { NULL, NULL, NULL, 0 }
 }; 
 
@@ -179,6 +177,7 @@ int send_led_cmd(u16 fn, long TubeId)
     p->reply=NULL; //No reply
     return xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);     
   }
+  return pdFALSE;
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -188,17 +187,17 @@ void gdi_send_result(u8 result)
 	if (result == response_OK)
 	{
     if(gdiEcho) {
-		  UART_SendMsg(uart, "\r\nOK\r\n" , 6);
+		  UART_SendMsg(uart, (u8 *)"\r\nOK\r\n" , 6);
     } else {
-		  UART_SendMsg(uart, "OK\r" , 6);
+		  UART_SendMsg(uart, (u8 *)"OK\r" , 6);
     }
 	}
 	else if (result == response_ERROR) 
   {
     if(gdiEcho) {
- 		  UART_SendMsg(uart, "\r\nERROR\r\n" , 9);
+ 		  UART_SendMsg(uart, (u8 *)"\r\nERROR\r\n" , 9);
     } else {
- 		  UART_SendMsg(uart, "NOK\r" , 9);
+ 		  UART_SendMsg(uart, (u8 *)"NOK\r" , 9);
     }   
 	}
 }
@@ -371,7 +370,7 @@ void gdi_parse_command(char * inputbuffer)
 	char *p;
 
 	/* change the input to lowercase characters */
-	for (p = inputbuffer ; *p; ++p) *p = tolower(*p);
+	for (p = inputbuffer ; *p; ++p) *p = (char)tolower((int)*p);
 
 	if (strncmp(inputbuffer, command_prefix,strlen(command_prefix)) != 0)
 		if((strlen(inputbuffer) == 2) && ( !strcmp(inputbuffer, "at") ))
@@ -515,87 +514,86 @@ void gdi_map_to_functions()
 {
 	int retvalue,	i=0;
 	u16 p = 9876;
-	u8 result, slave;
+	u8 slave;
 	u16 addr, datasize;
 #define SIZE_OF_STR_RESULT 400
 	u16 buffer[50];
   char str[SIZE_OF_STR_RESULT];
-  u16 seq_num,seq_id;
-  				uint16_t temp; /*Settemp in 0.1 degrees*/
-				uint32_t time; /*time in secs*/
-        char state;
-                     stageCmd_t data;
-            u8 nParams;
+  u16 seq_num;
+  uint16_t temp; /*Settemp in 0.1 degrees*/
+  uint32_t time; /*time in secs*/
+  char state;
+  stageCmd_t data;
 
   uid=0; //Rease value from last cmd
-	switch(gdi_req_func_info.func_type)
-	{
-		case at :
-			gdi_send_data_response("OK", newline_both);
-			break;
+  switch(gdi_req_func_info.func_type)
+  {
+    case at :
+      gdi_send_data_response("OK", newline_both);
+    break;
 
-		case help :
+    case help :
 			while(gdi_func_info_table[i].command_name != NULL)
 			{
 				gdi_send_data_response(gdi_func_info_table[i].func_info, newline_start);
 				gdi_send_data_response(" - ", no_newline);
 				gdi_send_data_response(gdi_func_info_table[i].func_format, newline_end);
 				i++;
-			}	
+			}
 			gdi_send_data_response("OK", newline_end);
-			break;
+    break;
 
     case reset :
       ResetHeaters();
       //Reset_Handler();
-      break;
+    break;
 
     case echo :
-      {
-        u8 echoSwitch;
-        echoSwitch = (u8)  atoi(*(gdi_req_func_info.parameters + 0));
-        gdiEcho = echoSwitch;
-  			gdi_send_data_response("OK", newline_end);
-      }
-      break;
+    {
+      u8 echoSwitch;
+      echoSwitch = (u8)  atoi(*(gdi_req_func_info.parameters + 0));
+      gdiEcho = echoSwitch;
+      gdi_send_data_response("OK", newline_end);
+    }
+    break;
 
 		case print :
 			gdi_print_number(test_variable,newline_both);
 			gdi_send_data_response("OK", newline_end);
-			break;	
+    break;
       
     case coolandlid:
-      {
-        s16 setpoint;
-        u8  fn_idx;
-        xMessage *msg;        
-        int result = TRUE;
+    {
+      s16 setpoint;
+      u8  fn_idx;
+      xMessage *msg;        
+      int result = TRUE;
 
-        if(!gdiEcho) {
-          uid = (u16) atoi(*(gdi_req_func_info.parameters + i));
-          i++;
-        }
-        SetCooleAndLidReq *p;
-        msg = pvPortMalloc(sizeof(xMessage)+sizeof(SetCooleAndLidReq)+20);
-        if(msg)
-        {
-  				fn_idx   = (u8)  atoi(*(gdi_req_func_info.parameters + i));
-          i++;
-  				setpoint = (s16) atoi(*(gdi_req_func_info.parameters + i));
-          if(6 > fn_idx) {
-            msg->ucMessageID = SET_COOLE_AND_LID;
-          } else {
-            result = FALSE;
-            gdi_send_data_response("NOK invalid fn", newline_end);
-          }
-          p = (SetCooleAndLidReq *)msg->ucData;
-          p->value = setpoint;
-          p->idx   = fn_idx;
-          xQueueSend(CoolAndLidQueueHandle, &msg, portMAX_DELAY);
-        }
+      if(!gdiEcho) {
+        uid = (u16) atoi(*(gdi_req_func_info.parameters + i));
+        i++;
       }
-			if(result) { gdi_send_data_response("OK", newline_end); }
-      break;
+      SetCooleAndLidReq *p;
+      msg = pvPortMalloc(sizeof(xMessage)+sizeof(SetCooleAndLidReq)+20);
+      if(msg)
+      {
+				fn_idx   = (u8)  atoi(*(gdi_req_func_info.parameters + i));
+        i++;
+				setpoint = (s16) atoi(*(gdi_req_func_info.parameters + i));
+        if(6 > fn_idx) {
+          msg->ucMessageID = SET_COOLE_AND_LID;
+        } else {
+          result = FALSE;
+          gdi_send_data_response("NOK invalid fn", newline_end);
+        }
+        p = (SetCooleAndLidReq *)msg->ucData;
+        p->value = setpoint;
+        p->idx   = fn_idx;
+        xQueueSend(CoolAndLidQueueHandle, &msg, portMAX_DELAY);
+      }
+      if(result) { gdi_send_data_response("OK", newline_end); }
+    }
+    break;
       
     case cool:
       {
@@ -611,7 +609,7 @@ void gdi_map_to_functions()
         msg = pvPortMalloc(sizeof(xMessage)+sizeof(SetCooleAndLidReq)+20);
         if(msg)
         {
-  				setpoint = (s16) atoi(*(gdi_req_func_info.parameters + i));
+          setpoint = (s16) atoi(*(gdi_req_func_info.parameters + i));
           if((setpoint >= -100)&&(setpoint <= 300)) {			// <= 100
             msg->ucMessageID = SET_COOL_TEMP;
           } else {
@@ -622,8 +620,8 @@ void gdi_map_to_functions()
           p->value = setpoint;
           xQueueSend(CoolAndLidQueueHandle, &msg, portMAX_DELAY);
         }
+        if(result) { gdi_send_data_response("OK", newline_end); }
       }
-			if(result) { gdi_send_data_response("OK", newline_end); }
       break;
 
     case lid:
@@ -657,8 +655,8 @@ void gdi_map_to_functions()
           p->idx   = fn_idx;
           xQueueSend(CoolAndLidQueueHandle, &msg, portMAX_DELAY);
         }
+        if(result) { gdi_send_data_response("OK", newline_end); }
       }
-			if(result) { gdi_send_data_response("OK", newline_end); }
       break;
 
     case lidpwm:
@@ -692,8 +690,8 @@ void gdi_map_to_functions()
           p->idx   = fn_idx;
           xQueueSend(CoolAndLidQueueHandle, &msg, portMAX_DELAY);
         }
+        if(result) { gdi_send_data_response("OK", newline_end); }
       }
-			if(result) { gdi_send_data_response("OK", newline_end); }
       break;
 
 
@@ -722,8 +720,8 @@ void gdi_map_to_functions()
           p->value = setpoint;
           xQueueSend(CoolAndLidQueueHandle, &msg, portMAX_DELAY);
         }
+        if(result) { gdi_send_data_response("OK", newline_end); }
       }
-			if(result) { gdi_send_data_response("OK", newline_end); }
       break;
 
 	  case seq:
@@ -916,7 +914,7 @@ void gdi_map_to_functions()
               }
               else
               {
-                gdi_send_data_response("NOK No sequence", newline_end);
+                gdi_send_data_response("NOK ", newline_end);
               }
             }
             else if(!strncmp((*(gdi_req_func_info.parameters + i + 1)),"tubestatus",strlen("tubestatus")))
@@ -942,7 +940,6 @@ void gdi_map_to_functions()
             {
             // GDI_PRINTF("tubestage[%s-%s-%s-%s-%s-%s]#%d",(*(gdi_req_func_info.parameters + 0)),(*(gdi_req_func_info.parameters + 1)),(*(gdi_req_func_info.parameters + 2)),(*(gdi_req_func_info.parameters + 3)),(*(gdi_req_func_info.parameters + 4)),(*(gdi_req_func_info.parameters + 5)),(*(gdi_req_func_info.number_of_parameters)));
             // i=i-1;
-               nParams = (gdi_req_func_info.number_of_parameters);
             // i=i+1;
                seq_num = (u16) atoi(*(gdi_req_func_info.parameters + i + 1));
                data.temp = (u16) atoi(*(gdi_req_func_info.parameters + 2 + i));
@@ -995,90 +992,95 @@ void gdi_map_to_functions()
       }
       //gdi_send_data_response("OK", newline_end);
       break;
-		
-		case test_func :
-			retvalue = test_function(p);
-			gdi_send_data_response("Function return value is : ", newline_start);
-			gdi_print_number(retvalue,newline_end);
-			gdi_send_data_response("OK", newline_end);
-			break;	
-			
-		case modbus_read_regs :
-			if (gdi_req_func_info.number_of_parameters < 3)
-				gdi_send_data_response("ERROR", newline_both);
-			else
-			{
-				slave = (u8) atoi(*(gdi_req_func_info.parameters + 0));
-				addr = (u16) atoi(*(gdi_req_func_info.parameters + 1));
-				datasize = (u16) atoi(*(gdi_req_func_info.parameters + 2)); 
 
-				gdi_send_data_response("slave, addr and datasize are = ", newline_start);
-				gdi_print_number(slave, space_end);
-				gdi_print_number(addr, space_end);
-				gdi_print_number(datasize, newline_end);
-				
-				if((0 == addr) || (0 == datasize))
-					gdi_send_data_response("ERROR", newline_both);
-				else
-				{
-					result = DebugModbusReadRegs(slave, addr, datasize, (u8 *)buffer);
+      case test_func :
+        retvalue = test_function(p);
+        gdi_send_data_response("Function return value is : ", newline_start);
+        gdi_print_number(retvalue,newline_end);
+        gdi_send_data_response("OK", newline_end);
+      break;
 
-          if(NO_ERROR == result)
-          {
-            gdi_send_data_response("The register values read are : ", no_newline);
-  					for (i=0; i<datasize;i++) { 
-              gdi_print_wrong_endian_number(buffer[i], space_end); 
+      case modbus_read_regs :
+      {
+        u8 result;
+        if (gdi_req_func_info.number_of_parameters < 3)
+          gdi_send_data_response("ERROR", newline_both);
+        else
+        {
+          slave = (u8) atoi(*(gdi_req_func_info.parameters + 0));
+          addr = (u16) atoi(*(gdi_req_func_info.parameters + 1));
+          datasize = (u16) atoi(*(gdi_req_func_info.parameters + 2)); 
+
+          gdi_send_data_response("slave, addr and datasize are = ", newline_start);
+          gdi_print_number(slave, space_end);
+          gdi_print_number(addr, space_end);
+          gdi_print_number(datasize, newline_end);
+
+          if((0 == addr) || (0 == datasize)) {
+            gdi_send_data_response("ERROR", newline_both);
+          } else {
+            result = DebugModbusReadRegs(slave, addr, datasize, (u8 *)buffer);
+
+            if(NO_ERROR == result)
+            {
+              gdi_send_data_response("The register values read are : ", no_newline);
+              for (i=0; i<datasize;i++) { 
+                gdi_print_wrong_endian_number(buffer[i], space_end); 
+              }
+            }
+            gdi_send_data_response("The return value is : ", newline_start);
+            gdi_print_number(result, newline_end);
+            if(result == NO_ERROR)
+            {
+              gdi_send_data_response("OK", newline_end);
+            }
+            else
+            {
+              gdi_send_data_response("ERROR", newline_end);
+            }
+
+          }
+        }
+      }
+      break;
+
+      case modbus_write_regs :
+      {
+        u8 result;
+        if (gdi_req_func_info.number_of_parameters < 3)
+          gdi_send_data_response("ERROR", newline_both);
+        else
+        {
+          result = gdi_get_regwrite_values(buffer);	
+          if (result == 0) {
+            gdi_send_data_response("ERROR", newline_both);
+          } else {
+            slave = (u8) atoi(*(gdi_req_func_info.parameters + 0));
+            addr = (u16) atoi(*(gdi_req_func_info.parameters + 1));
+            datasize = (u16) atoi(*(gdi_req_func_info.parameters + result)); 
+
+            gdi_send_data_response("slave, addr and datasize are : ", newline_start);
+            gdi_print_number(slave, space_end);
+            gdi_print_number(addr, space_end);
+            gdi_print_number(datasize, newline_end);
+            gdi_send_data_response("The register values to write are : ", no_newline);
+            for(i=0;i < datasize;i++) {
+              gdi_print_wrong_endian_number(buffer[i], space_end);
+            }
+            result = DebugModbusWriteRegs(slave,addr, (u8 *)buffer, datasize);
+
+            gdi_send_data_response("The return value is : ", newline_start);
+            gdi_print_number(result, newline_end);
+
+            if (result != NO_ERROR) {
+              gdi_send_data_response("Register Write Failed!", newline_end);
+            } else {
+              gdi_send_data_response("OK", newline_end);
             }
           }
-					gdi_send_data_response("The return value is : ", newline_start);
-					gdi_print_number(result, newline_end);
-          if(result == NO_ERROR)
-          {
-					  gdi_send_data_response("OK", newline_end);
-          }
-          else
-          {
-            gdi_send_data_response("ERROR", newline_end);
-          }
-
-				}
-			}	
-			break;
-
-		case modbus_write_regs :
-			if (gdi_req_func_info.number_of_parameters < 3)
-				gdi_send_data_response("ERROR", newline_both);
-			else
-			{
-				result = gdi_get_regwrite_values(buffer);	
-				if (result == 0)
-					gdi_send_data_response("ERROR", newline_both);
-				else
-				{
-					slave = (u8) atoi(*(gdi_req_func_info.parameters + 0));
-					addr = (u16) atoi(*(gdi_req_func_info.parameters + 1));
-					datasize = (u16) atoi(*(gdi_req_func_info.parameters + result)); 
-
-					gdi_send_data_response("slave, addr and datasize are : ", newline_start);
-					gdi_print_number(slave, space_end);
-					gdi_print_number(addr, space_end);
-					gdi_print_number(datasize, newline_end);
-					gdi_send_data_response("The register values to write are : ", no_newline);
-					for(i=0;i < datasize;i++) {
-						gdi_print_wrong_endian_number(buffer[i], space_end);
-          }
-					result = DebugModbusWriteRegs(slave,addr, (u8 *)buffer, datasize);
-
-					gdi_send_data_response("The return value is : ", newline_start);
-					gdi_print_number(result, newline_end);
-					
-					if (result != NO_ERROR)
-						gdi_send_data_response("Register Write Failed!", newline_end);
-					else
-						gdi_send_data_response("OK", newline_end);
-				}
-			}	
-			break;
+        }
+      }
+      break;
 
     case modbus_Synchronize_LED:
       //void WriteTubeHeaterReg(u8 tube '=0', u16 reg '=0', u16 *data 'no data', u16 datasize '=0')
@@ -1101,7 +1103,7 @@ void gdi_map_to_functions()
           p->datasize=0; //datasize;
           p->reply=NULL; //No reply
           xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);      
-    			gdi_send_data_response("OK", newline_end);
+          gdi_send_data_response("OK", newline_end);
         }
       }
       break;
@@ -1109,8 +1111,6 @@ void gdi_map_to_functions()
     case modbus_LED:
       //  {"led", " Set tube LED function", "at@gdi:led(fn)",modbus_LED},
       {
-        xMessage *msg;
-        WriteModbusRegsReq *p;
         long TubeId = 0;
         int i = 0;
         int cmd;
@@ -1160,7 +1160,7 @@ void gdi_map_to_functions()
             if(pdTRUE != send_led_cmd(fn, TubeId)) { result = 0; }
           }
         }
-  			if(result) { 
+        if(result) { 
           gdi_send_data_response("OK", newline_end);
   			} else {
           gdi_send_data_response("NOK Param out of range", newline_end);
@@ -1168,69 +1168,19 @@ void gdi_map_to_functions()
       }
       break;
 
-    case swupdate:
-      {
-        xMessage *msg;
-        SetSSUpdateReq *p;
-        long TubeId = 0;
-        int i = 0;
-        int cmd;
-        u16 fn;
-        int result = 1;
-        
-        if(!gdiEcho) {
-          uid = (u16) atoi(*(gdi_req_func_info.parameters + i));
-          i++;
-        }
-        //TubeId = (u16) atoi(*(gdi_req_func_info.parameters + i));
-        //i++;
-        cmd = (u16) atoi(*(gdi_req_func_info.parameters + i));
-        i++;
-
-        if(1 == cmd)
-        {
-          result = SWU_start_task();
-          if(result) { 
-            gdi_send_data_response("OK", newline_end);
-          } else {
-            gdi_send_data_response("NOK failed", newline_end);
-          }
-        }
-        else
-        {
-          msg = pvPortMalloc(sizeof(xMessage)+sizeof(WriteModbusRegsReq)/*+datasize*sizeof(u16)*/);
-          if(msg)
-          {
-            msg->ucMessageID = START_SWU;
-            p = (SetSSUpdateReq *)msg->ucData;
-            p->value = cmd;
-            xQueueSend(SwuQueueHandle, &msg, portMAX_DELAY);
-            if(result) { 
-              gdi_send_data_response("OK", newline_end);
-            } else {
-              gdi_send_data_response("NOK Param out of range", newline_end);
-            }
-          }
-          else
-          {          
-            gdi_send_data_response("NOK malloc failed", newline_end);
-          }
-        }
-      }
-      break;
-
-		case invalid_command :
+    case invalid_command :
+    {
       if(gdiEcho) {
-			  gdi_send_data_response("ERROR", newline_both);
-			  gdi_send_data_response("Invalid Command - type at@gdi:help()", newline_end);
+        gdi_send_data_response("ERROR", newline_both);
+        gdi_send_data_response("Invalid Command - type at@gdi:help()", newline_end);
       }else{
-			  gdi_send_data_response("NOK Invalid Command", newline_end);
-              gdi_send_data_response(input_buffer[0], newline_end);
-              gdi_send_data_response(input_buffer[1], newline_end);
+        gdi_send_data_response("NOK Invalid Command", newline_end);
+        gdi_send_data_response(input_buffer[0], newline_end);
+        gdi_send_data_response(input_buffer[1], newline_end);
       }
-			break;
-	}
-			
+    }
+    break;
+  }
 }
 
 void recieveCMD(void)
@@ -1249,7 +1199,7 @@ void recieveCMD(void)
 
   if (CHAR_ENTER == data)/*Enter detected interpret CMD */
   {
-    input_buffer[inputCmdBuf][index] = '\0';
+    input_buffer[(int)inputCmdBuf][index] = '\0';
     /*unlock mutex to continue in GDI task*/
     xSemaphoreGiveFromISR( GDI_RXSemaphore, &xHigherPriorityTaskWoken);
     
@@ -1268,7 +1218,7 @@ void recieveCMD(void)
     {
       if((' ' <= data) && ('~' >= data))
       {
-        input_buffer[inputCmdBuf][index++] = data;
+        input_buffer[(int)inputCmdBuf][index++] = data;
         if(INPUT_BUF_SIZE <= index)
         {
           gdi_send_msg_response("NOK INPUT BUFFER OVERRUN !!!");
@@ -1294,7 +1244,6 @@ void gdi_init_req_func_info()
 
 void gdi_deinit_req_func_info()
 {
-extern void* xStart;
   if (gdi_req_func_info.parameters)
   {
  //   GDI_PRINTF("GDI deinit params:%x",gdi_req_func_info.number_of_parameters);

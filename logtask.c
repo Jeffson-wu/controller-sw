@@ -33,12 +33,15 @@
 #include "trcConfig.h"
 #include "trcHardwarePort.h"
 #include "../heater-sw/heater_reg.h"
+#include "logtask.h"
+#include "util.h"
 
 extern xQueueHandle ModbusQueueHandle;
 extern xTimerHandle yTimer[];
 xQueueHandle LogQueueHandle;
 
-
+void LogOn(int log_time);
+void LogOff();
 
 /* Private define ------------------------------------------------------------*/
 #define NUM_OF_TUBES 16+1
@@ -141,11 +144,11 @@ logDataElement_t * dequeue(logDataQueue_t * pQueue)
   logDataElement_t * pElement;
 
   taskENTER_CRITICAL(); //push irq state
-	if(pQueue->tail == pQueue->head) {pElement = NULL; } // Return null if queue is empty
+  if(pQueue->tail == pQueue->head) {pElement = NULL; } // Return null if queue is empty
   else {
-		pQueue->head++;
-		pElement = &pQueue->logDataElement[pQueue->head % LOG_QUEUE_SIZE];
-	}
+    pQueue->head++;
+    pElement = &pQueue->logDataElement[pQueue->head % LOG_QUEUE_SIZE];
+  }
 #ifdef DEBUG
   h = pQueue->head; 
   t = pQueue->tail;
@@ -156,9 +159,8 @@ logDataElement_t * dequeue(logDataQueue_t * pQueue)
 }
 
 /* ---------------------------------------------------------------------------*/
-int dataQueueAdd(u8 tubeId, u16 seqNumber, u8 data[])
+void dataQueueAdd(u8 tubeId, u16 seqNumber, u8 data[])
 {
-  uint16_t modbus_data;
   cur_tubeid = tubeId;
   int i;
   logDataElement_t * poutData;
@@ -179,13 +181,14 @@ int dataQueueAdd(u8 tubeId, u16 seqNumber, u8 data[])
   {
     DEBUG_LOG_PRINTF("T%d:dataQueueAdd - buffer full",tubeId);
   }
+  
 }
 
+/* ---------------------------------------------------------------------------*/
 void emptyLog(int tubeId)
 {
   while(NULL != dequeue(&logDataQueue[tubeId-1]));  //idx=[0..15]
 }
-
 
 /* ---------------------------------------------------------------------------*/
 int getLog(char *poutText,int tubeId )
@@ -291,7 +294,6 @@ void vReadTubeTemp(xTimerHandle pxTimer )
 {
   xMessage *msg;
   ReadModbusRegsReq *p;
-  portBASE_TYPE taskWoken = pdTRUE;
   int tube;
 
   for(tube=1;tube<17;tube++)
@@ -375,7 +377,7 @@ void LogTask( void * pvParameters )
           if( (TUBE1_TEMP_REG == modbus_addr) || (TUBE2_TEMP_REG == modbus_addr)||(TUBE3_TEMP_REG == modbus_addr) || (TUBE4_TEMP_REG == modbus_addr) )
           { // Debug Logging
             modbus_data =(((u16)(preg->data[0])<<8)|(preg->data[1]));
-            sprintf(message,"T%d:%d.%01dC ",TubeId,modbus_data/10,modbus_data%10);
+            sprintf(message,"T%ld:%d.%01dC ",TubeId,modbus_data/10,modbus_data%10);
             for(i=0;i<strlen(message);i++)
             {
               while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);

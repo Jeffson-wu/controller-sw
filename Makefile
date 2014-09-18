@@ -13,12 +13,7 @@ TARGET = arm-none-eabi-
 CC = $(TARGET)gcc
 OBJCOPY = $(TARGET)objcopy
 INCLUDES = -I ./include -I ./board -I ./arch -I ./freertos/include -I ./ -I ./freertos/portable/GCC/ARM_CM3 -I ./GenericRecorderLibSrc/Include -I./GenericRecorderLibSrc/KernelPorts/FreeRTOS -I./GenericRecorderLibSrc/ConfigurationTemplate
-ifdef EVAL
-# Type make EVAL=Y to build for STM3210C-EVAL board
-CFLAGS = -g -O0 -c -mcpu=cortex-m3 -mthumb -D__START=main -D__STARTUP_CLEAR_BSS -DSTM32F1XX -DSTM32F10C_EVAL -DUSE_STDPERIPH_DRIVER $(INCLUDES)
-else
-CFLAGS = -g -O0 -c -mcpu=cortex-m3 -mthumb -D__START=main -D__STARTUP_CLEAR_BSS -DSTM32F1XX -DUSE_STDPERIPH_DRIVER $(INCLUDES)
-endif
+CFLAGS = -g -O0 -c -Wall -mcpu=cortex-m3 -mthumb -D__START=main -D__STARTUP_CLEAR_BSS -DSTM32F1XX -DUSE_STDPERIPH_DRIVER $(INCLUDES)
 
 LDFLAGS = -T arch/stm32f1x.ld -mcpu=cortex-m3 -mthumb -nostartfiles -Wl,--gc-section
 LIBS = -lc -lgcc -lnosys
@@ -28,6 +23,7 @@ PROGRAM = controller
 
 SOURCES = \
     main.c \
+    util.c \
     serial.c \
     modbus.c \
     gdi.c \
@@ -39,7 +35,6 @@ SOURCES = \
     jsmn/jsmn.c \
     cooleandlidtask.c \
     logtask.c \
-    swupdatetask.c \
 	pid.c \
     arch/startup.S \
     arch/system_stm32f10x.c \
@@ -94,7 +89,7 @@ $(PROGRAM): $(OBJECTS)
 	@echo "done"
 
 $(PROGRAM).hex: $(PROGRAM)
-	@$(OBJCOPY) -O srec $< $@
+	@$(OBJCOPY) -O ihex $< $@
 
 $(OBJECTS_DIR)/%.o: %.c
 	@echo "Compiling $<"

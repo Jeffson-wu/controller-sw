@@ -21,9 +21,9 @@
 #include "semphr.h"
 #include "timers.h"
 #include "task.h"
+#include "gdi.h"
 #include "ads1148.h"
 #define DEBUG
-#define REV_2
 #ifdef DEBUG
 #include <stdio.h>
 #endif
@@ -34,8 +34,6 @@
 static const uint8_t muxLookup[4] = {0x01, 0x13, 0x25, 0x37};
 static const uint8_t idacMuxLookup[4] = {0x01, 0x23, 0x45, 0x67};
 static const uint8_t nopbuf [4] = {0xFF, 0xFF, 0xFF, 0xFF}; // For RO operations write NOPs
-static uint8_t txbuf [4];
-static uint8_t rxbuf [4];
 __IO int16_t latestConv[4];
 
 #ifdef DEBUG
@@ -141,7 +139,6 @@ void adsGPIOInit(void)
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_OD;
   GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
   GPIO_Init(GPIOA, &GPIO_InitStructure);
-#ifdef REV_2
 /* Configure the ADS_RESET pin */
   GPIO_InitStructure.GPIO_Pin = ADS_RESET_PIN;
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_OD;
@@ -159,19 +156,6 @@ void adsGPIOInit(void)
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPU;
   GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
   GPIO_Init(GPIOC, &GPIO_InitStructure);
-
-#else  /* Configure the ADS_DRDY pin */
-  GPIO_InitStructure.GPIO_Pin = ADS_DRDY_PIN;
-  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPU;
-  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
-  GPIO_Init(GPIOB, &GPIO_InitStructure);
-
-  /* Configure the ADS_START and ADS_RESET pins */
-  GPIO_InitStructure.GPIO_Pin = ADS_START_PIN | ADS_RESET_PIN;
-  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_OD;
-  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
-  GPIO_Init(GPIOC, &GPIO_InitStructure);
-#endif
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -188,11 +172,7 @@ void adsIrqInit(void)
   EXTI_Init(&EXTI_InitStructure);
 
   GPIO_EXTILineConfig(ADS_EXTI_PORTSOURCE , ADS_DRDY_PINSOURCE);
-#ifdef REV_2
   NVIC_InitStructure.NVIC_IRQChannel = EXTI1_IRQn;
-#else
-  NVIC_InitStructure.NVIC_IRQChannel = EXTI15_10_IRQn;
-#endif
   NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
   NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0x0E; //Low prio
   NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0x0E; //Low prio
@@ -343,7 +323,7 @@ int adsDetectHW(void)
 int adsDetectSensor(void)
 {
 #define FS 0x7F00  //32512
-  int i, j; // iterator
+  int i; // iterator
   int16_t value;
   uint8_t tx[6];
   uint8_t rx[6];
@@ -390,6 +370,7 @@ int adsDetectSensor(void)
       ret = FALSE;
     }
   }
+  return ret;
 }
 /* ---------------------------------------------------------------------------*/
 /* Public functions ----------------------------------------------------------*/
@@ -417,18 +398,10 @@ int ads1148Init(void)
   int ret = 0;
 
   adsGPIOInit();
-  #ifdef REV_2
   GPIO_ResetBits(GPIOB, ADS_RESET_PIN);
-    // Keep ADS1148 reset active for 1,1us minimun using internal osc. Spend waiting time initialasing SPI.
-    spiInit();
-    GPIO_SetBits(GPIOB, ADS_RESET_PIN);
-
-  #else
-  GPIO_ResetBits(GPIOC, ADS_RESET_PIN);
   // Keep ADS1148 reset active for 1,1us minimun using internal osc. Spend waiting time initialasing SPI.
   spiInit();
-  GPIO_SetBits(GPIOC, ADS_RESET_PIN);
-#endif
+  GPIO_SetBits(GPIOB, ADS_RESET_PIN);
   GPIO_ResetBits(GPIOA, ADS_CS_PIN); // Activate Chip Select pin
 
   // START needs to be high to enable all cmds
@@ -480,12 +453,7 @@ int ads1148Init(void)
 /* ---------------------------------------------------------------------------*/
 uint8_t adsGetDrdy(void)
 {
-#ifdef REV_2
-return GPIO_ReadInputDataBit(GPIOC, ADS_DRDY_PIN);
-#else
-  return GPIO_ReadInputDataBit(GPIOB, ADS_DRDY_PIN);
-#endif
-  //Bit_SET, Bit_RESET
+  return GPIO_ReadInputDataBit(GPIOC, ADS_DRDY_PIN);
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -709,8 +677,7 @@ void adsGetLatest(int16_t * ch0value, int16_t * ch1value, int16_t * ch2value, in
 void adsConfigConversionTimer(tmrTIMER_CALLBACK convStartFn)
 {
   xTimerHandle xTimer;
-  signed portBASE_TYPE * pxReschedule = pdFALSE;
-  xTimer= xTimerCreate("ADCTimer",      // Just a text name, not used by the kernel.
+  xTimer= xTimerCreate((signed char *)"ADCTimer",      // Just a text name, not used by the kernel.
                        ((configTICK_RATE_HZ)/SAMPLING_FREQUENCY),  // conversion frequency.
                        pdTRUE,          // The timers will auto-reload themselves when they expire.
                        (void *) 1,      // Assign each timer a unique id equal to its array index.

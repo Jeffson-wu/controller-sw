@@ -395,7 +395,7 @@
  * This needs to be correctly defined to see status reports from the trace 
  * status monitor task (this is defined in trcUser.c).
  ******************************************************************************/         
-#define vTraceConsoleMessage(fmt, args...)   {buf[100]; sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);}
+#define vTraceConsoleMessage(fmt, args...)   {char buf[100]; sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);}
 
 /*******************************************************************************
  * vTracePortGetTimeStamp

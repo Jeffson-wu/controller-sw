@@ -25,9 +25,12 @@
 /* Exported macro ------------------------------------------------------------*/
 /* Exported variables ------------------------------------------------------- */
 /* Exported functions ------------------------------------------------------- */
-extern void vReadTubeTemp(xTimerHandle pxTimer );
-extern void LogTask( void * pvParameters );
-extern void sendLog();
+void vReadTubeTemp(xTimerHandle pxTimer );
+void LogTask( void * pvParameters );
+void sendLog();
+void emptyLog(int tubeId);
+int getLog(char *poutText,int tubeId );
+
 #endif /* __LOGTASK_H */
 
 /************************ (C) COPYRIGHT Xtel *****END OF FILE****/
