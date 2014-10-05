@@ -22,8 +22,6 @@ typedef enum
   Extension,
   Incubation,
   Pause,
-  LoopStart,
-  LoopEnd,
   End
 }Tubestage_t;
 
@@ -38,16 +36,10 @@ typedef struct
 void Heater_PinConfig(void);
 void heaterIrqInit(void);
 
-int create_seq(long TubeId, uint16_t temp, int Nstages);
-bool insert_state_to_seq(long TubeId, char stageChar, uint32_t time, uint16_t temp );
 bool start_tube_seq(long TubeId);
 bool stop_tube_seq(long TubeId);
-void pause_tube_seq(void);
-void continue_tube_seq(void);
 
 char *get_tube_state(long TubeId, char *poutText);
-char *get_system_state(char *poutText);
-void set_log_interval(long Log_Interval);
 bool tubedataQueueAdd(u8 tubeId, u16 seq_num, char state, stageCmd_t *data);
 bool pause_tube_state(long TubeId);
 

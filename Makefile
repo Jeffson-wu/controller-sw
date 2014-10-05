@@ -30,9 +30,6 @@ SOURCES = \
     pwm.c \
     ads1148.c \
     sequencer.c \
-    jsmn/decode_script.c \
-    jsmn/json.c \
-    jsmn/jsmn.c \
     cooleandlidtask.c \
     logtask.c \
 	pid.c \

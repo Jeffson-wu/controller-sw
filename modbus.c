@@ -113,13 +113,13 @@ static uint16_t gen_crc16(const uint8_t *buf, int len)
   for (pos = 0; pos < len; pos++) {
     crc ^= (uint16_t)buf[pos];          // XOR byte into least sig. byte of crc
  
-    for (i = 8; i != 0; i--) {    // Loop over each bit
-      if ((crc & 0x0001) != 0) {      // If the LSB is set
-        crc >>= 1;                    // Shift right and XOR 0xA001
+    for (i = 8; i != 0; i--) {          // Loop over each bit
+      if ((crc & 0x0001) != 0) {        // If the LSB is set
+        crc >>= 1;                      // Shift right and XOR 0xA001
         crc ^= 0xA001;
       }
-      else                            // Else LSB is not set
-        crc >>= 1;                    // Just shift right
+      else                              // Else LSB is not set
+        crc >>= 1;                      // Just shift right
     }
   }
   // Note, this number has low and high bytes swapped, so use it accordingly (or swap bytes)
@@ -233,7 +233,7 @@ static USART_ERROR ModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer)
   ERR = waitForRespons(telegram, &telegramsize);
   if(ERR != NO_ERROR)
   {
-  return ERR;
+    return ERR;
   }
   memcpy(buffer, telegram, datasize*sizeof(u16)>telegramsize?telegramsize:datasize*sizeof(u16));
   if(telegramsize-5<=0)
@@ -392,12 +392,12 @@ void Modbus_init(USART_TypeDef *uart)
 
 u8 DebugModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer)
 {
-   return ModbusReadRegs(slave, addr, datasize, buffer);
+  return ModbusReadRegs(slave, addr, datasize, buffer);
 }
 
 bool DebugModbusWriteRegs(u8 slave, u16 addr, u8 *data, u16 datasize)
 {
-   return ModbusWriteRegs(slave, addr, data, datasize);
+  return ModbusWriteRegs(slave, addr, data, datasize);
 }
 
 

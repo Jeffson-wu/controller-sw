@@ -36,7 +36,6 @@ enum
   START_LID_HEATING,
   STOP_LID_HEATING,
   SET_LID_PWM,
-  INIT_TUBE_SEQ
 };
 
 typedef enum 

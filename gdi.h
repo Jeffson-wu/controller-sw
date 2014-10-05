@@ -13,9 +13,6 @@
   ******************************************************************************
   */ 
 
-#define MAIN_IF_REV2
-
-
  void gdi_init();
  void gdi_send_msg_on_monitor(char * response);
  void gdi_send_msg_response(char * response);

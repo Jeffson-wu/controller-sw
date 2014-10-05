@@ -287,7 +287,7 @@ void LogOn(int log_time)/*In secs*/
 
 void LogOff()
 {
-if( xTimerStop( yTimer[2], 0 ) != pdPASS );
+  if( xTimerStop( yTimer[2], 0 ) != pdPASS );
 }
 
 void vError_LEDToggle(xTimerHandle pxTimer )
@@ -312,31 +312,31 @@ void ConfigOSTimer ()
   int r= 5; 
   int i = 0;
   yTimer[0]= xTimerCreate((signed char *)"HeartbeatTimer", // Just a text name, not used by the kernel.
-              ( 100 * x ),   // The timer period in ticks.
-              pdTRUE, // The timers will auto-reload themselves when they expire.
-              ( void * ) 100, // Assign each timer a unique id equal to its array index.
-              vHeartBeat_LEDToggle // Each timer calls the same callback when it expires.
+              ( 100 * x ),          // The timer period in ticks.
+              pdTRUE,               // The timers will auto-reload themselves when they expire.
+              ( void * ) 100,       // Assign each timer a unique id equal to its array index.
+              vHeartBeat_LEDToggle  // Each timer calls the same callback when it expires.
               );
   yTimer[1]= xTimerCreate((signed char *)"ErrorLedTimer", // Just a text name, not used by the kernel.
-              ( 100 * y ),   // The timer period in ticks.
-              pdTRUE,  // The timers will auto-reload themselves when they expire.
-              ( void * ) 102,// Assign each timer a unique id equal to its array index.
-              vError_LEDToggle // Each timer calls the same callback when it expires.
+              ( 100 * y ),          // The timer period in ticks.
+              pdTRUE,               // The timers will auto-reload themselves when they expire.
+              ( void * ) 102,       // Assign each timer a unique id equal to its array index.
+              vError_LEDToggle      // Each timer calls the same callback when it expires.
               );
   yTimer[2]= xTimerCreate((signed char *)"LogTimer",       // Just a text name, not used by the kernel.
-              ( 100 * z ),     // The timer period in ticks.
-              pdTRUE,     // The timers will auto-reload themselves when they expire.
-              ( void * ) 103,   // Assign each timer a unique id equal to its array index.
-              vReadTubeTemp   // Each timer calls the same callback when it expires.
+              ( 100 * z ),          // The timer period in ticks.
+              pdTRUE,               // The timers will auto-reload themselves when they expire.
+              ( void * ) 103,       // Assign each timer a unique id equal to its array index.
+              vReadTubeTemp         // Each timer calls the same callback when it expires.
               );
   yTimer[3]= xTimerCreate((signed char *)"ResetHeaters",       // Just a text name, not used by the kernel.
-              ( 100 * r ),     // The timer period in ticks.
-              pdTRUE,     // The timers will auto-reload themselves when they expire.
-              ( void * ) 104,   // Assign each timer a unique id equal to its array index.
-              vHeatersReset   // Each timer calls the same callback when it expires.
+              ( 100 * r ),          // The timer period in ticks.
+              pdTRUE,               // The timers will auto-reload themselves when they expire.
+              ( void * ) 104,       // Assign each timer a unique id equal to its array index.
+              vHeatersReset         // Each timer calls the same callback when it expires.
               );
 
-  for (i=0;i<1;i++)/*Only start Heartbeat timer, error timer will be started when needed to flash errorled*/
+  for (i = 0; i < 1; i++)/*Only start Heartbeat timer, error timer will be started when needed to flash errorled*/
   {
     if( yTimer[i] == NULL )
     {
@@ -393,6 +393,9 @@ void vApplicationStackOverflowHook( xTaskHandle *pxTask, signed char *pcTaskName
 
 void init_os_trace()
 {
+#define ID_ISR_TIMER1 1       // lowest valid ID is 1
+#define PRIO_OF_ISR_TIMER1 3  // the hardware priority of the interrupt
+  
   /* Put the recorder data structure on the heap (malloc), if no 
   static allocation. (See TRACE_DATA_ALLOCATION in trcConfig.h). */
 #ifdef _PORT_INIT_EXISTS
@@ -407,13 +410,7 @@ void init_os_trace()
     vTraceConsoleMessage("OS trace started ");
     vTraceConsoleMessage("Compiled: %s @ %s",(uint8_t *)__TIME__,(uint8_t *)__DATE__);
     vTraceUserEvent(1);
-
-
-#define ID_ISR_TIMER1 1       // lowest valid ID is 1
-#define PRIO_OF_ISR_TIMER1 3  // the hardware priority of the interrupt
-
-vTraceSetISRProperties(ID_ISR_TIMER1, "ISRTimer1", PRIO_OF_ISR_TIMER1);
-
+    vTraceSetISRProperties(ID_ISR_TIMER1, "ISRTimer1", PRIO_OF_ISR_TIMER1);
   }
 }
 
@@ -493,15 +490,15 @@ int main(void)
   xTaskCreate( TubeSequencerTask, ( const signed char * ) "TubeSeq task", ( unsigned short ) 1000, NULL, ( ( unsigned portBASE_TYPE ) 4 ) | portPRIVILEGE_BIT, &pvTubeSequencerTaskTask );
 
 #if 1
-  for(i=1;i<17;i++)
+  for(i = 1; i < 17; i++)
   {
     TubeId = i;
-    msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
+    msg = pvPortMalloc(sizeof(xMessage)+sizeof(long));
     if(msg)
     {
-      msg->ucMessageID=TUBE_TEST_SEQ;
-      p=(long *)msg->ucData;
-      *p=TubeId;
+      msg->ucMessageID = TUBE_TEST_SEQ;
+      p = (long *)msg->ucData;
+      *p = TubeId;
       xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
     }
   }
@@ -528,7 +525,7 @@ void assert_failed(unsigned char* file, unsigned int line)
   
   vTraceConsoleMessage("Assertion: %s line: %d", file, line);
 
-  GPIO_SetBits(GPIOB,GPIO_Pin_11); /* Turn on error LED */
+  GPIO_SetBits(GPIOB,GPIO_Pin_11);  /* Turn on error LED */
   GPIO_ResetBits(GPIOC,GPIO_Pin_9); /* Turn off hartbeat LED */
   /* Infinite loop */
   while (1)
@@ -539,11 +536,11 @@ void assert_failed(unsigned char* file, unsigned int line)
 
 void HardFault_Handler(void)
 {
-  GPIO_SetBits(GPIOB,GPIO_Pin_11); /* Turn on error LED */
+  GPIO_SetBits(GPIOB,GPIO_Pin_11);  /* Turn on error LED */
   GPIO_ResetBits(GPIOC,GPIO_Pin_9); /* Turn off hartbeat LED */
   
-  GPIO_SetBits(GPIOB,GPIO_Pin_0); /* Turn on RX LED */
-  GPIO_SetBits(GPIOB,GPIO_Pin_1); /* Turn on TX LED */
+  GPIO_SetBits(GPIOB,GPIO_Pin_0);   /* Turn on RX LED */
+  GPIO_SetBits(GPIOB,GPIO_Pin_1);   /* Turn on TX LED */
   while (1) {}
 }
 

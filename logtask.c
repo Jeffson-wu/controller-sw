@@ -83,8 +83,8 @@ u8 cur_tubeid = 0;
 
 /* Private function prototypes -----------------------------------------------*/
 void SERIAL_String(const char *string);
-/* Private functions ---------------------------------------------------------*/
 
+/* Private functions ---------------------------------------------------------*/
 void SERIAL_String(const char *string)
 {
   USART_TypeDef *uart = USART1;
@@ -120,11 +120,11 @@ logDataElement_t * enqueue(logDataQueue_t * pQueue)
   logDataElement_t * pElement;
 
   taskENTER_CRITICAL(); //push irq state
-	if((pQueue->tail - LOG_QUEUE_SIZE) == pQueue->head) { pElement = NULL; } // Return null if queue is full
-	else {
-	  pQueue->tail++;
+  if((pQueue->tail - LOG_QUEUE_SIZE) == pQueue->head) { pElement = NULL; } // Return null if queue is full
+  else {
+    pQueue->tail++;
     pElement = &pQueue->logDataElement[pQueue->tail % LOG_QUEUE_SIZE];
-	}
+  }
 #ifdef DEBUG
   h = pQueue->head; 
   t = pQueue->tail;
@@ -247,13 +247,6 @@ int getLog(char *poutText,int tubeId )
 }
 
 /* ---------------------------------------------------------------------------*/
-/* at@gdi:seq_cmd(getlog)\n                                                   */
-/* Response:                                                                  */
-/* LOG:(tube1:<tempX>,<tempX>,<tempX>,<tempX>,<tempX>,<tempX>,<tempX>;        */
-/*      tube2:<tempX>,<tempX>,<tempX>,<tempX>;tube12:<tempX>,<tempX>;)       */
-/*                                                                            */
-/* Where <tempX> is the logged temperature in deci C and printed in HEX       */ 
-/* ---------------------------------------------------------------------------*/
 void sendLog()
 {
   int tubeId = 0;
@@ -296,13 +289,13 @@ void vReadTubeTemp(xTimerHandle pxTimer )
   ReadModbusRegsReq *p;
   int tube;
 
-  for(tube=1;tube<17;tube++)
+  for(tube = 1; tube < 17; tube++)
   {
     if(log_tubes[tube]== TRUE)
     {
-      msg=pvPortMalloc(sizeof(xMessage)+sizeof(ReadModbusRegsReq));
-      msg->ucMessageID=READ_MODBUS_REGS;
-      p=(ReadModbusRegsReq *)msg->ucData;
+      msg = pvPortMalloc(sizeof(xMessage)+sizeof(ReadModbusRegsReq));
+      msg->ucMessageID = READ_MODBUS_REGS;
+      p = (ReadModbusRegsReq *)msg->ucData;
       if((tube%4) == 0)
       {
         p->addr=TUBE4_TEMP_REG;      
@@ -316,9 +309,9 @@ void vReadTubeTemp(xTimerHandle pxTimer )
       {
         p->addr=TUBE1_TEMP_REG;
       }
-      p->datasize=1;
-      p->reply=LogQueueHandle;
-      p->slave=tube/*+0x02*/;
+      p->datasize = 1;
+      p->reply = LogQueueHandle;
+      p->slave = tube;
       xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);
     }
   }
