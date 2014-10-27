@@ -1,5 +1,6 @@
 ;/*
-;    FreeRTOS V7.5.2 - Copyright (C) 2013 Real Time Engineers Ltd.
+;    FreeRTOS V8.1.2 - Copyright (C) 2014 Real Time Engineers Ltd.
+;    All rights reserved
 ;
 ;
 ;    ***************************************************************************
@@ -70,7 +71,7 @@
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; SVC handler is used to start the scheduler and yield a task.
+; SVC handler is used to yield a task.
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 FreeRTOS_SWI_Handler
 
@@ -80,10 +81,15 @@ FreeRTOS_SWI_Handler
 	portSAVE_CONTEXT
 	LDR R0, =vTaskSwitchContext
 	BLX	R0
-
-vPortRestoreTaskContext
 	portRESTORE_CONTEXT
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; vPortRestoreTaskContext is used to start the scheduler.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+vPortRestoreTaskContext
+	; Switch to system mode
+	CPS		#SYS_MODE
+	portRESTORE_CONTEXT
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; PL390 GIC interrupt handler
@@ -125,12 +131,13 @@ FreeRTOS_IRQ_Handler
 
 	; Call the interrupt handler
 	PUSH	{r0-r3, lr}
-	BL		vApplicationIRQHandler
+	LDR		r1, =vApplicationIRQHandler
+	BLX		r1
 	POP		{r0-r3, lr}
 	ADD		sp, sp, r2
 
 	CPSID 	i
-	
+
 	; Write the value read from ICCIAR to ICCEOIR
 	LDR 	r4, =ulICCEOIR
 	STR		r0, [r4]
@@ -179,7 +186,8 @@ switch_before_exit
 	; vTaskSwitchContext() if vTaskSwitchContext() uses LDRD or STRD
 	; instructions, or 8 byte aligned stack allocated data.  LR does not need
 	; saving as a new LR will be loaded by portRESTORE_CONTEXT anyway.
-	BL		vTaskSwitchContext
+	LDR		r0, =vTaskSwitchContext
+	BLX		r0
 
 	; Restore the context of, and branch to, the task selected to execute next.
 	portRESTORE_CONTEXT

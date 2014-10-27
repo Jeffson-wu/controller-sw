@@ -1,5 +1,6 @@
 /*
-    FreeRTOS V7.5.2 - Copyright (C) 2013 Real Time Engineers Ltd.
+    FreeRTOS V8.1.2 - Copyright (C) 2014 Real Time Engineers Ltd.
+    All rights reserved
 
     VISIT http://www.FreeRTOS.org TO ENSURE YOU ARE USING THE LATEST VERSION.
 
@@ -23,10 +24,10 @@
     the terms of the GNU General Public License (version 2) as published by the
     Free Software Foundation >>!AND MODIFIED BY!<< the FreeRTOS exception.
 
-    >>! NOTE: The modification to the GPL is included to allow you to distribute
-    >>! a combined work that includes FreeRTOS without being obliged to provide
-    >>! the source code for proprietary components outside of the FreeRTOS
-    >>! kernel.
+    >>!   NOTE: The modification to the GPL is included to allow you to     !<<
+    >>!   distribute a combined work that includes FreeRTOS without being   !<<
+    >>!   obliged to provide the source code for proprietary components     !<<
+    >>!   outside of the FreeRTOS kernel.                                   !<<
 
     FreeRTOS is distributed in the hope that it will be useful, but WITHOUT ANY
     WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
@@ -90,16 +91,21 @@
 	#define portDOUBLE		double
 	#define portLONG		long
 	#define portSHORT		short
-	#define portSTACK_TYPE	unsigned long
-	#define portBASE_TYPE	portLONG
-	typedef unsigned long portTickType;
-	#define portMAX_DELAY ( portTickType ) 0xffffffff
+	#define portSTACK_TYPE	uint32_t
+	#define portBASE_TYPE	long
+
+	typedef portSTACK_TYPE StackType_t;
+	typedef long BaseType_t;
+	typedef unsigned long UBaseType_t;
+
+	typedef uint32_t TickType_t;
+	#define portMAX_DELAY ( TickType_t ) 0xffffffffUL
 
 	/*-----------------------------------------------------------*/
 
 	/* Hardware specifics. */
 	#define portSTACK_GROWTH			( -1 )
-	#define portTICK_RATE_MS			( ( portTickType ) 1000 / configTICK_RATE_HZ )
+	#define portTICK_PERIOD_MS			( ( TickType_t ) 1000 / configTICK_RATE_HZ )
 	#define portBYTE_ALIGNMENT			8
 
 	/*-----------------------------------------------------------*/
@@ -109,7 +115,7 @@
 	/* Called at the end of an ISR that can cause a context switch. */
 	#define portEND_SWITCHING_ISR( xSwitchRequired )\
 	{												\
-	extern unsigned long ulPortYieldRequired;		\
+	extern uint32_t ulPortYieldRequired;			\
 													\
 		if( xSwitchRequired != pdFALSE )			\
 		{											\
@@ -127,8 +133,8 @@
 
 	extern void vPortEnterCritical( void );
 	extern void vPortExitCritical( void );
-	extern unsigned long ulPortSetInterruptMask( void );
-	extern void vPortClearInterruptMask( unsigned long ulNewMaskValue );
+	extern uint32_t ulPortSetInterruptMask( void );
+	extern void vPortClearInterruptMask( uint32_t ulNewMaskValue );
 
 	/* These macros do not globally disable/enable interrupts.  They do mask off
 	interrupts that have a priority below configMAX_API_CALL_INTERRUPT_PRIORITY. */
@@ -156,10 +162,14 @@
 	void vPortTaskUsesFPU( void );
 	#define portTASK_USES_FLOATING_POINT() vPortTaskUsesFPU()
 
-	#define portLOWEST_INTERRUPT_PRIORITY ( ( ( unsigned long ) configUNIQUE_INTERRUPT_PRIORITIES ) - 1UL )
+	#define portLOWEST_INTERRUPT_PRIORITY ( ( ( uint32_t ) configUNIQUE_INTERRUPT_PRIORITIES ) - 1UL )
 	#define portLOWEST_USABLE_INTERRUPT_PRIORITY ( portLOWEST_INTERRUPT_PRIORITY - 1UL )
 
 	/* Architecture specific optimisations. */
+	#ifndef configUSE_PORT_OPTIMISED_TASK_SELECTION
+		#define configUSE_PORT_OPTIMISED_TASK_SELECTION 1
+	#endif
+
 	#if configUSE_PORT_OPTIMISED_TASK_SELECTION == 1
 
 		/* Store/clear the ready priorities in a bit map. */
@@ -222,12 +232,12 @@ number of bits implemented by the interrupt controller. */
 #define portICCRPR_RUNNING_PRIORITY_OFFSET						( 0x14 )
 
 #define portINTERRUPT_CONTROLLER_CPU_INTERFACE_ADDRESS 		( configINTERRUPT_CONTROLLER_BASE_ADDRESS + configINTERRUPT_CONTROLLER_CPU_INTERFACE_OFFSET )
-#define portICCPMR_PRIORITY_MASK_REGISTER 					( *( ( volatile unsigned char * ) ( portINTERRUPT_CONTROLLER_CPU_INTERFACE_ADDRESS + portICCPMR_PRIORITY_MASK_OFFSET ) ) )
+#define portICCPMR_PRIORITY_MASK_REGISTER 					( *( ( volatile uint32_t * ) ( portINTERRUPT_CONTROLLER_CPU_INTERFACE_ADDRESS + portICCPMR_PRIORITY_MASK_OFFSET ) ) )
 #define portICCIAR_INTERRUPT_ACKNOWLEDGE_REGISTER_ADDRESS 	( portINTERRUPT_CONTROLLER_CPU_INTERFACE_ADDRESS + portICCIAR_INTERRUPT_ACKNOWLEDGE_OFFSET )
 #define portICCEOIR_END_OF_INTERRUPT_REGISTER_ADDRESS 		( portINTERRUPT_CONTROLLER_CPU_INTERFACE_ADDRESS + portICCEOIR_END_OF_INTERRUPT_OFFSET )
 #define portICCPMR_PRIORITY_MASK_REGISTER_ADDRESS 			( portINTERRUPT_CONTROLLER_CPU_INTERFACE_ADDRESS + portICCPMR_PRIORITY_MASK_OFFSET )
-#define portICCBPR_BINARY_POINT_REGISTER 					( *( ( const volatile unsigned long * ) ( portINTERRUPT_CONTROLLER_CPU_INTERFACE_ADDRESS + portICCBPR_BINARY_POINT_OFFSET ) ) )
-#define portICCRPR_RUNNING_PRIORITY_REGISTER 				( *( ( const volatile unsigned char * ) ( portINTERRUPT_CONTROLLER_CPU_INTERFACE_ADDRESS + portICCRPR_RUNNING_PRIORITY_OFFSET ) ) )
+#define portICCBPR_BINARY_POINT_REGISTER 					( *( ( const volatile uint32_t * ) ( portINTERRUPT_CONTROLLER_CPU_INTERFACE_ADDRESS + portICCBPR_BINARY_POINT_OFFSET ) ) )
+#define portICCRPR_RUNNING_PRIORITY_REGISTER 				( *( ( const volatile uint32_t * ) ( portINTERRUPT_CONTROLLER_CPU_INTERFACE_ADDRESS + portICCRPR_RUNNING_PRIORITY_OFFSET ) ) )
 
 #endif /* PORTMACRO_H */
 

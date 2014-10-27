@@ -285,7 +285,7 @@ void InitTubeTimers()
   {
     xTimers[ x ] = xTimerCreate
       (                                                     /* Just a text name, not used by the RTOS kernel. */
-      (signed char *) "TubeTimer",
+      (char *) "TubeTimer",
     /* The timer period in ticks. */
       ( 1000 * 1 ),
     /* The timers will auto-reload themselves when they expire. */
@@ -560,24 +560,52 @@ void Heater_PinConfig(void)
   GPIO_Init(GPIOC, &GPIO_InitStructure);
 }
 
+void ReadTubeHeaterRegFromISR( void *pvParameter1, uint32_t ulParameter2 )
+{
+  u8 tube = (u8)ulParameter2;
+  xMessage *msg;
+  ReadModbusRegsReq *p;
+  portBASE_TYPE taskWoken = pdTRUE;
+  msg=pvPortMalloc(sizeof(xMessage)+sizeof(ReadModbusRegsReq));
+  if(NULL == msg)
+  {
+    configASSERT(pdFALSE); // This is a fatal error
+  }
+  else
+  {
+    msg->ucMessageID=READ_MODBUS_REGS;
+    p=(ReadModbusRegsReq *)msg->ucData;
+    p->slave=tube;
+    p->addr=EVENT_REG;
+    p->datasize=5;
+    p->reply=TubeSequencerQueueHandle;
+    configASSERT(xQueueSendFromISR(ModbusQueueHandle,&msg,&taskWoken) == pdPASS);
+  }
+  return;
+}
+
 /* ---------------------------------------------------------------------------*/
 void EXTI_Handler(void)
 {
-  vTraceStoreISRBegin(3);
+//  vTraceStoreISRBegin(3);
+  BaseType_t xHigherPriorityTaskWoken = pdFALSE;
   ExtiGpioTypeDef ExtiGpio = Heater1;
   while(ExtiGpio < nExtiGpio)                               /*Alwlays starts at Heater1 */
   {
     if (SET == EXTI_GetFlagStatus(gpio_EXTI_CNF[ExtiGpio].EXTI_LINE))
     {
       DEBUG_IF_PRINTF("INTERRUPT-READ STATUS ON HEATER[%s]",heater[ExtiGpio]);
-                                                            //ToDo: Also check tube_1!!!
-      ReadTubeHeaterReg(heater2tube[ExtiGpio].tube_1, EVENT_REG, 5, TubeSequencerQueueHandle, TRUE);
+      xTimerPendFunctionCallFromISR( ReadTubeHeaterRegFromISR,
+                               NULL,
+                               ( uint32_t ) heater2tube[ExtiGpio].tube_1,
+                               &xHigherPriorityTaskWoken );
       EXTI_ClearITPendingBit(gpio_EXTI_CNF[ExtiGpio].EXTI_LINE);
     }
     ExtiGpio++;
   }
-  vTraceStoreISREnd();
-  portEND_SWITCHING_ISR( pdTRUE);
+//  vTraceStoreISREnd();
+  //portEND_SWITCHING_ISR( pdTRUE);
+  portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
 }
 
 /* ---------------------------------------------------------------------------*/

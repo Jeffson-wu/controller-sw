@@ -1,5 +1,6 @@
 /*
-    FreeRTOS V7.5.2 - Copyright (C) 2013 Real Time Engineers Ltd.
+    FreeRTOS V8.1.2 - Copyright (C) 2014 Real Time Engineers Ltd. 
+    All rights reserved
 
     VISIT http://www.FreeRTOS.org TO ENSURE YOU ARE USING THE LATEST VERSION.
 
@@ -23,10 +24,10 @@
     the terms of the GNU General Public License (version 2) as published by the
     Free Software Foundation >>!AND MODIFIED BY!<< the FreeRTOS exception.
 
-    >>! NOTE: The modification to the GPL is included to allow you to distribute
-    >>! a combined work that includes FreeRTOS without being obliged to provide
-    >>! the source code for proprietary components outside of the FreeRTOS
-    >>! kernel.
+    >>!   NOTE: The modification to the GPL is included to allow you to     !<<
+    >>!   distribute a combined work that includes FreeRTOS without being   !<<
+    >>!   obliged to provide the source code for proprietary components     !<<
+    >>!   outside of the FreeRTOS kernel.                                   !<<
 
     FreeRTOS is distributed in the hope that it will be useful, but WITHOUT ANY
     WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
@@ -127,8 +128,8 @@ void portSetupTick( void )
 	/*
 	 * Set the compare match value.
 	 */
-	CCPR1H = ( unsigned char ) ( ( portTIMER_COMPARE_VALUE >> 8 ) & 0xff );
-	CCPR1L = ( unsigned char )   ( portTIMER_COMPARE_VALUE & 0xff );
+	CCPR1H = ( uint8_t ) ( ( portTIMER_COMPARE_VALUE >> 8 ) & 0xff );
+	CCPR1L = ( uint8_t )   ( portTIMER_COMPARE_VALUE & 0xff );
 
 	/*
 	 * Set Compare Special Event Trigger Mode
@@ -158,8 +159,8 @@ void portSetupTick( void )
 	/*
 	 * Clear the time count
 	 */
-	TMR1H = ( unsigned char ) 0x00;
-	TMR1L = ( unsigned char ) 0x00;
+	TMR1H = ( uint8_t ) 0x00;
+	TMR1L = ( uint8_t ) 0x00;
 
 	/*
 	 * Setup the timer

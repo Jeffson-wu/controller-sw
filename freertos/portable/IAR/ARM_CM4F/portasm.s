@@ -1,5 +1,6 @@
 /*
-    FreeRTOS V7.5.2 - Copyright (C) 2013 Real Time Engineers Ltd.
+    FreeRTOS V8.1.2 - Copyright (C) 2014 Real Time Engineers Ltd.
+    All rights reserved
 
     VISIT http://www.FreeRTOS.org TO ENSURE YOU ARE USING THE LATEST VERSION.
 
@@ -23,10 +24,10 @@
     the terms of the GNU General Public License (version 2) as published by the
     Free Software Foundation >>!AND MODIFIED BY!<< the FreeRTOS exception.
 
-    >>! NOTE: The modification to the GPL is included to allow you to distribute
-    >>! a combined work that includes FreeRTOS without being obliged to provide
-    >>! the source code for proprietary components outside of the FreeRTOS
-    >>! kernel.
+    >>!   NOTE: The modification to the GPL is included to allow you to     !<<
+    >>!   distribute a combined work that includes FreeRTOS without being   !<<
+    >>!   obliged to provide the source code for proprietary components     !<<
+    >>!   outside of the FreeRTOS kernel.                                   !<<
 
     FreeRTOS is distributed in the hope that it will be useful, but WITHOUT ANY
     WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
@@ -81,11 +82,11 @@
 /*-----------------------------------------------------------*/
 
 xPortPendSVHandler:
-	mrs r0, psp						
-	
+	mrs r0, psp
+	isb
 	/* Get the location of the current TCB. */
-	ldr	r3, =pxCurrentTCB			
-	ldr	r2, [r3]						
+	ldr	r3, =pxCurrentTCB
+	ldr	r2, [r3]
 
 	/* Is the task using the FPU context?  If so, push high vfp registers. */
 	tst r14, #0x10
@@ -93,34 +94,42 @@ xPortPendSVHandler:
 	vstmdbeq r0!, {s16-s31}
 
 	/* Save the core registers. */
-	stmdb r0!, {r4-r11, r14}				
-	
+	stmdb r0!, {r4-r11, r14}
+
 	/* Save the new top of stack into the first member of the TCB. */
 	str r0, [r2]
-	
-	stmdb sp!, {r3, r14}
+
+	stmdb sp!, {r3}
 	mov r0, #configMAX_SYSCALL_INTERRUPT_PRIORITY
 	msr basepri, r0
-	bl vTaskSwitchContext			
+	bl vTaskSwitchContext
 	mov r0, #0
 	msr basepri, r0
-	ldmia sp!, {r3, r14}
+	ldmia sp!, {r3}
 
 	/* The first item in pxCurrentTCB is the task top of stack. */
-	ldr r1, [r3]	
+	ldr r1, [r3]
 	ldr r0, [r1]
-	
+
 	/* Pop the core registers. */
 	ldmia r0!, {r4-r11, r14}
 
-	/* Is the task using the FPU context?  If so, pop the high vfp registers 
+	/* Is the task using the FPU context?  If so, pop the high vfp registers
 	too. */
 	tst r14, #0x10
 	it eq
 	vldmiaeq r0!, {s16-s31}
-	
-	msr psp, r0						
-	bx r14							
+
+	msr psp, r0
+	isb
+	#ifdef WORKAROUND_PMU_CM001 /* XMC4000 specific errata */
+		#if WORKAROUND_PMU_CM001 == 1
+			push { r14 }
+			pop { pc }
+		#endif
+	#endif
+
+	bx r14
 
 
 /*-----------------------------------------------------------*/
@@ -130,7 +139,7 @@ ulPortSetInterruptMask:
 	mov r1, #configMAX_SYSCALL_INTERRUPT_PRIORITY
 	msr basepri, r1
 	bx r14
-	
+
 /*-----------------------------------------------------------*/
 
 vPortClearInterruptMask:
@@ -147,8 +156,9 @@ vPortSVCHandler:
 	/* Pop the core registers. */
 	ldmia r0!, {r4-r11, r14}
 	msr psp, r0
+	isb
 	mov r0, #0
-	msr	basepri, r0	
+	msr	basepri, r0
 	bx r14
 
 /*-----------------------------------------------------------*/
@@ -162,6 +172,9 @@ vPortStartFirstTask
 	msr msp, r0
 	/* Call SVC to start the first task. */
 	cpsie i
+	cpsie f
+	dsb
+	isb
 	svc 0
 
 /*-----------------------------------------------------------*/
@@ -170,13 +183,13 @@ vPortEnableVFP:
 	/* The FPU enable bits are in the CPACR. */
 	ldr.w r0, =0xE000ED88
 	ldr	r1, [r0]
-	
+
 	/* Enable CP10 and CP11 coprocessors, then save back. */
 	orr	r1, r1, #( 0xf << 20 )
 	str r1, [r0]
-	bx	r14	
-	
+	bx	r14
+
 
 
 	END
-	
+

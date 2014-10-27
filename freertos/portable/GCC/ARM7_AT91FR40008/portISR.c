@@ -1,5 +1,6 @@
 /*
-    FreeRTOS V7.5.2 - Copyright (C) 2013 Real Time Engineers Ltd.
+    FreeRTOS V8.1.2 - Copyright (C) 2014 Real Time Engineers Ltd. 
+    All rights reserved
 
     VISIT http://www.FreeRTOS.org TO ENSURE YOU ARE USING THE LATEST VERSION.
 
@@ -23,10 +24,10 @@
     the terms of the GNU General Public License (version 2) as published by the
     Free Software Foundation >>!AND MODIFIED BY!<< the FreeRTOS exception.
 
-    >>! NOTE: The modification to the GPL is included to allow you to distribute
-    >>! a combined work that includes FreeRTOS without being obliged to provide
-    >>! the source code for proprietary components outside of the FreeRTOS
-    >>! kernel.
+    >>!   NOTE: The modification to the GPL is included to allow you to     !<<
+    >>!   distribute a combined work that includes FreeRTOS without being   !<<
+    >>!   obliged to provide the source code for proprietary components     !<<
+    >>!   outside of the FreeRTOS kernel.                                   !<<
 
     FreeRTOS is distributed in the hope that it will be useful, but WITHOUT ANY
     WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
@@ -82,11 +83,11 @@
 #include "task.h"
 
 /* Constants required to handle interrupts. */
-#define portCLEAR_AIC_INTERRUPT		( ( unsigned long ) 0 )
+#define portCLEAR_AIC_INTERRUPT		( ( uint32_t ) 0 )
 
 /* Constants required to handle critical sections. */
-#define portNO_CRITICAL_NESTING		( ( unsigned long ) 0 )
-volatile unsigned long ulCriticalNesting = 9999UL;
+#define portNO_CRITICAL_NESTING		( ( uint32_t ) 0 )
+volatile uint32_t ulCriticalNesting = 9999UL;
 
 /*-----------------------------------------------------------*/
 
@@ -146,7 +147,7 @@ void vPortYieldProcessor( void )
 	void vNonPreemptiveTick( void ) __attribute__ ((interrupt ("IRQ")));
 	void vNonPreemptiveTick( void )
 	{		
-	static volatile unsigned long ulDummy;
+	static volatile uint32_t ulDummy;
 
 		/* Clear tick timer interrupt indication. */
 		ulDummy = portTIMER_REG_BASE_PTR->TC_SR;  
@@ -169,7 +170,7 @@ void vPortYieldProcessor( void )
 
 		/* WARNING - Do not use local (stack) variables here.  Use globals
 					 if you must! */
-		static volatile unsigned long ulDummy;
+		static volatile uint32_t ulDummy;
 
 		/* Clear tick timer interrupt indication. */
 		ulDummy = portTIMER_REG_BASE_PTR->TC_SR;  

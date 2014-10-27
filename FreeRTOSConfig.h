@@ -84,11 +84,10 @@
 #define configUSE_TICK_HOOK			0
 #define configCPU_CLOCK_HZ			( ( unsigned long ) 72000000 )
 #define configTICK_RATE_HZ			( ( portTickType ) 1000 )
-#define configMAX_PRIORITIES		( ( unsigned portBASE_TYPE ) 16 )
+#define configMAX_PRIORITIES		( 16 )
 #define configMINIMAL_STACK_SIZE	( ( unsigned short ) 64 )
-#define configTOTAL_HEAP_SIZE		( ( size_t ) ( 18 * 1024 ) ) // 32 when using dynamically allocated sequences, 16 is static
+#define configTOTAL_HEAP_SIZE		( ( size_t ) ( 30 * 1024 ) ) // 32 when using dynamically allocated sequences, 16 is static
 #define configMAX_TASK_NAME_LEN		( 16 )
-#define configUSE_TRACE_FACILITY	1
 #define configUSE_16_BIT_TICKS		0
 #define configIDLE_SHOULD_YIELD		1
 #define SAMPLING_FREQUENCY 10
@@ -102,10 +101,10 @@
 #define configUSE_ALTERNATIVE_API 		0
 #define configCHECK_FOR_STACK_OVERFLOW	2/*0 TFK DEBUG_RTOS*/
 #define configUSE_RECURSIVE_MUTEXES		1
-#define configQUEUE_REGISTRY_SIZE		30/*0 TFK DEBUG_RTOS*/
-#define configGENERATE_RUN_TIME_STATS	1 /*0 TFK DEBUG_RTOS*/
-#define configUSE_MALLOC_FAILED_HOOK 1  /*0 TFK DEBUG_RTOS*/
-#define configUSE_STATS_FORMATTING_FUNCTIONS 1 /*0 TFK DEBUG_RTOS*/
+//#define configQUEUE_REGISTRY_SIZE		30/*0 TFK DEBUG_RTOS*/
+//#define configGENERATE_RUN_TIME_STATS	1 /*0 TFK DEBUG_RTOS*/
+//#define configUSE_MALLOC_FAILED_HOOK 1  /*0 TFK DEBUG_RTOS*/
+//#define configUSE_STATS_FORMATTING_FUNCTIONS 1 /*0 TFK DEBUG_RTOS*/
 //#define configASSERT 1 /*0 TFK DEBUG_RTOS*/
 void assert_failed(unsigned char* file, unsigned int line); //Implemented in main.c
 #define configASSERT(expr) ((expr) ? (void)0 : assert_failed((unsigned char *)__FILE__, __LINE__))
@@ -129,6 +128,7 @@ to exclude the API function. */
 #define INCLUDE_vTaskSuspend			1
 #define INCLUDE_vTaskDelayUntil			1
 #define INCLUDE_vTaskDelay				1
+#define INCLUDE_xTimerPendFunctionCall  1
 
 /* This is the raw value as per the Cortex-M3 NVIC.  Values can be 255
 (lowest) to 0 (1?) (highest). */
@@ -169,7 +169,7 @@ extern unsigned long vGetCounter();
 #define xPortSysTickHandler SysTick_Handler
 
 
-#define configUSE_TRACE_FACILITY 1
+#define configUSE_TRACE_FACILITY 0
 			  #include "trcKernelPort.h"
 
 

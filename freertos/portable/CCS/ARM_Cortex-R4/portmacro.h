@@ -1,5 +1,6 @@
 /*
-    FreeRTOS V7.5.2 - Copyright (C) 2013 Real Time Engineers Ltd.
+    FreeRTOS V8.1.2 - Copyright (C) 2014 Real Time Engineers Ltd.
+    All rights reserved
 
     VISIT http://www.FreeRTOS.org TO ENSURE YOU ARE USING THE LATEST VERSION.
 
@@ -23,10 +24,10 @@
     the terms of the GNU General Public License (version 2) as published by the
     Free Software Foundation >>!AND MODIFIED BY!<< the FreeRTOS exception.
 
-    >>! NOTE: The modification to the GPL is included to allow you to distribute
-    >>! a combined work that includes FreeRTOS without being obliged to provide
-    >>! the source code for proprietary components outside of the FreeRTOS
-    >>! kernel.
+    >>!   NOTE: The modification to the GPL is included to allow you to     !<<
+    >>!   distribute a combined work that includes FreeRTOS without being   !<<
+    >>!   obliged to provide the source code for proprietary components     !<<
+    >>!   outside of the FreeRTOS kernel.                                   !<<
 
     FreeRTOS is distributed in the hope that it will be useful, but WITHOUT ANY
     WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
@@ -81,21 +82,25 @@
 #define portDOUBLE      double
 #define portLONG        long
 #define portSHORT       short
-#define portSTACK_TYPE  unsigned long
+#define portSTACK_TYPE  uint32_t
 #define portBASE_TYPE   long
 
+typedef portSTACK_TYPE StackType_t;
+typedef long BaseType_t;
+typedef unsigned long UBaseType_t;
+
 #if (configUSE_16_BIT_TICKS == 1)
-    typedef unsigned portSHORT portTickType;
-    #define portMAX_DELAY (portTickType) 0xFFFF
+    typedef uint16_t TickType_t;
+    #define portMAX_DELAY (TickType_t) 0xFFFF
 #else
-    typedef unsigned portLONG portTickType;
-    #define portMAX_DELAY (portTickType) 0xFFFFFFFFF
+    typedef uint32_t TickType_t;
+    #define portMAX_DELAY (TickType_t) 0xFFFFFFFFF
 #endif
 
 
 /* Architecture specifics. */
 #define portSTACK_GROWTH    (-1)
-#define portTICK_RATE_MS    ((portTickType) 1000 / configTICK_RATE_HZ)
+#define portTICK_PERIOD_MS    ((TickType_t) 1000 / configTICK_RATE_HZ)
 #define portBYTE_ALIGNMENT  8
 
 /* Critical section handling. */
@@ -110,10 +115,14 @@ extern void vPortExitCritical(void);
 #pragma SWI_ALIAS( vPortYield, 0 )
 extern void vPortYield( void );
 #define portYIELD()             	vPortYield()
-#define portSYS_SSIR1_REG			( * ( ( volatile unsigned long * ) 0xFFFFFFB0 ) )
+#define portSYS_SSIR1_REG			( * ( ( volatile uint32_t * ) 0xFFFFFFB0 ) )
 #define portSYS_SSIR1_SSKEY			( 0x7500UL )
 #define portYIELD_WITHIN_API()		{ portSYS_SSIR1_REG = portSYS_SSIR1_SSKEY;  asm( " DSB " ); asm( " ISB " ); }
 #define portYIELD_FROM_ISR( x )		if( x != pdFALSE ){ portSYS_SSIR1_REG = portSYS_SSIR1_SSKEY;  ( void ) portSYS_SSIR1_REG; }
+
+#ifndef configUSE_PORT_OPTIMISED_TASK_SELECTION
+	#define configUSE_PORT_OPTIMISED_TASK_SELECTION 1
+#endif
 
 /* Architecture specific optimisations. */
 #if configUSE_PORT_OPTIMISED_TASK_SELECTION == 1

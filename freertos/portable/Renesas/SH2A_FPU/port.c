@@ -1,5 +1,6 @@
 /*
-    FreeRTOS V7.5.2 - Copyright (C) 2013 Real Time Engineers Ltd.
+    FreeRTOS V8.1.2 - Copyright (C) 2014 Real Time Engineers Ltd. 
+    All rights reserved
 
     VISIT http://www.FreeRTOS.org TO ENSURE YOU ARE USING THE LATEST VERSION.
 
@@ -23,10 +24,10 @@
     the terms of the GNU General Public License (version 2) as published by the
     Free Software Foundation >>!AND MODIFIED BY!<< the FreeRTOS exception.
 
-    >>! NOTE: The modification to the GPL is included to allow you to distribute
-    >>! a combined work that includes FreeRTOS without being obliged to provide
-    >>! the source code for proprietary components outside of the FreeRTOS
-    >>! kernel.
+    >>!   NOTE: The modification to the GPL is included to allow you to     !<<
+    >>!   distribute a combined work that includes FreeRTOS without being   !<<
+    >>!   obliged to provide the source code for proprietary components     !<<
+    >>!   outside of the FreeRTOS kernel.                                   !<<
 
     FreeRTOS is distributed in the hope that it will be useful, but WITHOUT ANY
     WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
@@ -101,14 +102,14 @@ extern void vPortStartFirstTask( void );
 /*
  * Obtains the current GBR value - defined in portasm.src.
  */
-extern unsigned long ulPortGetGBR( void );
+extern uint32_t ulPortGetGBR( void );
 
 /*-----------------------------------------------------------*/
 
 /* 
  * See header file for description. 
  */
-portSTACK_TYPE *pxPortInitialiseStack( portSTACK_TYPE *pxTopOfStack, pdTASK_CODE pxCode, void *pvParameters )
+StackType_t *pxPortInitialiseStack( StackType_t *pxTopOfStack, TaskFunction_t pxCode, void *pvParameters )
 {
 	/* Mark the end of the stack - used for debugging only and can be removed. */
 	*pxTopOfStack = 0x11111111UL;
@@ -123,7 +124,7 @@ portSTACK_TYPE *pxPortInitialiseStack( portSTACK_TYPE *pxTopOfStack, pdTASK_CODE
 	pxTopOfStack--;
 	
 	/* PC. */
-	*pxTopOfStack = ( unsigned long ) pxCode;
+	*pxTopOfStack = ( uint32_t ) pxCode;
 	pxTopOfStack--;
 	
 	/* PR. */
@@ -171,7 +172,7 @@ portSTACK_TYPE *pxPortInitialiseStack( portSTACK_TYPE *pxTopOfStack, pdTASK_CODE
 	pxTopOfStack--;
 
 	/* R4. */
-	*pxTopOfStack = ( unsigned long ) pvParameters;
+	*pxTopOfStack = ( uint32_t ) pvParameters;
 	pxTopOfStack--;
 
 	/* R3. */
@@ -210,7 +211,7 @@ portSTACK_TYPE *pxPortInitialiseStack( portSTACK_TYPE *pxTopOfStack, pdTASK_CODE
 }
 /*-----------------------------------------------------------*/
 
-portBASE_TYPE xPortStartScheduler( void )
+BaseType_t xPortStartScheduler( void )
 {
 extern void vApplicationSetupTimerInterrupt( void );
 
@@ -239,7 +240,7 @@ void vPortEndScheduler( void )
 
 void vPortYield( void )
 {
-long lInterruptMask;
+int32_t lInterruptMask;
 
 	/* Ensure the yield trap runs at the same priority as the other interrupts
 	that can cause a context switch. */
@@ -258,10 +259,10 @@ long lInterruptMask;
 }
 /*-----------------------------------------------------------*/
 
-portBASE_TYPE xPortUsesFloatingPoint( xTaskHandle xTask )
+BaseType_t xPortUsesFloatingPoint( TaskHandle_t xTask )
 {
-unsigned long *pulFlopBuffer;
-portBASE_TYPE xReturn;
+uint32_t *pulFlopBuffer;
+BaseType_t xReturn;
 extern void * volatile pxCurrentTCB;
 
 	/* This function tells the kernel that the task referenced by xTask is
@@ -272,11 +273,11 @@ extern void * volatile pxCurrentTCB;
 	subject task - so pxCurrentTCB is the task handle. */
 	if( xTask == NULL )
 	{
-		xTask = ( xTaskHandle ) pxCurrentTCB;
+		xTask = ( TaskHandle_t ) pxCurrentTCB;
 	}
 
 	/* Allocate a buffer large enough to hold all the flop registers. */
-	pulFlopBuffer = ( unsigned long * ) pvPortMalloc( portFLOP_STORAGE_SIZE );
+	pulFlopBuffer = ( uint32_t * ) pvPortMalloc( portFLOP_STORAGE_SIZE );
 	
 	if( pulFlopBuffer != NULL )
 	{

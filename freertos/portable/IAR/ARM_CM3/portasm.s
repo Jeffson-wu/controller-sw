@@ -1,5 +1,6 @@
 /*
-    FreeRTOS V7.5.2 - Copyright (C) 2013 Real Time Engineers Ltd.
+    FreeRTOS V8.1.2 - Copyright (C) 2014 Real Time Engineers Ltd.
+    All rights reserved
 
     VISIT http://www.FreeRTOS.org TO ENSURE YOU ARE USING THE LATEST VERSION.
 
@@ -23,10 +24,10 @@
     the terms of the GNU General Public License (version 2) as published by the
     Free Software Foundation >>!AND MODIFIED BY!<< the FreeRTOS exception.
 
-    >>! NOTE: The modification to the GPL is included to allow you to distribute
-    >>! a combined work that includes FreeRTOS without being obliged to provide
-    >>! the source code for proprietary components outside of the FreeRTOS
-    >>! kernel.
+    >>!   NOTE: The modification to the GPL is included to allow you to     !<<
+    >>!   distribute a combined work that includes FreeRTOS without being   !<<
+    >>!   obliged to provide the source code for proprietary components     !<<
+    >>!   outside of the FreeRTOS kernel.                                   !<<
 
     FreeRTOS is distributed in the hope that it will be useful, but WITHOUT ANY
     WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
@@ -81,9 +82,10 @@
 /*-----------------------------------------------------------*/
 
 xPortPendSVHandler:
-	mrs r0, psp						
+	mrs r0, psp
+	isb
 	ldr	r3, =pxCurrentTCB			/* Get the location of the current TCB. */
-	ldr	r2, [r3]						
+	ldr	r2, [r3]
 
 	stmdb r0!, {r4-r11}				/* Save the remaining registers. */
 	str r0, [r2]					/* Save the new top of stack into the first member of the TCB. */
@@ -91,16 +93,17 @@ xPortPendSVHandler:
 	stmdb sp!, {r3, r14}
 	mov r0, #configMAX_SYSCALL_INTERRUPT_PRIORITY
 	msr basepri, r0
-	bl vTaskSwitchContext			
+	bl vTaskSwitchContext
 	mov r0, #0
 	msr basepri, r0
 	ldmia sp!, {r3, r14}
 
-	ldr r1, [r3]					
+	ldr r1, [r3]
 	ldr r0, [r1]					/* The first item in pxCurrentTCB is the task top of stack. */
 	ldmia r0!, {r4-r11}				/* Pop the registers. */
-	msr psp, r0						
-	bx r14							
+	msr psp, r0
+	isb
+	bx r14
 
 
 /*-----------------------------------------------------------*/
@@ -110,7 +113,7 @@ ulPortSetInterruptMask:
 	mov r1, #configMAX_SYSCALL_INTERRUPT_PRIORITY
 	msr basepri, r1
 	bx r14
-	
+
 /*-----------------------------------------------------------*/
 
 vPortClearInterruptMask:
@@ -127,6 +130,7 @@ vPortSVCHandler:
 	/* Pop the core registers. */
 	ldmia r0!, {r4-r11}
 	msr psp, r0
+	isb
 	mov r0, #0
 	msr	basepri, r0
 	orr r14, r14, #13
@@ -141,9 +145,11 @@ vPortStartFirstTask
 	ldr r0, [r0]
 	/* Set the msp back to the start of the stack. */
 	msr msp, r0
-	/* Call SVC to start the first task. */
+	/* Call SVC to start the first task, ensuring interrupts are enabled. */
 	cpsie i
+	cpsie f
+	dsb
+	isb
 	svc 0
 
 	END
-	

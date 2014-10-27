@@ -1,5 +1,6 @@
 /*
-    FreeRTOS V7.5.2 - Copyright (C) 2013 Real Time Engineers Ltd.
+    FreeRTOS V8.1.2 - Copyright (C) 2014 Real Time Engineers Ltd. 
+    All rights reserved
 
     VISIT http://www.FreeRTOS.org TO ENSURE YOU ARE USING THE LATEST VERSION.
 
@@ -23,10 +24,10 @@
     the terms of the GNU General Public License (version 2) as published by the
     Free Software Foundation >>!AND MODIFIED BY!<< the FreeRTOS exception.
 
-    >>! NOTE: The modification to the GPL is included to allow you to distribute
-    >>! a combined work that includes FreeRTOS without being obliged to provide
-    >>! the source code for proprietary components outside of the FreeRTOS
-    >>! kernel.
+    >>!   NOTE: The modification to the GPL is included to allow you to     !<<
+    >>!   distribute a combined work that includes FreeRTOS without being   !<<
+    >>!   obliged to provide the source code for proprietary components     !<<
+    >>!   outside of the FreeRTOS kernel.                                   !<<
 
     FreeRTOS is distributed in the hope that it will be useful, but WITHOUT ANY
     WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
@@ -82,9 +83,9 @@ Changes from V2.6.1
 /*-----------------------------------------------------------*/
 
 /* See header file for description. */
-portSTACK_TYPE *pxPortInitialiseStack( portSTACK_TYPE *pxTopOfStack, pdTASK_CODE pxCode, void *pvParameters )
+StackType_t *pxPortInitialiseStack( StackType_t *pxTopOfStack, TaskFunction_t pxCode, void *pvParameters )
 {
-portSTACK_TYPE DS_Reg = 0;
+StackType_t DS_Reg = 0;
 
 	/* Place a few bytes of known values on the bottom of the stack.
 	This is just useful for debugging. */
@@ -127,15 +128,15 @@ portSTACK_TYPE DS_Reg = 0;
 	/* The remaining registers would be pushed on the stack by our context
 	switch function.  These are loaded with values simply to make debugging
 	easier. */
-	*pxTopOfStack = ( portSTACK_TYPE ) 0xAAAA;	/* AX */
+	*pxTopOfStack = ( StackType_t ) 0xAAAA;	/* AX */
 	pxTopOfStack--;
-	*pxTopOfStack = ( portSTACK_TYPE ) 0xBBBB;	/* BX */
+	*pxTopOfStack = ( StackType_t ) 0xBBBB;	/* BX */
 	pxTopOfStack--;
-	*pxTopOfStack = ( portSTACK_TYPE ) 0xCCCC;	/* CX */
+	*pxTopOfStack = ( StackType_t ) 0xCCCC;	/* CX */
 	pxTopOfStack--;
-	*pxTopOfStack = ( portSTACK_TYPE ) 0xDDDD;	/* DX */
+	*pxTopOfStack = ( StackType_t ) 0xDDDD;	/* DX */
 	pxTopOfStack--;
-	*pxTopOfStack = ( portSTACK_TYPE ) 0xEEEE;	/* ES */
+	*pxTopOfStack = ( StackType_t ) 0xEEEE;	/* ES */
 	pxTopOfStack--;
 
 	/* We need the true data segment. */
@@ -143,11 +144,11 @@ portSTACK_TYPE DS_Reg = 0;
 
 	*pxTopOfStack = DS_Reg;						/* DS */
 	pxTopOfStack--;
-	*pxTopOfStack = ( portSTACK_TYPE ) 0x0123;	/* SI */
+	*pxTopOfStack = ( StackType_t ) 0x0123;	/* SI */
 	pxTopOfStack--;
-	*pxTopOfStack = ( portSTACK_TYPE ) 0xDDDD;	/* DI */
+	*pxTopOfStack = ( StackType_t ) 0xDDDD;	/* DI */
 	pxTopOfStack--;
-	*pxTopOfStack = ( portSTACK_TYPE ) 0xBBBB;	/* BP */
+	*pxTopOfStack = ( StackType_t ) 0xBBBB;	/* BP */
 
 	/*lint +e950 +e611 +e923 */
 

@@ -1,5 +1,6 @@
 /*
-    FreeRTOS V7.5.2 - Copyright (C) 2013 Real Time Engineers Ltd.
+    FreeRTOS V8.1.2 - Copyright (C) 2014 Real Time Engineers Ltd.
+    All rights reserved
 
     VISIT http://www.FreeRTOS.org TO ENSURE YOU ARE USING THE LATEST VERSION.
 
@@ -23,10 +24,10 @@
     the terms of the GNU General Public License (version 2) as published by the
     Free Software Foundation >>!AND MODIFIED BY!<< the FreeRTOS exception.
 
-    >>! NOTE: The modification to the GPL is included to allow you to distribute
-    >>! a combined work that includes FreeRTOS without being obliged to provide
-    >>! the source code for proprietary components outside of the FreeRTOS
-    >>! kernel.
+    >>!   NOTE: The modification to the GPL is included to allow you to     !<<
+    >>!   distribute a combined work that includes FreeRTOS without being   !<<
+    >>!   obliged to provide the source code for proprietary components     !<<
+    >>!   outside of the FreeRTOS kernel.                                   !<<
 
     FreeRTOS is distributed in the hope that it will be useful, but WITHOUT ANY
     WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
@@ -88,15 +89,19 @@ extern "C" {
 #define portSTACK_TYPE  unsigned int
 #define portBASE_TYPE   int
 
+typedef portSTACK_TYPE StackType_t;
+typedef long BaseType_t;
+typedef unsigned long UBaseType_t;
+
 
 #if (configUSE_16_BIT_TICKS==1)
-	typedef unsigned portSHORT portTickType;
-	#define portMAX_DELAY ( portTickType ) 0xffff
+	typedef uint16_t TickType_t;
+	#define portMAX_DELAY ( TickType_t ) 0xffff
 #else
-	typedef unsigned portLONG portTickType;
-	#define portMAX_DELAY ( portTickType ) 0xffffffff
+	typedef uint32_t TickType_t;
+	#define portMAX_DELAY ( TickType_t ) 0xffffffffUL
 #endif
-/*-----------------------------------------------------------*/	
+/*-----------------------------------------------------------*/
 
 /* Interrupt control macros. */
 #define portDISABLE_INTERRUPTS() __asm ( "DI" )
@@ -104,11 +109,11 @@ extern "C" {
 /*-----------------------------------------------------------*/
 
 /* Critical section control macros. */
-#define portNO_CRITICAL_SECTION_NESTING		( ( unsigned portBASE_TYPE ) 0 )
+#define portNO_CRITICAL_SECTION_NESTING		( ( UBaseType_t ) 0 )
 
 #define portENTER_CRITICAL()														\
 {																					\
-extern volatile /*unsigned portSHORT*/ portSTACK_TYPE usCriticalNesting;			\
+extern volatile /*uint16_t*/ portSTACK_TYPE usCriticalNesting;						\
 																					\
 	portDISABLE_INTERRUPTS();														\
 																					\
@@ -120,7 +125,7 @@ extern volatile /*unsigned portSHORT*/ portSTACK_TYPE usCriticalNesting;			\
 
 #define portEXIT_CRITICAL()															\
 {																					\
-extern volatile /*unsigned portSHORT*/ portSTACK_TYPE usCriticalNesting;			\
+extern volatile /*uint16_t*/ portSTACK_TYPE usCriticalNesting;						\
 																					\
 	if( usCriticalNesting > portNO_CRITICAL_SECTION_NESTING )						\
 	{																				\
@@ -152,7 +157,7 @@ extern void vTaskSwitchContext( void );
 /* Hardwware specifics. */
 #define portBYTE_ALIGNMENT	4
 #define portSTACK_GROWTH	( -1 )
-#define portTICK_RATE_MS	( ( portTickType ) 1000 / configTICK_RATE_HZ )		
+#define portTICK_PERIOD_MS	( ( TickType_t ) 1000 / configTICK_RATE_HZ )
 /*-----------------------------------------------------------*/
 
 /* Task function macros as described on the FreeRTOS.org WEB site. */

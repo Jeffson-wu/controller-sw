@@ -4,7 +4,7 @@ Tracealyzer Trace Recorder Library
 Percepio AB
 www.percepio.com
 
-This directory contains the a generic trace recorder library for Tracealyzer v2.5. 
+This directory contains the a generic trace recorder library for Tracealyzer v2.6. 
 
 For information on how to upload the trace data from your target system RAM to 
 Tracealyzer, see "debugger trace upload.txt"
@@ -15,7 +15,7 @@ Files included
 - trcUser.c/.h            - The main API towards the application (trcUser.h in the only include necessary).
 - trcKernel.c/.h          - Internal routines for storing kernel events.
 - trcBase.c/.h            - Internal routines for manipulating the data structures and calculating timestamps.
-- trcHardwarePort.c/.h    - The hardware interface, especially for timestamping. (Needs configuration!)
+- trcHardwarePort.c/.h    - The hardware interface, especially for timestamping.
 - trcKernelPort.c/.h      - Kernel specific implementations of macros and data.
 - trcKernelHooks.h        - The trace macro defines (OS independent).
 - trcTypes.h              - Type definitions used.
@@ -24,7 +24,7 @@ Hardware Timer Ports
 --------------------
 This release contains hardware timer ports for the following hardware architectures:
 
-- ARM Cortex M3/M4 (all brands, such as Atmel SAM3/SAM4, NXP (17xx, 18xx, 43xx, etc), STM32, Freescale Kinetis, ...)
+- ARM Cortex M3/M4/M0/M0+ (all brands, such as Atmel SAM3x/SAM4x/SAM D20, NXP 17xx, 18xx, 43xx, STM32, Freescale Kinetis, ...)
 - Atmel AT91SAM7x
 - Atmel AT32UC3 (AVR32)
 - Renesas RX600 (e.g., RX62N)

@@ -1,5 +1,6 @@
 /*
-    FreeRTOS V7.5.2 - Copyright (C) 2013 Real Time Engineers Ltd.
+    FreeRTOS V8.1.2 - Copyright (C) 2014 Real Time Engineers Ltd. 
+    All rights reserved
 
     VISIT http://www.FreeRTOS.org TO ENSURE YOU ARE USING THE LATEST VERSION.
 
@@ -23,10 +24,10 @@
     the terms of the GNU General Public License (version 2) as published by the
     Free Software Foundation >>!AND MODIFIED BY!<< the FreeRTOS exception.
 
-    >>! NOTE: The modification to the GPL is included to allow you to distribute
-    >>! a combined work that includes FreeRTOS without being obliged to provide
-    >>! the source code for proprietary components outside of the FreeRTOS
-    >>! kernel.
+    >>!   NOTE: The modification to the GPL is included to allow you to     !<<
+    >>!   distribute a combined work that includes FreeRTOS without being   !<<
+    >>!   obliged to provide the source code for proprietary components     !<<
+    >>!   outside of the FreeRTOS kernel.                                   !<<
 
     FreeRTOS is distributed in the hope that it will be useful, but WITHOUT ANY
     WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
@@ -85,16 +86,16 @@
 static void prvSetupTimerInterrupt( void );
 /*-----------------------------------------------------------*/
 
-portSTACK_TYPE *pxPortInitialiseStack( portSTACK_TYPE * pxTopOfStack, pdTASK_CODE pxCode, void *pvParameters )
+StackType_t *pxPortInitialiseStack( StackType_t * pxTopOfStack, TaskFunction_t pxCode, void *pvParameters )
 {
 	/* Make space on the stack for the context - this leaves a couple of spaces
 	empty.  */
 	pxTopOfStack -= 20;
 
 	/* Fill the registers with known values to assist debugging. */
-	pxTopOfStack[ 16 ] = portKERNEL_INTERRUPT_PRIORITY_LEVEL;
+	pxTopOfStack[ 16 ] = 0;
 	pxTopOfStack[ 15 ] = portINITIAL_PSR;
-	pxTopOfStack[ 14 ] = ( unsigned long ) pxCode;
+	pxTopOfStack[ 14 ] = ( uint32_t ) pxCode;
 	pxTopOfStack[ 13 ] = 0x00000000UL; /* R15. */
 	pxTopOfStack[ 12 ] = 0x00000000UL; /* R14. */
 	pxTopOfStack[ 11 ] = 0x0d0d0d0dUL;
@@ -108,20 +109,16 @@ portSTACK_TYPE *pxPortInitialiseStack( portSTACK_TYPE * pxTopOfStack, pdTASK_COD
 	pxTopOfStack[ 3 ] = 0x05050505UL;
 	pxTopOfStack[ 2 ] = 0x04040404UL;
 	pxTopOfStack[ 1 ] = 0x03030303UL;
-	pxTopOfStack[ 0 ] = ( unsigned long ) pvParameters;
+	pxTopOfStack[ 0 ] = ( uint32_t ) pvParameters;
 
 	return pxTopOfStack;
 }
 /*-----------------------------------------------------------*/
 
-portBASE_TYPE xPortStartScheduler( void )
+BaseType_t xPortStartScheduler( void )
 {
 	/* Set-up the timer interrupt. */
 	prvSetupTimerInterrupt();
-
-	/* Enable the TRAP yield. */
-	irq[ portIRQ_TRAP_YIELD ].ien = 1;
-	irq[ portIRQ_TRAP_YIELD ].ipl = portKERNEL_INTERRUPT_PRIORITY_LEVEL;
 
 	/* Integrated Interrupt Controller: Enable all interrupts. */
 	ic->ien = 1;
@@ -143,7 +140,6 @@ static void prvSetupTimerInterrupt( void )
 
 	/* Set the IRQ Handler priority and enable it. */
 	irq[ IRQ_COUNTER1 ].ien = 1;
-	irq[ IRQ_COUNTER1 ].ipl = portKERNEL_INTERRUPT_PRIORITY_LEVEL;
 }
 /*-----------------------------------------------------------*/
 

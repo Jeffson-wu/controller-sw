@@ -1,5 +1,6 @@
 /*
-    FreeRTOS V7.5.2 - Copyright (C) 2013 Real Time Engineers Ltd.
+    FreeRTOS V8.1.2 - Copyright (C) 2014 Real Time Engineers Ltd.
+    All rights reserved
 
     VISIT http://www.FreeRTOS.org TO ENSURE YOU ARE USING THE LATEST VERSION.
 
@@ -23,10 +24,10 @@
     the terms of the GNU General Public License (version 2) as published by the
     Free Software Foundation >>!AND MODIFIED BY!<< the FreeRTOS exception.
 
-    >>! NOTE: The modification to the GPL is included to allow you to distribute
-    >>! a combined work that includes FreeRTOS without being obliged to provide
-    >>! the source code for proprietary components outside of the FreeRTOS
-    >>! kernel.
+    >>!   NOTE: The modification to the GPL is included to allow you to     !<<
+    >>!   distribute a combined work that includes FreeRTOS without being   !<<
+    >>!   obliged to provide the source code for proprietary components     !<<
+    >>!   outside of the FreeRTOS kernel.                                   !<<
 
     FreeRTOS is distributed in the hope that it will be useful, but WITHOUT ANY
     WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
@@ -73,7 +74,7 @@ extern "C" {
 #endif
 
 /*-----------------------------------------------------------
- * Port specific definitions.  
+ * Port specific definitions.
  *
  * The settings in this file configure FreeRTOS correctly for the
  * given hardware and compiler.
@@ -88,22 +89,26 @@ extern "C" {
 #define portDOUBLE		double
 #define portLONG		long
 #define portSHORT		short
-#define portSTACK_TYPE	unsigned long
+#define portSTACK_TYPE	uint32_t
 #define portBASE_TYPE	long
 
+typedef portSTACK_TYPE StackType_t;
+typedef long BaseType_t;
+typedef unsigned long UBaseType_t;
+
 #if( configUSE_16_BIT_TICKS == 1 )
-	typedef unsigned portSHORT portTickType;
-	#define portMAX_DELAY ( portTickType ) 0xffff
+	typedef uint16_t TickType_t;
+	#define portMAX_DELAY ( TickType_t ) 0xffff
 #else
-	typedef unsigned long portTickType;
-	#define portMAX_DELAY ( portTickType ) 0xffffffff
+	typedef uint32_t TickType_t;
+	#define portMAX_DELAY ( TickType_t ) 0xffffffffUL
 #endif
 /*-----------------------------------------------------------*/
 
 /* Hardware specifics. */
 #define portBYTE_ALIGNMENT			8
 #define portSTACK_GROWTH			-1
-#define portTICK_RATE_MS			( ( portTickType ) 1000 / configTICK_RATE_HZ )		
+#define portTICK_PERIOD_MS			( ( TickType_t ) 1000 / configTICK_RATE_HZ )
 /*-----------------------------------------------------------*/
 
 /* Critical section management. */
@@ -111,24 +116,24 @@ extern "C" {
 #define portALL_IPL_BITS			( 0x3fUL << portIPL_SHIFT )
 #define portSW0_BIT					( 0x01 << 8 )
 
-/* This clears the IPL bits, then sets them to 
-configMAX_SYSCALL_INTERRUPT_PRIORITY.  	An extra check is performed if 
-configASSERT() is defined to ensure an assertion handler does not inadvertently 
-attempt to lower the IPL when the call to assert was triggered because the IPL 
-value was found to be above	configMAX_SYSCALL_INTERRUPT_PRIORITY when an ISR
+/* This clears the IPL bits, then sets them to
+configMAX_SYSCALL_INTERRUPT_PRIORITY.  An extra check is performed if
+configASSERT() is defined to ensure an assertion handler does not inadvertently
+attempt to lower the IPL when the call to assert was triggered because the IPL
+value was found to be above configMAX_SYSCALL_INTERRUPT_PRIORITY when an ISR
 safe FreeRTOS API function was executed.  ISR safe FreeRTOS API functions are
 those that end in FromISR.  FreeRTOS maintains a separate interrupt API to
 ensure API function and interrupt entry is as fast and as simple as possible. */
 #ifdef configASSERT
 	#define portDISABLE_INTERRUPTS()											\
 	{																			\
-	unsigned long ulStatus;														\
+	uint32_t ulStatus;														\
 																				\
 		/* Mask interrupts at and below the kernel interrupt priority. */		\
 		ulStatus = _CP0_GET_STATUS();											\
 																				\
 		/* Is the current IPL below configMAX_SYSCALL_INTERRUPT_PRIORITY? */	\
-		if( ( ( ulStatus & portALL_IPL_BITS ) >> portIPL_SHIFT ) < configMAX_SYSCALL_INTERRUPT_PRIORITY )	\
+		if( ( ( ulStatus & portALL_IPL_BITS ) >> portIPL_SHIFT ) < configMAX_SYSCALL_INTERRUPT_PRIORITY ) \
 		{																		\
 			ulStatus &= ~portALL_IPL_BITS;										\
 			_CP0_SET_STATUS( ( ulStatus | ( configMAX_SYSCALL_INTERRUPT_PRIORITY << portIPL_SHIFT ) ) ); \
@@ -137,7 +142,7 @@ ensure API function and interrupt entry is as fast and as simple as possible. */
 #else /* configASSERT */
 	#define portDISABLE_INTERRUPTS()										\
 	{																		\
-	unsigned long ulStatus;													\
+	uint32_t ulStatus;													\
 																			\
 		/* Mask interrupts at and below the kernel interrupt priority. */	\
 		ulStatus = _CP0_GET_STATUS();										\
@@ -148,7 +153,7 @@ ensure API function and interrupt entry is as fast and as simple as possible. */
 
 #define portENABLE_INTERRUPTS()											\
 {																		\
-unsigned long ulStatus;													\
+uint32_t ulStatus;													\
 																		\
 	/* Unmask all interrupts. */										\
 	ulStatus = _CP0_GET_STATUS();										\
@@ -163,10 +168,14 @@ extern void vTaskExitCritical( void );
 #define portENTER_CRITICAL()		vTaskEnterCritical()
 #define portEXIT_CRITICAL()			vTaskExitCritical()
 
-extern unsigned portBASE_TYPE uxPortSetInterruptMaskFromISR();
-extern void vPortClearInterruptMaskFromISR( unsigned portBASE_TYPE );
+extern UBaseType_t uxPortSetInterruptMaskFromISR();
+extern void vPortClearInterruptMaskFromISR( UBaseType_t );
 #define portSET_INTERRUPT_MASK_FROM_ISR() uxPortSetInterruptMaskFromISR()
 #define portCLEAR_INTERRUPT_MASK_FROM_ISR( uxSavedStatusRegister ) vPortClearInterruptMaskFromISR( uxSavedStatusRegister )
+
+#ifndef configUSE_PORT_OPTIMISED_TASK_SELECTION
+	#define configUSE_PORT_OPTIMISED_TASK_SELECTION 1
+#endif
 
 #if configUSE_PORT_OPTIMISED_TASK_SELECTION == 1
 
@@ -191,7 +200,7 @@ extern void vPortClearInterruptMaskFromISR( unsigned portBASE_TYPE );
 
 #define portYIELD()								\
 {												\
-unsigned long ulCause;							\
+uint32_t ulCause;							\
 												\
 	/* Trigger software interrupt. */			\
 	ulCause = _CP0_GET_CAUSE();					\
@@ -199,13 +208,10 @@ unsigned long ulCause;							\
 	_CP0_SET_CAUSE( ulCause );					\
 }
 
-#ifdef configASSERT
-	#define portCURRENT_INTERRUPT_PRIORITY ( ( _CP0_GET_STATUS() & portALL_IPL_BITS ) >> portIPL_SHIFT )
-	#define portASSERT_IF_INTERRUPT_PRIORITY_INVALID() configASSERT( portCURRENT_INTERRUPT_PRIORITY <= configMAX_SYSCALL_INTERRUPT_PRIORITY )
-#endif /* configASSERT */
+extern volatile UBaseType_t uxInterruptNesting;
+#define portASSERT_IF_IN_ISR() configASSERT( uxInterruptNesting == 0 )
 
-
-#define portNOP()	asm volatile ( 	"nop" )
+#define portNOP()	__asm volatile ( "nop" )
 
 /*-----------------------------------------------------------*/
 

@@ -1,6 +1,7 @@
 ;/*
-;    FreeRTOS V7.5.2 - Copyright (C) 2013 Real Time Engineers Ltd.
-;	
+;    FreeRTOS V8.1.2 - Copyright (C) 2014 Real Time Engineers Ltd.
+;    All rights reserved
+;
 ;
 ;    ***************************************************************************
 ;     *                                                                       *
@@ -60,7 +61,7 @@
 
 ;/*-----------------------------------------------------------*/
 ;
-; Save Task Context 
+; Save Task Context
 ;
 portSAVE_CONTEXT .macro
 		DSB
@@ -100,7 +101,7 @@ portSAVE_CONTEXT .macro
 
 		; If the task is not using a floating point context then skip the
 		; saving of the FPU registers.
-		BEQ		PC+3
+		BEQ		$+16
 		FSTMDBD	LR!, {D0-D15}
 		FMRX    R1,  FPSCR
 		STMFD   LR!, {R1}
@@ -136,7 +137,7 @@ portRESTORE_CONTEXT .macro
 
 		; If the task is not using a floating point context then skip the
 		; VFP register loads.
-		BEQ		PC+3
+		BEQ		$+16
 
 		; Restore the floating point context.
 		LDMFD   LR!, {R0}

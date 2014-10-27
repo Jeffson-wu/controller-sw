@@ -12,7 +12,7 @@
 TARGET = arm-none-eabi-
 CC = $(TARGET)gcc
 OBJCOPY = $(TARGET)objcopy
-INCLUDES = -I ./include -I ./board -I ./arch -I ./freertos/include -I ./ -I ./freertos/portable/GCC/ARM_CM3 -I ./GenericRecorderLibSrc/Include -I./GenericRecorderLibSrc/KernelPorts/FreeRTOS -I./GenericRecorderLibSrc/ConfigurationTemplate
+INCLUDES = -I ./include -I ./board -I ./arch -I ./freertos/include -I ./ -I ./freertos/portable/GCC/ARM_CM3 -I ./GenericRecorderLibSrc/Include -I./GenericRecorderLibSrc/ConfigurationTemplate
 CFLAGS = -g -O0 -c -Wall -Werror -mcpu=cortex-m3 -mthumb -D__START=main -D__STARTUP_CLEAR_BSS -DSTM32F1XX -DUSE_STDPERIPH_DRIVER $(INCLUDES)
 
 LDFLAGS = -T arch/stm32f1x.ld -mcpu=cortex-m3 -mthumb -nostartfiles -Wl,--gc-section
@@ -63,6 +63,7 @@ SOURCES = \
     freertos/croutine.c \
     freertos/list.c \
     freertos/queue.c \
+    freertos/event_groups.c \
     freertos/tasks.c \
     freertos/timers.c \
     freertos/portable/GCC/ARM_CM3/port.c \
@@ -70,8 +71,8 @@ SOURCES = \
     GenericRecorderLibSrc/trcBase.c \
     GenericRecorderLibSrc/trcHardwarePort.c \
     GenericRecorderLibSrc/trcKernel.c \
-    GenericRecorderLibSrc/trcUser.c \
-    GenericRecorderLibSrc/KernelPorts/FreeRTOS/trcKernelPort.c
+    GenericRecorderLibSrc/trcKernelPort.c \
+    GenericRecorderLibSrc/trcUser.c
     
 OBJS = $(patsubst %,$(OBJECTS_DIR)/%,$(SOURCES:%.c=%.o))
 OBJECTS = $(OBJS:%.S=%.o)

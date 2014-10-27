@@ -311,25 +311,25 @@ void ConfigOSTimer ()
   int x= 5;
   int r= 5; 
   int i = 0;
-  yTimer[0]= xTimerCreate((signed char *)"HeartbeatTimer", // Just a text name, not used by the kernel.
+  yTimer[0]= xTimerCreate((char *)"HeartbeatTimer", // Just a text name, not used by the kernel.
               ( 100 * x ),          // The timer period in ticks.
               pdTRUE,               // The timers will auto-reload themselves when they expire.
               ( void * ) 100,       // Assign each timer a unique id equal to its array index.
               vHeartBeat_LEDToggle  // Each timer calls the same callback when it expires.
               );
-  yTimer[1]= xTimerCreate((signed char *)"ErrorLedTimer", // Just a text name, not used by the kernel.
+  yTimer[1]= xTimerCreate((char *)"ErrorLedTimer", // Just a text name, not used by the kernel.
               ( 100 * y ),          // The timer period in ticks.
               pdTRUE,               // The timers will auto-reload themselves when they expire.
               ( void * ) 102,       // Assign each timer a unique id equal to its array index.
               vError_LEDToggle      // Each timer calls the same callback when it expires.
               );
-  yTimer[2]= xTimerCreate((signed char *)"LogTimer",       // Just a text name, not used by the kernel.
+  yTimer[2]= xTimerCreate((char *)"LogTimer",       // Just a text name, not used by the kernel.
               ( 100 * z ),          // The timer period in ticks.
               pdTRUE,               // The timers will auto-reload themselves when they expire.
               ( void * ) 103,       // Assign each timer a unique id equal to its array index.
               vReadTubeTemp         // Each timer calls the same callback when it expires.
               );
-  yTimer[3]= xTimerCreate((signed char *)"ResetHeaters",       // Just a text name, not used by the kernel.
+  yTimer[3]= xTimerCreate((char *)"ResetHeaters",       // Just a text name, not used by the kernel.
               ( 100 * r ),          // The timer period in ticks.
               pdTRUE,               // The timers will auto-reload themselves when they expire.
               ( void * ) 104,       // Assign each timer a unique id equal to its array index.
@@ -408,7 +408,6 @@ void init_os_trace()
   }else
   {
     vTraceConsoleMessage("OS trace started ");
-    vTraceConsoleMessage("Compiled: %s @ %s",(uint8_t *)__TIME__,(uint8_t *)__DATE__);
     vTraceUserEvent(1);
     vTraceSetISRProperties(ID_ISR_TIMER1, "ISRTimer1", PRIO_OF_ISR_TIMER1);
   }
@@ -450,7 +449,6 @@ int main(void)
   long *p;
   long TubeId;
   xMessage *msg;
-  
   HW_Init();
   PWM_Init(24000,24000);
 
@@ -475,19 +473,18 @@ int main(void)
   xModbusSemaphore = xSemaphoreCreateMutex();
   /*create queue*/
   ModbusQueueHandle=xQueueCreate( 32, ( unsigned portBASE_TYPE ) sizeof( void * ) );
-  vQueueAddToRegistry(ModbusQueueHandle,(signed char *)"MODBUS");
+  vQueueAddToRegistry(ModbusQueueHandle,(char *)"MODBUS");
   LogQueueHandle=xQueueCreate( 64, ( unsigned portBASE_TYPE ) sizeof( void * ) );
-  vQueueAddToRegistry(LogQueueHandle,(signed char *)"LOG");
+  vQueueAddToRegistry(LogQueueHandle,(char *)"LOG");
   CoolAndLidQueueHandle=xQueueCreate( QUEUESIZE, ( unsigned portBASE_TYPE ) sizeof( void * ) );
-  vQueueAddToRegistry(CoolAndLidQueueHandle,(signed char *)"CooleAndLid");
+  vQueueAddToRegistry(CoolAndLidQueueHandle,(char *)"CooleAndLid");
   TubeSequencerQueueHandle=xQueueCreate( 100, ( unsigned portBASE_TYPE ) sizeof( void * ) );
-  vQueueAddToRegistry(TubeSequencerQueueHandle,(signed char *)"GDI");
-
-  xTaskCreate( ModbusTask, ( const signed char * ) "Modbus task", ( unsigned short ) 400, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &modbusCreatedTask );
-  xTaskCreate( LogTask, ( const signed char * ) "Log task", ( unsigned short ) 400, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvLogTask );
-  xTaskCreate( gdi_task, ( const signed char * ) "Debug task", ( unsigned short ) 600, NULL, ( ( unsigned portBASE_TYPE ) 1 ) | portPRIVILEGE_BIT, &gdiCreatedTask );
-  xTaskCreate( CooleAndLidTask, (const signed char *) "CooleAndLid task", 300, NULL, ( (unsigned portBASE_TYPE) 4 ) | portPRIVILEGE_BIT, &pvCooleAndLidTask );
-  xTaskCreate( TubeSequencerTask, ( const signed char * ) "TubeSeq task", ( unsigned short ) 1000, NULL, ( ( unsigned portBASE_TYPE ) 4 ) | portPRIVILEGE_BIT, &pvTubeSequencerTaskTask );
+  vQueueAddToRegistry(TubeSequencerQueueHandle,(char *)"GDI");
+  xTaskCreate( ModbusTask, ( const char * ) "Modbus task", ( unsigned short ) 400, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &modbusCreatedTask );
+  xTaskCreate( LogTask, ( const char * ) "Log task", ( unsigned short ) 400, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvLogTask );
+  xTaskCreate( gdi_task, ( const char * ) "Debug task", ( unsigned short ) 600, NULL, ( ( unsigned portBASE_TYPE ) 1 ) | portPRIVILEGE_BIT, &gdiCreatedTask );
+  xTaskCreate( CooleAndLidTask, (const char *) "Cool Lid task" /*max 16 chars*/, 300, NULL, ( (unsigned portBASE_TYPE) 4 ) | portPRIVILEGE_BIT, &pvCooleAndLidTask );
+  xTaskCreate( TubeSequencerTask, ( const char * ) "TubeSeq task", ( unsigned short ) 1000, NULL, ( ( unsigned portBASE_TYPE ) 4 ) | portPRIVILEGE_BIT, &pvTubeSequencerTaskTask );
 
 #if 1
   for(i = 1; i < 17; i++)
@@ -523,8 +520,6 @@ void assert_failed(unsigned char* file, unsigned int line)
      ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
   ErrorOn();/*Turn on error led to show that sequence has ended*/
   
-  vTraceConsoleMessage("Assertion: %s line: %d", file, line);
-
   GPIO_SetBits(GPIOB,GPIO_Pin_11);  /* Turn on error LED */
   GPIO_ResetBits(GPIOC,GPIO_Pin_9); /* Turn off hartbeat LED */
   /* Infinite loop */
@@ -536,12 +531,63 @@ void assert_failed(unsigned char* file, unsigned int line)
 
 void HardFault_Handler(void)
 {
+ __asm volatile
+    (
+        " tst lr, #4                                                \n"
+        " ite eq                                                    \n"
+        " mrseq r0, msp                                             \n"
+        " mrsne r0, psp                                             \n"
+        " ldr r1, [r0, #24]                                         \n"
+        " ldr r2, handler2_address_const                            \n"
+        " bx r2                                                     \n"
+        " handler2_address_const: .word prvGetRegistersFromStack    \n"
+    );
+
+#if 0
   GPIO_SetBits(GPIOB,GPIO_Pin_11);  /* Turn on error LED */
   GPIO_ResetBits(GPIOC,GPIO_Pin_9); /* Turn off hartbeat LED */
   
   GPIO_SetBits(GPIOB,GPIO_Pin_0);   /* Turn on RX LED */
   GPIO_SetBits(GPIOB,GPIO_Pin_1);   /* Turn on TX LED */
   while (1) {}
+#endif
+}
+
+void prvGetRegistersFromStack( uint32_t *pulFaultStackAddress )
+{
+/* These are volatile to try and prevent the compiler/linker optimising them
+away as the variables never actually get used.  If the debugger won't show the
+values of the variables, make them global my moving their declaration outside
+of this function. */
+volatile uint32_t r0;
+volatile uint32_t r1;
+volatile uint32_t r2;
+volatile uint32_t r3;
+volatile uint32_t r12;
+volatile uint32_t lr; /* Link register. */
+volatile uint32_t pc; /* Program counter. */
+volatile uint32_t psr;/* Program status register. */
+
+    r0 = pulFaultStackAddress[ 0 ];
+    r1 = pulFaultStackAddress[ 1 ];
+    r2 = pulFaultStackAddress[ 2 ];
+    r3 = pulFaultStackAddress[ 3 ];
+
+    r12 = pulFaultStackAddress[ 4 ];
+    lr = pulFaultStackAddress[ 5 ];
+    pc = pulFaultStackAddress[ 6 ];
+    psr = pulFaultStackAddress[ 7 ];
+
+    /* When the following line is hit, the variables contain the register values. */
+    for( ;; );
+    r0=r0;
+    r1=r1;
+    r2=r2;
+    r3=r3;
+    r12=r12;
+    lr=lr;
+    pc=pc;
+    psr=psr;
 }
 
 

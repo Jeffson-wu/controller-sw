@@ -677,7 +677,7 @@ void adsGetLatest(int16_t * ch0value, int16_t * ch1value, int16_t * ch2value, in
 void adsConfigConversionTimer(tmrTIMER_CALLBACK convStartFn)
 {
   xTimerHandle xTimer;
-  xTimer= xTimerCreate((signed char *)"ADCTimer",      // Just a text name, not used by the kernel.
+  xTimer= xTimerCreate((char *)"ADCTimer",      // Just a text name, not used by the kernel.
                        ((configTICK_RATE_HZ)/SAMPLING_FREQUENCY),  // conversion frequency.
                        pdTRUE,          // The timers will auto-reload themselves when they expire.
                        (void *) 1,      // Assign each timer a unique id equal to its array index.

@@ -383,7 +383,7 @@ void ModbusTask( void * pvParameters )
 void Modbus_init(USART_TypeDef *uart)
 {
   usedUart=uart;
-  TimerHandle=xTimerCreate((signed char*)"Modbus Response timer", MODBUS_RESPONSE_TIMEOUT, pdTRUE, NULL, response_timeoutCB);
+  TimerHandle=xTimerCreate((char*)"Modbus Response timer", MODBUS_RESPONSE_TIMEOUT, pdTRUE, NULL, response_timeoutCB);
   xModbusSemaphore = xSemaphoreCreateMutex();
   xSemaphoreTake( xModbusSemaphore, portMAX_DELAY );
   UART_Init(USART2, recieveChar);

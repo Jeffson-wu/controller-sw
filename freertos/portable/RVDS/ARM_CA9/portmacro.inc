@@ -1,5 +1,6 @@
 ;/*
-;    FreeRTOS V7.5.2 - Copyright (C) 2013 Real Time Engineers Ltd.
+;    FreeRTOS V8.1.2 - Copyright (C) 2014 Real Time Engineers Ltd.
+;    All rights reserved
 ;
 ;
 ;    ***************************************************************************
@@ -103,9 +104,6 @@ IRQ_MODE			EQU		0x12
 	MACRO
 	portRESTORE_CONTEXT
 
-	; Switch to system mode
-	CPS		#SYS_MODE
-
 	; Set the SP to point to the stack of the task being restored.
 	LDR		R0, =pxCurrentTCB
 	LDR		R1, [R0]
@@ -119,7 +117,7 @@ IRQ_MODE			EQU		0x12
 	CMP		R1, #0
 
 	; Restore the floating point context, if any
-	LDMFDNE SP!, {R0}
+	POPNE	{R0}
 	VPOPNE	{D16-D31}
 	VPOPNE	{D0-D15}
 	VMSRNE  FPSCR, R0
