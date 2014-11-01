@@ -87,22 +87,9 @@ void ErrorOff();
 void LogOn(int log_time);
 void LogOff();
 
-
-void SWupdate_taskkill(void)
-{
-  //Delete tasks not needed
-  vTaskDelete( pvCooleAndLidTask )       PRIVILEGED_FUNCTION;
-  vTaskDelete( pvLogTask )               PRIVILEGED_FUNCTION;
-  vTaskDelete( pvTubeSequencerTaskTask ) PRIVILEGED_FUNCTION;
-  vTaskDelete( modbusCreatedTask )       PRIVILEGED_FUNCTION;
-
-  //Delete a queue - freeing all the memory allocated for storing of items placed on the queue.
-  vQueueDelete(CoolAndLidQueueHandle);
-  vQueueDelete(LogQueueHandle);
-  vQueueDelete(TubeSequencerQueueHandle);
-  vQueueDelete(ModbusQueueHandle);
-}
-
+/* ---------------------------------------------------------------------------*/
+/* Functions                                                                  */
+/* ---------------------------------------------------------------------------*/
 void fn(void)
 {
   static int nesting = 0;
@@ -113,6 +100,7 @@ void fn(void)
   nesting--;
 }
 
+/* ---------------------------------------------------------------------------*/
 void HeartBeat_ErrorLed_Pinconfig()
 {
   /*HeartBeatLED PC9 to test*/
@@ -123,7 +111,7 @@ void HeartBeat_ErrorLed_Pinconfig()
   /* Configure the GPIO_LED pin */
   GPIO_InitStructure.GPIO_Pin = GPIO_Pin_9;
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
-  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
   GPIO_Init(GPIOC, &GPIO_InitStructure);
   GPIO_SetBits(GPIOC,GPIO_Pin_9);
   /*ErrorLED PB11 to test*/
@@ -133,7 +121,7 @@ void HeartBeat_ErrorLed_Pinconfig()
   /* Configure the GPIO_LED pin */
   GPIO_InitStructure.GPIO_Pin = GPIO_Pin_11;
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
-  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
   GPIO_Init(GPIOB, &GPIO_InitStructure);
   GPIO_ResetBits(GPIOB,GPIO_Pin_11);
 
@@ -144,7 +132,7 @@ void HeartBeat_ErrorLed_Pinconfig()
   /* Configure the GPIO_LED pin */
   GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0 | GPIO_Pin_1;
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
-  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
   GPIO_Init(GPIOB, &GPIO_InitStructure);
   GPIO_ResetBits(GPIOB,GPIO_Pin_0);/*RX LED*/
   GPIO_ResetBits(GPIOB,GPIO_Pin_1);/*TX LED*/
@@ -156,7 +144,7 @@ void HeartBeat_ErrorLed_Pinconfig()
   GPIO_SetBits(GPIOA,GPIO_Pin_0);
 }
 
-
+/* ---------------------------------------------------------------------------*/
 void HW_Init(void)
 {
    /*Setup for USART2 - MODBUS*/
@@ -184,12 +172,12 @@ void HW_Init(void)
   RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART3, ENABLE);
   GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10;/*TX*/
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
-  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_10MHz;
   GPIO_Init(GPIOC, &GPIO_InitStructure);
 #endif
   GPIO_InitStructure.GPIO_Pin = GPIO_Pin_1;/*RTS*/
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
-  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_10MHz;
   GPIO_Init(GPIOA, &GPIO_InitStructure);
   GPIO_ResetBits(GPIOA,GPIO_Pin_1);
 
@@ -233,9 +221,9 @@ void HW_Init(void)
 
   NVIC_PriorityGroupConfig(NVIC_PriorityGroup_4);
   /* FREERTOS CONFIG For simplicity all bits must be defined
-		to be pre-emption priority bits.  The following assertion will fail if
-		this is not the case (if some bits represent a sub-priority).
-			configASSERT( ( portAIRCR_REG & portPRIORITY_GROUP_MASK ) <= ulMaxPRIGROUPValue );*/
+    to be pre-emption priority bits.  The following assertion will fail if
+    this is not the case (if some bits represent a sub-priority).
+      configASSERT( ( portAIRCR_REG & portPRIORITY_GROUP_MASK ) <= ulMaxPRIGROUPValue );*/
 
 //#define DEBUG_CLOCK_MSO
 #ifdef DEBUG_CLOCK_MSO
@@ -251,45 +239,48 @@ void HW_Init(void)
     //RCC_GetClocksFreq(&CLOCKS);
     //CLOCKS.SYSCLK_Frequency;
 #endif
-
-
 }
 
-
+/* ---------------------------------------------------------------------------*/
 void ResetHeaters()
 {
   if( xTimerStart(yTimer[3], 0 ) != pdPASS );
   GPIO_ResetBits(GPIOA,GPIO_Pin_0);
 }
 
+/* ---------------------------------------------------------------------------*/
 void vHeatersReset(xTimerHandle pxTimer )
 {
   GPIO_SetBits(GPIOA,GPIO_Pin_0);
   if( xTimerStop( yTimer[3], 0 ) != pdPASS );
 }
 
-
+/* ---------------------------------------------------------------------------*/
 void ErrorOn()
 {
   if( xTimerStart(yTimer[1], 0 ) != pdPASS );
 }
 
+/* ---------------------------------------------------------------------------*/
 void ErrorOff()
 {
   if( xTimerStop( yTimer[1], 0 ) != pdPASS );
 }
 
+/* ---------------------------------------------------------------------------*/
 void LogOn(int log_time)/*In secs*/
 {
   if( xTimerStart(yTimer[2], 0 ) != pdPASS );
   if(xTimerChangePeriod( yTimer[2],10 * log_time,100)!= pdPASS );
 }
 
+/* ---------------------------------------------------------------------------*/
 void LogOff()
 {
   if( xTimerStop( yTimer[2], 0 ) != pdPASS );
 }
 
+/* ---------------------------------------------------------------------------*/
 void vError_LEDToggle(xTimerHandle pxTimer )
 {
   GPIOB->ODR ^= GPIO_Pin_11;
@@ -297,6 +288,7 @@ void vError_LEDToggle(xTimerHandle pxTimer )
 
 #define DEBUG_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_response(buf);
 
+/* ---------------------------------------------------------------------------*/
 void vHeartBeat_LEDToggle(xTimerHandle pxTimer )
 {
   //char buf[20];
@@ -304,6 +296,7 @@ void vHeartBeat_LEDToggle(xTimerHandle pxTimer )
   //DEBUG_PRINTF("FREE HEAP:%d",xPortGetFreeHeapSize());
 }
 
+/* ---------------------------------------------------------------------------*/
 void ConfigOSTimer ()
 {
   int z = 100;
@@ -362,27 +355,23 @@ char buf[300]; /*buffer for debug printf*/
 
 #define _PORT_INIT_EXISTS
 
-//####JRJ void port_init(void);
-
 extern void prvSetupHardware(void);
 
+/* ---------------------------------------------------------------------------*/
 void port_init(void)
 {
    // prvSetupHardware();
 }
 #endif
 
-
-
-//####JRJ void vApplicationMallocFailedHook( void );
-//####JRJ extern void vApplicationStackOverflowHook( xTaskHandle *pxTask, signed char *pcTaskName );
-
+/* ---------------------------------------------------------------------------*/
 void vApplicationMallocFailedHook( void )
 {
   ErrorOn();
   vTraceConsoleMessage("\n\rMalloc failed!\n\r");
 }
 
+/* ---------------------------------------------------------------------------*/
 void vApplicationStackOverflowHook( xTaskHandle *pxTask, signed char *pcTaskName )
 {
   ErrorOn();
@@ -391,6 +380,7 @@ void vApplicationStackOverflowHook( xTaskHandle *pxTask, signed char *pcTaskName
   for( ;; );
 }
 
+/* ---------------------------------------------------------------------------*/
 void init_os_trace()
 {
 #define ID_ISR_TIMER1 1       // lowest valid ID is 1
@@ -414,6 +404,7 @@ void init_os_trace()
 }
 
 
+/* ---------------------------------------------------------------------------*/
 /* Defined in main.c. */
 void vConfigureTimerForRunTimeStats( void )
 {
@@ -432,11 +423,13 @@ void vConfigureTimerForRunTimeStats( void )
   TIM_TimeBaseInit(TIM5, &TIM_TimeBaseStructure);
 }
 
+/* ---------------------------------------------------------------------------*/
 unsigned long vGetCounter()
 {
   return TIM_GetCounter(TIM5);
 }
 
+/* ---------------------------------------------------------------------------*/
 /**
   * @brief  Main program.
   * @param  None
@@ -444,13 +437,8 @@ unsigned long vGetCounter()
   */
 int main(void)
 {
-  int i;
-
-  long *p;
-  long TubeId;
-  xMessage *msg;
   HW_Init();
-  PWM_Init(24000,24000);
+  PWM_Init(10000,10000); //10kHz PWM
 
   gdi_init(); /*Setup debug uart*/
  // UART_Init(USART3,NULL);
@@ -486,17 +474,24 @@ int main(void)
   xTaskCreate( CooleAndLidTask, (const char *) "Cool Lid task" /*max 16 chars*/, 300, NULL, ( (unsigned portBASE_TYPE) 4 ) | portPRIVILEGE_BIT, &pvCooleAndLidTask );
   xTaskCreate( TubeSequencerTask, ( const char * ) "TubeSeq task", ( unsigned short ) 1000, NULL, ( ( unsigned portBASE_TYPE ) 4 ) | portPRIVILEGE_BIT, &pvTubeSequencerTaskTask );
 
-#if 1
-  for(i = 1; i < 17; i++)
+#if 1 //
   {
-    TubeId = i;
-    msg = pvPortMalloc(sizeof(xMessage)+sizeof(long));
-    if(msg)
+    int i;
+    long *p;
+    long TubeId;
+    xMessage *msg;
+
+    for(i = 1; i < 17; i++)
     {
-      msg->ucMessageID = TUBE_TEST_SEQ;
-      p = (long *)msg->ucData;
-      *p = TubeId;
-      xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
+      TubeId = i;
+      msg = pvPortMalloc(sizeof(xMessage)+sizeof(long));
+      if(msg)
+      {
+        msg->ucMessageID = TUBE_TEST_SEQ;
+        p = (long *)msg->ucData;
+        *p = TubeId;
+        xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
+      }
     }
   }
 #endif
@@ -521,11 +516,14 @@ void assert_failed(unsigned char* file, unsigned int line)
   ErrorOn();/*Turn on error led to show that sequence has ended*/
   
   GPIO_SetBits(GPIOB,GPIO_Pin_11);  /* Turn on error LED */
-  GPIO_ResetBits(GPIOC,GPIO_Pin_9); /* Turn off hartbeat LED */
+  GPIO_ResetBits(GPIOC,GPIO_Pin_9); /* Turn off hartbeat LED */  
+  GPIO_ResetBits(GPIOB,GPIO_Pin_0);   /* Turn off RX LED */
+  GPIO_ResetBits(GPIOB,GPIO_Pin_1);   /* Turn off TX LED */
   /* Infinite loop */
   while (1)
   {
-  }
+  }  
+  // Go to core dump mode instead of the infinite loop
 }
 #endif
 
@@ -542,52 +540,124 @@ void HardFault_Handler(void)
         " bx r2                                                     \n"
         " handler2_address_const: .word prvGetRegistersFromStack    \n"
     );
-
-#if 0
-  GPIO_SetBits(GPIOB,GPIO_Pin_11);  /* Turn on error LED */
-  GPIO_ResetBits(GPIOC,GPIO_Pin_9); /* Turn off hartbeat LED */
-  
-  GPIO_SetBits(GPIOB,GPIO_Pin_0);   /* Turn on RX LED */
-  GPIO_SetBits(GPIOB,GPIO_Pin_1);   /* Turn on TX LED */
-  while (1) {}
-#endif
 }
 
 void prvGetRegistersFromStack( uint32_t *pulFaultStackAddress )
 {
-/* These are volatile to try and prevent the compiler/linker optimising them
-away as the variables never actually get used.  If the debugger won't show the
-values of the variables, make them global my moving their declaration outside
-of this function. */
-volatile uint32_t r0;
-volatile uint32_t r1;
-volatile uint32_t r2;
-volatile uint32_t r3;
-volatile uint32_t r12;
-volatile uint32_t lr; /* Link register. */
-volatile uint32_t pc; /* Program counter. */
-volatile uint32_t psr;/* Program status register. */
+  /* These are volatile to try and prevent the compiler/linker optimising them
+  away as the variables never actually get used.  If the debugger won't show the
+  values of the variables, make them global my moving their declaration outside
+  of this function. */
+  volatile uint32_t r0;
+  volatile uint32_t r1;
+  volatile uint32_t r2;
+  volatile uint32_t r3;
+  volatile uint32_t r4;
+  volatile uint32_t r5;
+  volatile uint32_t r6;
+  volatile uint32_t r7;
+  volatile uint32_t r8;
+  volatile uint32_t r9;
+  volatile uint32_t r10;
+  volatile uint32_t r11;
+  volatile uint32_t r12;
+  volatile uint32_t lr; /* Link register. */
+  volatile uint32_t pc; /* Program counter. */
+  volatile uint32_t psr;/* Program status register. */
+  volatile uint32_t _CFSR;
+  volatile uint32_t _HFSR;
+  volatile uint32_t _DFSR;
+  volatile uint32_t _AFSR;
+  volatile uint32_t _MMAR;
+  volatile uint32_t _BFAR;
 
-    r0 = pulFaultStackAddress[ 0 ];
-    r1 = pulFaultStackAddress[ 1 ];
-    r2 = pulFaultStackAddress[ 2 ];
-    r3 = pulFaultStackAddress[ 3 ];
+  register unsigned int _r4  __asm("r4");
+  register unsigned int _r5  __asm("r5");
+  register unsigned int _r6  __asm("r6");
+  register unsigned int _r7  __asm("r7");
+  register unsigned int _r8  __asm("r8");
+  register unsigned int _r9  __asm("r9");
+  register unsigned int _r10 __asm("r10");
+  register unsigned int _r11 __asm("r11");
 
-    r12 = pulFaultStackAddress[ 4 ];
-    lr = pulFaultStackAddress[ 5 ];
-    pc = pulFaultStackAddress[ 6 ];
-    psr = pulFaultStackAddress[ 7 ];
+  r0 = pulFaultStackAddress[ 0 ];
+  r1 = pulFaultStackAddress[ 1 ];
+  r2 = pulFaultStackAddress[ 2 ];
+  r3 = pulFaultStackAddress[ 3 ];
+  r4 = _r4;
+  r5 = _r5;
+  r6 = _r6;
+  r7 = _r7;
+  r8 = _r8;
+  r9 = _r9;
+  r10 = _r10;
+  r11 = _r11;
+  r12 = pulFaultStackAddress[ 4 ];
+  lr = pulFaultStackAddress[ 5 ];
+  pc = pulFaultStackAddress[ 6 ];
+  psr = pulFaultStackAddress[ 7 ];
 
-    /* When the following line is hit, the variables contain the register values. */
-    for( ;; );
-    r0=r0;
-    r1=r1;
-    r2=r2;
-    r3=r3;
-    r12=r12;
-    lr=lr;
-    pc=pc;
-    psr=psr;
+  // Configurable Fault Status Register
+  // Consists of MMSR, BFSR and UFSR
+  _CFSR = (*((volatile unsigned long *)(0xE000ED28))) ;   
+                                                                                  
+  // Hard Fault Status Register
+  _HFSR = (*((volatile unsigned long *)(0xE000ED2C))) ;
+  
+  // Debug Fault Status Register
+  _DFSR = (*((volatile unsigned long *)(0xE000ED30))) ;
+  
+  // Auxiliary Fault Status Register
+  _AFSR = (*((volatile unsigned long *)(0xE000ED3C))) ;
+  
+  // Read the Fault Address Registers. These may not contain valid values.
+  // Check BFARVALID/MMARVALID to see if they are valid values
+  // MemManage Fault Address Register
+  _MMAR = (*((volatile unsigned long *)(0xE000ED34))) ;
+  // Bus Fault Address Register
+  _BFAR = (*((volatile unsigned long *)(0xE000ED38))) ;
+  
+  //__asm("BKPT #0\n") ; // Break into the debugger
+
+  /* When the following line is hit, the variables contain the register values. */
+#if 1
+    GPIO_SetBits(GPIOB,GPIO_Pin_11);  /* Turn on error LED */
+    GPIO_ResetBits(GPIOC,GPIO_Pin_9); /* Turn off hartbeat LED */
+    
+    GPIO_SetBits(GPIOB,GPIO_Pin_0);   /* Turn on RX LED */
+    GPIO_SetBits(GPIOB,GPIO_Pin_1);   /* Turn on TX LED */
+    PWM_Set(0,TopHeaterCtrl1PWM);
+    PWM_Set(0,TopHeaterCtrl2PWM);
+    PWM_Set(0,FANctrlPWM); 
+    PWM_Set(0,PeltierCtrlPWM1);
+    PWM_Set(0,PeltierCtrlPWM3);
+    while (1) {}
+    // Go to core dump mode instead of the infinite loop
+#endif
+  //for( ;; );
+  r0=r0;
+  r1=r1;
+  r2=r2;
+  r3=r3;
+  r4=r4;
+  r5=r5;
+  r6=r6;
+  r7=r7;
+  r8=r8;
+  r9=r9;
+  r10=r10;
+  r11=r11;
+  r12=r12;
+  lr=lr;
+  pc=pc;
+  psr=psr;
+  
+  _CFSR=_CFSR;
+  _HFSR=_HFSR;
+  _DFSR=_DFSR;
+  _AFSR=_AFSR;
+  _MMAR=_MMAR;
+  _BFAR=_BFAR;
 }
 
 

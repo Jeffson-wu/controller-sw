@@ -41,17 +41,14 @@ char buf[20];
 #define DEBUG_PRINTF(fmt, args...)    /* Don't do anything in release builds */
 #endif
 
-
 #define STANDALONE /*Defines if the M3 Runs with or without Linux box*/
 
 #define LOCK_OUTPUT GPIO_Pin_8
 
-//#define DEBUG
-
 typedef enum {
-	STOP_STATE,
+  STOP_STATE,
   MANUAL_STATE,
-	CTRL_OPEN_LOOP_STATE,
+  CTRL_OPEN_LOOP_STATE,
   CTRL_CLOSED_LOOP_STATE,
   nCTRL_STATES
 } controllerState_t;
@@ -78,22 +75,22 @@ typedef enum {
 
 typedef struct {
   controllerState_t state;
-  int16_t         	setPoint;
+  int16_t           setPoint;
   uint16_t          *pwmVal;
   int16_t           *adcVal;
-  int16_t         	setPointLL;
-  int16_t         	setPointHL;
-  int8_t					  hysteresisActiveFlag;
+  int16_t           setPointLL;
+  int16_t           setPointHL;
+  int8_t            hysteresisActiveFlag;
 } regulatorData_t;
 
 typedef struct FAN_DATA{
-	fanID_t					fanID;
-	regulatorData_t regulator;
+  fanID_t         fanID;
+  regulatorData_t regulator;
 } fanData_t;
 
 typedef struct PELTIER_DATA{
   peltierID_t     peltierID;
-	regulatorData_t regulator;
+  regulatorData_t regulator;
 } peltierData_t;
 
 typedef struct LID_DATA{
@@ -129,8 +126,8 @@ static fanData_t fanData[1] = {
 
 void standAlone() //These settings should be made from the Linux Box
 {
-  peltierData[0].regulator.setPoint = temp_2_dac(200);
-  *fanData[0].regulator.pwmVal = 20000;
+  *peltierData[0].regulator.pwmVal = 20000;
+  *fanData[0].regulator.pwmVal = 24575; //32767*75/100 = 75%
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -226,12 +223,14 @@ void CooleAndLidTask( void * pvParameters )
   xSemaphoreHandle xADSSemaphore = NULL;
 
   xMessage *msg;
+#ifndef STANDALONE
   int i; //iterator
+#endif
 
 #ifdef DEBUG_COOL
   int8_t cnt = 0;
-  int count = 0;
-  char str[20];
+  //int count = 0;
+  //char str[20];
 #endif
 
   /* Create ADC synchrinization semaphore and let the ADC ISR know about it */
@@ -252,14 +251,15 @@ void CooleAndLidTask( void * pvParameters )
   }
   else
   {
-    // #### Fatal error handling
+    // #### Fatal error handling    
+    configASSERT(pdFALSE);
   }
 #endif
 
   adsConfigConversionTimer(&adsTimerCallback);
 
 #ifdef STANDALONE
-	standAlone();
+  standAlone();
 #endif
 
   while(1)
@@ -267,7 +267,7 @@ void CooleAndLidTask( void * pvParameters )
   #ifdef DEBUG_COOL
       if (cnt == 50)
       {
-        DEBUG_PRINTF("PEL:%d,%d,LID1:%d,%d,ST:%dLID2:%d,%d,ST:%d", dac_2_temp(adcCh[0]), pwmCh[0], dac_2_temp(adcCh[1]), pwmCh[1],lidData[0].regulator.state, dac_2_temp(adcCh[2]), pwmCh[2],lidData[1].regulator.state);
+        DEBUG_PRINTF("PEL:%ld,%d,LID1:%ld,%d,ST:%dLID2:%ld,%d,ST:%d", dac_2_temp(adcCh[0]), pwmCh[0], dac_2_temp(adcCh[1]), pwmCh[1],lidData[0].regulator.state, dac_2_temp(adcCh[2]), pwmCh[2],lidData[1].regulator.state);
         cnt = 0;
       }
       cnt++;
@@ -281,31 +281,14 @@ void CooleAndLidTask( void * pvParameters )
     /* Read lastest ADC samples into buffer */
     adsGetLatest(&adcCh[0], &adcCh[1], &adcCh[2], &adcCh[3]);
 
+#ifndef STANDALONE
     peltier(&peltierData[0]);
-#if 0
-		if ( !msgSent
-				&& lidData[0].regulator.state == CTRL_CLOSED_LOOP_STATE
-				//&& (*peltierData[0].regulator.adcVal < peltierData[0].regulator.setPointHL)		//ToDo: Incomment again!!
-				&& (*lidData[0].regulator.adcVal > lidData[0].regulator.setPointLL)
-				&& (*lidData[1].regulator.adcVal > lidData[1].regulator.setPointLL) )
-		{
-			msg = pvPortMalloc(sizeof(xMessage));
-			if(msg)
-			{
-				msg->ucMessageID = START_TUBE_SEQ;
-		    xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
-				msgSent = TRUE;
-			}
-		}
-
-#endif
-
 
     for(i = 0; i < 2; i ++)
     {
       lid(&lidData[i]);
     }
-    
+#endif
     PWM_Set(pwmCh[0], PeltierCtrlPWM1);
     PWM_Set(pwmCh[1], TopHeaterCtrl1PWM);
     PWM_Set(pwmCh[2], TopHeaterCtrl2PWM);
@@ -336,7 +319,7 @@ void CooleAndLidTask( void * pvParameters )
           p=(SetCooleAndLidReq *)(msg->ucData);
           lidData[p->idx-1].regulator.setPoint = temp_2_dac(p->value);
           lidData[0].regulator.state = CTRL_CLOSED_LOOP_STATE;
-        	lidData[1].regulator.state = CTRL_CLOSED_LOOP_STATE;
+          lidData[1].regulator.state = CTRL_CLOSED_LOOP_STATE;
         }
         break;
         case SET_LID_PWM:
@@ -349,14 +332,14 @@ void CooleAndLidTask( void * pvParameters )
         break;
         case START_LID_HEATING:
         {
-        	lidData[0].regulator.state = CTRL_CLOSED_LOOP_STATE;
-        	lidData[1].regulator.state = CTRL_CLOSED_LOOP_STATE;
+          lidData[0].regulator.state = CTRL_CLOSED_LOOP_STATE;
+          lidData[1].regulator.state = CTRL_CLOSED_LOOP_STATE;
         }
         break;
         case STOP_LID_HEATING:
         {
-        	lidData[0].regulator.state = STOP_STATE;
-        	lidData[1].regulator.state = STOP_STATE;
+          lidData[0].regulator.state = STOP_STATE;
+          lidData[1].regulator.state = STOP_STATE;
         }
         break;
         case SET_LID_LOCK:

@@ -73,7 +73,7 @@ typedef struct LOG_DATA_QUEUE {
 #define DEBUG_LOG_PRINTF(fmt, args...)    /* Don't do anything in release builds */
 #endif
 /* Private variables ---------------------------------------------------------*/
-bool log_tubes[NUM_OF_TUBES]={FALSE};
+bool log_tubes[NUM_OF_TUBES]={FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE};
 
 static logDataQueue_t __attribute__ ((aligned (16))) logDataQueue[NUM_OF_TUBES]; // #### Aligned for debug
 
@@ -324,7 +324,7 @@ void LogTask( void * pvParameters )
   uint16_t modbus_data;
   uint16_t modbus_addr;
   xMessage *msg;
-  long TubeId,log_interval;
+  long TubeId, log_interval;
   int i = 1;
   static long last_tube_to_log;
   
