@@ -245,7 +245,9 @@ void HW_Init(void)
 void ResetHeaters()
 {
   if( xTimerStart(yTimer[3], 0 ) != pdPASS );
+  vTraceConsoleMessage("ResetHeaters!");
   GPIO_ResetBits(GPIOA,GPIO_Pin_0);
+  GPIO_SetBits(GPIOB,GPIO_Pin_11);  /* Turn on error LED */
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -253,6 +255,7 @@ void vHeatersReset(xTimerHandle pxTimer )
 {
   GPIO_SetBits(GPIOA,GPIO_Pin_0);
   if( xTimerStop( yTimer[3], 0 ) != pdPASS );
+  GPIO_ResetBits(GPIOB,GPIO_Pin_11);  /* Turn off error LED */
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -376,7 +379,9 @@ void vApplicationStackOverflowHook( xTaskHandle *pxTask, signed char *pcTaskName
 {
   ErrorOn();
   vTraceConsoleMessage("\n\rStack overflow!\n\r");
-  taskDISABLE_INTERRUPTS();
+  GPIO_SetBits(GPIOB,GPIO_Pin_0);   /* Turn on RX LED */
+  GPIO_SetBits(GPIOB,GPIO_Pin_1);   /* Turn on TX LED */
+  taskDISABLE_INTERRUPTS();  
   for( ;; );
 }
 
@@ -438,23 +443,17 @@ unsigned long vGetCounter()
 int main(void)
 {
   HW_Init();
-  PWM_Init(10000,10000); //10kHz PWM
-
+  PWM_Init(20000,20000); //20kHz PWM : (TIM3(Topheater2,Peltier, Aux), TIM4(Topheater1, Fan))
   gdi_init(); /*Setup debug uart*/
- // UART_Init(USART3,NULL);
-  //USART_SendData(USART3,'A');
-  
   
   UART_SendMsg(USART3, (u8*)"Monitor Port UP\r\n" , 16);
-
-//  UART_Init(USART1,recieveCMD);
   init_os_trace(); /*GDB CMD:dump binary memory gdb_dump_23.txt 0x20000000 0x20010000  -- http://percepio.com/*/
   Modbus_init(USART2);
   PWM_Set(0,TopHeaterCtrl1PWM);
   PWM_Set(0,TopHeaterCtrl2PWM);
   PWM_Set(0,FANctrlPWM); 
-  PWM_Set(0,PeltierCtrlPWM1);
-  PWM_Set(0,PeltierCtrlPWM3);
+  PWM_Set(0,PeltierCtrl1PWM);
+  PWM_Set(0,AuxCtrlPWM);
 
   ConfigOSTimer();
 
@@ -495,6 +494,7 @@ int main(void)
     }
   }
 #endif
+  ResetHeaters();
 
   vTaskStartScheduler();
   return 0;
@@ -513,7 +513,6 @@ void assert_failed(unsigned char* file, unsigned int line)
 { 
   /* User can add his own implementation to report the file name and line number,
      ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
-  ErrorOn();/*Turn on error led to show that sequence has ended*/
   
   GPIO_SetBits(GPIOB,GPIO_Pin_11);  /* Turn on error LED */
   GPIO_ResetBits(GPIOC,GPIO_Pin_9); /* Turn off hartbeat LED */  
@@ -629,8 +628,8 @@ void prvGetRegistersFromStack( uint32_t *pulFaultStackAddress )
     PWM_Set(0,TopHeaterCtrl1PWM);
     PWM_Set(0,TopHeaterCtrl2PWM);
     PWM_Set(0,FANctrlPWM); 
-    PWM_Set(0,PeltierCtrlPWM1);
-    PWM_Set(0,PeltierCtrlPWM3);
+    PWM_Set(0,PeltierCtrl1PWM);
+    PWM_Set(0,AuxCtrlPWM);
     while (1) {}
     // Go to core dump mode instead of the infinite loop
 #endif

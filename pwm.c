@@ -129,7 +129,7 @@ void PWM_Set(uint16_t pwm_width,PWMPort_t pwm_port)
       ChannelPulse = (uint16_t) (((uint32_t) pwm_width * (TimerPeriod_TIM4 - 1)) / 32768);
       TIM_SetCompare4(TIM4,ChannelPulse);
     break;
-    case PeltierCtrlPWM1:
+    case PeltierCtrl1PWM:
       ChannelPulse = (uint16_t) (((uint32_t) pwm_width * (TimerPeriod_TIM3 - 1)) / 32768);
       TIM_SetCompare1(TIM3,ChannelPulse);
     break;
@@ -137,7 +137,7 @@ void PWM_Set(uint16_t pwm_width,PWMPort_t pwm_port)
       ChannelPulse = (uint16_t) (((uint32_t) pwm_width * (TimerPeriod_TIM3 - 1)) / 32768);
       TIM_SetCompare2(TIM3,ChannelPulse);
     break;
-    case PeltierCtrlPWM3:
+    case AuxCtrlPWM:
       ChannelPulse = (uint16_t) (((uint32_t) pwm_width * (TimerPeriod_TIM3 - 1)) / 32768);
       TIM_SetCompare3(TIM3,ChannelPulse);
     break;	

@@ -13,9 +13,9 @@ typedef enum {
 
   TopHeaterCtrl1PWM,/* PB8 TIM4_CH3*/
   FANctrlPWM,       /* PB9 TIM4_CH4*/
-  PeltierCtrlPWM1,  /* PC6 TIM3_CH1*/
+  PeltierCtrl1PWM,  /* PC6 TIM3_CH1*/
   TopHeaterCtrl2PWM,/* PC7 TIM3_CH2*/
-  PeltierCtrlPWM3,  /* PC8 TIM3_CH3*/
+  AuxCtrlPWM,       /* PC8 TIM3_CH3*/
   nPWMS
 } PWMPort_t;
 
@@ -26,8 +26,8 @@ void PWM_PinConfig(void);
 /* LIST4: TIM 1, 2, 3, 14, 15, 16 and 17 */
 #define IS_TIM_PMW_RANGE_VALID(PERIPH) (((PERIPH) == TopHeaterCtrl1PWM) || \
                                        ((PERIPH) == FANctrlPWM) || \
-                                       ((PERIPH) == PeltierCtrlPWM1) || \
+                                       ((PERIPH) == PeltierCtrl1PWM) || \
                                        ((PERIPH) == TopHeaterCtrl2PWM) || \
-                                       ((PERIPH) == PeltierCtrlPWM3) )
+                                       ((PERIPH) == AuxCtrlPWM) )
 
 #endif /* PWM_H_ */

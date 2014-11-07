@@ -11,6 +11,15 @@
   * <h2><center>&copy; COPYRIGHT 2013 Xtel </center></h2>
   *
   ******************************************************************************
+  * TIM3,CH1:
+  * TIM3,CH2:
+  * TIM3,CH3:
+  * TIM4,CH3:
+  * TIM4,CH4:
+  * ADC CH0:
+  * ADC CH1:
+  * ADC CH2:
+  * ADC CH3: 
   */ 
 
 /* Includes ------------------------------------------------------------------*/
@@ -128,6 +137,10 @@ void standAlone() //These settings should be made from the Linux Box
 {
   *peltierData[0].regulator.pwmVal = 20000;
   *fanData[0].regulator.pwmVal = 24575; //32767*75/100 = 75%
+
+  *lidData[0].regulator.pwmVal = 15000;
+  *lidData[1].regulator.pwmVal = 15000;
+  pwmCh[3] = 12000; ///###JRJ DEBUG 10% on Aux
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -289,10 +302,10 @@ void CooleAndLidTask( void * pvParameters )
       lid(&lidData[i]);
     }
 #endif
-    PWM_Set(pwmCh[0], PeltierCtrlPWM1);
+    PWM_Set(pwmCh[0], PeltierCtrl1PWM);
     PWM_Set(pwmCh[1], TopHeaterCtrl1PWM);
     PWM_Set(pwmCh[2], TopHeaterCtrl2PWM);
-    //PWM_Set(pwmCh[3], TopHeaterCtrlPWM);
+    PWM_Set(pwmCh[3], AuxCtrlPWM);
     PWM_Set(pwmCh[4], FANctrlPWM);
 
     if( xQueueReceive( CoolAndLidQueueHandle, &msg, /*Do not block*/ 0) == pdPASS )
@@ -364,11 +377,13 @@ void CooleAndLidTask( void * pvParameters )
             case 2:
               lidData[1].regulator.setPoint = temp_2_dac(p->value);
               break;
-            case 3: //In old lid heater connecter
-              pwmCh[3] = p->value;
+            case 3: //Aux PWM connecter
+              pwmCh[3] = p->value * 32768/100;
+              PWM_Set(pwmCh[3], AuxCtrlPWM);
               break;
             case 4: //Fan ctrl
-              pwmCh[4] = p->value;
+              pwmCh[4] = p->value * 32768/100;
+              PWM_Set(pwmCh[4], FANctrlPWM);
               break;
             case 5:
               if(1 == p->value) { GPIO_SetBits(GPIOA, LOCK_OUTPUT);   }

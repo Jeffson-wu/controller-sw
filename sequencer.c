@@ -1091,7 +1091,6 @@ void TubeStageHandler(long TubeId, xMessage *msg)
   u16 data;
   u16 data_element[2];
   Tubeloop_t *pTubeloop = &Tubeloop[TubeId-1];
-
   stageCmd_t *TSeq = &pTubeloop->curr;
 
   if(getseq(TubeId, TSeq) == TRUE) //Get next stage in sequence
@@ -1250,8 +1249,7 @@ void TubeSequencerTask( void * pvParameter)
             signals_txt[(unsigned char)msg->ucMessageID], stageToChar[(unsigned char)T->curr.stage],
             T->pausePendingState);
         #ifdef USE_PAUSE_FEATURE
-          if( (Extension == T->curr.stage)
-            && (TUBE_P_PAUSE_REQUESTED == T->pausePendingState) )
+          if( (Extension == T->curr.stage) && (TUBE_P_PAUSE_REQUESTED == T->pausePendingState) )
           {
             u16 data;
             data = T->pauseTemp;
