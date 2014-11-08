@@ -16,5 +16,6 @@
  void gdi_init();
  void gdi_send_msg_on_monitor(char * response);
  void gdi_send_msg_response(char * response);
+ int send_led_cmd(u16 fn, long TubeId);
 
 

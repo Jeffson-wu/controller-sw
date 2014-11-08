@@ -275,6 +275,7 @@ void ExtIrqEnable(ExtiGpioTypeDef heater);
 bool getseq(u8 tubeId,stageCmd_t * data);
 static int tubequefree(long tubeid);
 void tubeinitQueue();
+void stop_all_tube_LED();
 
 /* Private functions ---------------------------------------------------------*/
 void InitTubeTimers()
@@ -641,6 +642,16 @@ void stop_lid_heating()
   {
     msg->ucMessageID=STOP_LID_HEATING;
     xQueueSend(CoolAndLidQueueHandle, &msg, portMAX_DELAY);
+  }
+}
+
+/* ---------------------------------------------------------------------------*/
+void stop_all_tube_LED()
+{
+  long TubeId;
+  for(TubeId = 1; TubeId < 17; TubeId++)
+  {
+    send_led_cmd(SET_LED_OFF, TubeId);
   }
 }
 
@@ -1106,7 +1117,23 @@ void TubeStageHandler(long TubeId, xMessage *msg)
         /*Set idle mode for tube to stop heating*/
         data = SET_IDLE_MODE;
         WriteTubeHeaterReg(TubeId, TUBE_COMMAND_REG, &data, sizeof(data)/2);
-        stop_lid_heating();  // TODO: We MUST only stop top heater when all tubes are stopped - Or handle this from Linux
+        { // If no tubes are running switch off light and top heater
+          int sequences_done = TRUE;
+          int i;
+          for(i = 0; i < 16; i++)
+          {
+            //TUBE_INIT, TUBE_IDLE, TUBE_WAIT_TEMP, TUBE_WAIT_TIME, TUBE_WAIT_P_TEMP, TUBE_PAUSED, TUBE_OUT_OF_DATA, TUBE_NOT_INITIALIZED
+            if(! ( (TUBE_INIT == Tubeloop[1].state) || (TUBE_IDLE  == Tubeloop[1].state) || (TUBE_NOT_INITIALIZED == Tubeloop[1].state) ))
+            {
+              sequences_done = FALSE;
+            }
+          }
+          if(sequences_done)
+          {
+            //#### We cannot switch on yet!!  stop_lid_heating();
+            void stop_all_tube_LED();
+          }
+        }
       #ifdef USE_DEVELOPMENT_LOGGING
         /*Stop monitoring temperature on the tube*/
         new_msg = pvPortMalloc(sizeof(xMessage)+sizeof(long));
