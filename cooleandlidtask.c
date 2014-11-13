@@ -129,14 +129,15 @@ static lidData_t lidData[2] = {
 };
 
 static fanData_t fanData[1] = {
-  {FAN_1, {STOP_STATE, 0, &pwmCh[4]}}
+  {FAN_1, {STOP_STATE, 0, &pwmCh[4], &adcCh[3]}}
 };
 
 
 void standAlone() //These settings should be made from the Linux Box
 {
-  *peltierData[0].regulator.pwmVal = 20000;
-  *fanData[0].regulator.pwmVal = 24575; //32767*75/100 = 75%
+
+  *peltierData[0].regulator.pwmVal = 8000;
+  *fanData[0].regulator.pwmVal = 20000; //40% of 32767
 
   *lidData[0].regulator.pwmVal = 15000;
   *lidData[1].regulator.pwmVal = 15000;
@@ -165,6 +166,7 @@ void peltier(peltierData_t *peltierData){
       /*
        * Hysteresis Control
        */
+#if 0
       if (*reg->adcVal > reg->setPointHL)// || reg->hysteresisActiveFlag == 0)
       {
         *reg->pwmVal = 32767;
@@ -175,6 +177,7 @@ void peltier(peltierData_t *peltierData){
         *reg->pwmVal = 0;
       //	reg->hysteresisActiveFlag = 1;
       }
+#endif
     }
     break;
     default:
@@ -280,7 +283,7 @@ void CooleAndLidTask( void * pvParameters )
   #ifdef DEBUG_COOL
       if (cnt == 50)
       {
-        DEBUG_PRINTF("PEL:%ld,%d,LID1:%ld,%d,ST:%dLID2:%ld,%d,ST:%d", dac_2_temp(adcCh[0]), pwmCh[0], dac_2_temp(adcCh[1]), pwmCh[1],lidData[0].regulator.state, dac_2_temp(adcCh[2]), pwmCh[2],lidData[1].regulator.state);
+        DEBUG_PRINTF("PELC:%ld,%d,PELH:%ld,LID1:%ld,%d,ST:%dLID2:%ld,%d,ST:%d", dac_2_temp(adcCh[0]), pwmCh[0], dac_2_temp(adcCh[3]), dac_2_temp(adcCh[1]), pwmCh[1],lidData[0].regulator.state, dac_2_temp(adcCh[2]), pwmCh[2],lidData[1].regulator.state);
         cnt = 0;
       }
       cnt++;
