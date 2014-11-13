@@ -718,6 +718,25 @@ bool stop_tube_seq( long TubeId)
                       TubeId, tube_states[Tubeloop[TubeId].state]);
     Tubeloop[TubeId-1].state = TUBE_IDLE;
     Tubeloop[TubeId-1].pausePendingState = TUBE_P_NORM;
+    { // If no tubes are running switch off light and top heater
+      int sequences_done = TRUE;
+      int i;
+      for(i = 0; i < 16; i++)
+      {
+        //TUBE_INIT, TUBE_IDLE, TUBE_WAIT_TEMP, TUBE_WAIT_TIME, TUBE_WAIT_P_TEMP, TUBE_PAUSED, TUBE_OUT_OF_DATA, TUBE_NOT_INITIALIZED
+        if(! ( (TUBE_INIT == Tubeloop[i].state) || (TUBE_IDLE  == Tubeloop[i].state) || (TUBE_NOT_INITIALIZED == Tubeloop[i].state) ))
+        {
+          sequences_done = FALSE;             
+          DEBUG_PRINTF("sequence NOT done Tube:%d", i);
+        }
+      }
+      if(sequences_done)
+      {
+        DEBUG_PRINTF("sequences done");
+        //#### We cannot switch on yet!!  stop_lid_heating();
+        stop_all_tube_LED();
+      }
+    }
 
     //while( (getseq(TubeId, TSeq) == TRUE));                 /*empty buffer*/
     tubeinitQueue();
@@ -1123,15 +1142,17 @@ void TubeStageHandler(long TubeId, xMessage *msg)
           for(i = 0; i < 16; i++)
           {
             //TUBE_INIT, TUBE_IDLE, TUBE_WAIT_TEMP, TUBE_WAIT_TIME, TUBE_WAIT_P_TEMP, TUBE_PAUSED, TUBE_OUT_OF_DATA, TUBE_NOT_INITIALIZED
-            if(! ( (TUBE_INIT == Tubeloop[1].state) || (TUBE_IDLE  == Tubeloop[1].state) || (TUBE_NOT_INITIALIZED == Tubeloop[1].state) ))
+            if(! ( (TUBE_INIT == Tubeloop[i].state) || (TUBE_IDLE  == Tubeloop[i].state) || (TUBE_NOT_INITIALIZED == Tubeloop[i].state) ))
             {
-              sequences_done = FALSE;
+              sequences_done = FALSE;             
+              DEBUG_PRINTF("sequence NOT done Tube:%d", i);
             }
           }
           if(sequences_done)
           {
+            DEBUG_PRINTF("sequences done");
             //#### We cannot switch on yet!!  stop_lid_heating();
-            void stop_all_tube_LED();
+            stop_all_tube_LED();
           }
         }
       #ifdef USE_DEVELOPMENT_LOGGING

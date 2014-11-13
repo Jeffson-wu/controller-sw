@@ -214,7 +214,7 @@ void HW_Init(void)
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
   GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
   GPIO_Init(GPIOA, &GPIO_InitStructure);
-  GPIO_SetBits(GPIOA, GPIO_Pin_8); //GPIO_Pin_15 will not go low Deactivate M0 reset
+  GPIO_SetBits(GPIOA, GPIO_Pin_15); //GPIO_Pin_15 will not go low Deactivate M0 reset
 
   /* TIM Configuration */
   PWM_PinConfig();
@@ -494,7 +494,7 @@ int main(void)
     }
   }
 #endif
-  ResetHeaters();
+  //ResetHeaters();
 
   vTaskStartScheduler();
   return 0;
