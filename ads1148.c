@@ -762,8 +762,10 @@ void ADS_Handler(void)
       state++;
       break;
     case CHANNEL_2_SAMPLED:
-      latestConv[2] = readAndPrepareChannel(0 /* 3 --> Conv only 3 channels */);
-      //state++;
+      //latestConv[2] = readAndPrepareChannel(0 /* 3 --> Conv only 3 channels */);
+    	latestConv[2] = readAndPrepareChannel(3);
+      state++;
+#if 0
 //--> Conv only 3 channels
       GPIO_ResetBits(GPIOC, ADS_START_PIN);
       adsIrqDisable();
@@ -772,6 +774,7 @@ void ADS_Handler(void)
       xSemaphoreGiveFromISR(ADSSemaphore, &xHigherPriorityTaskWoken);
       state = CHANNEL_0_SAMPLED;
 //<-- Conv only 3 channels
+#endif
       break;
     case CHANNEL_3_SAMPLED:
       latestConv[3] = readAndPrepareChannel(0);
