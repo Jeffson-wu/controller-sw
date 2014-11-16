@@ -26,7 +26,7 @@
 #include "signals.h"
 #include "logtask.h"
 #include "sequencer.h"
-#include "swupdatetask.h"
+#include "cooleandlidtask.h"
 #include "signals.h"
 #include "../heater-sw/heater_reg.h"
 #include "gdi.h"
@@ -568,23 +568,40 @@ void gdi_map_to_functions()
       }
       SetCooleAndLidReq *p;
       msg = pvPortMalloc(sizeof(xMessage)+sizeof(SetCooleAndLidReq)+20);
-      if(msg)
-      {
-        fn_idx   = (u8)  atoi(*(gdi_req_func_info.parameters + i));
-        i++;
-        setpoint = (s16) atoi(*(gdi_req_func_info.parameters + i));
-        if(6 > fn_idx) {
-          msg->ucMessageID = SET_COOLE_AND_LID;
-        } else {
-          result = FALSE;
-          gdi_send_data_response("NOK invalid fn", newline_end);
+      fn_idx   = (u8)  atoi(*(gdi_req_func_info.parameters + i));
+
+      if(6 == fn_idx) {
+        /* Get log */
+        if(getClLog(str))
+        { /* CL log data was retrieved */
+          GDI_PRINTF("Get CL Log");
+          gdi_send_data_response(str, newline_end);
         }
-        p = (SetCooleAndLidReq *)msg->ucData;
-        p->value = setpoint;
-        p->idx   = fn_idx;
-        xQueueSend(CoolAndLidQueueHandle, &msg, portMAX_DELAY);
+        else
+        { /* No CL log data */
+          GDI_PRINTF("No CL Log");
+          gdi_send_data_response("OK", newline_end);
+        }
+      } 
+      else
+      {
+        if(msg)
+        {
+          i++;
+          setpoint = (s16) atoi(*(gdi_req_func_info.parameters + i));
+          if(6 > fn_idx) {
+            msg->ucMessageID = SET_COOL_AND_LID;
+          } else {
+            result = FALSE;
+            gdi_send_data_response("NOK invalid fn", newline_end);
+          }
+          p = (SetCooleAndLidReq *)msg->ucData;
+          p->value = setpoint;
+          p->idx   = fn_idx;
+          xQueueSend(CoolAndLidQueueHandle, &msg, portMAX_DELAY);
+        }
+        if(result) { gdi_send_data_response("OK", newline_end); }
       }
-      if(result) { gdi_send_data_response("OK", newline_end); }
     }
     break;
       

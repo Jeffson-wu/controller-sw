@@ -247,6 +247,7 @@ int getLog(char *poutText,int tubeId )
 }
 
 /* ---------------------------------------------------------------------------*/
+/* Development logging */
 void sendLog()
 {
   int tubeId = 0;

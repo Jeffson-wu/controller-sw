@@ -24,7 +24,8 @@
 /* Exported macro ------------------------------------------------------------*/
 /* Exported functions ------------------------------------------------------- */
 
-void CooleAndLidTask( void * pvParameters );
+void CoolAndLidTask( void * pvParameters );
+int getClLog(char *poutText );
 
 #endif /* __COOLERANDLIDTASK_H */
 

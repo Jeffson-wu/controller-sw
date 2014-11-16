@@ -78,7 +78,7 @@ uint32_t load=0xA5A5 ;
 
 void ModbusTask( void * pvParameters );
 void Modbus_init(USART_TypeDef *uart);
-void CooleAndLidTask( void * pvParameters );
+void CoolAndLidTask( void * pvParameters );
 void gdi_task(void *pvParameters);
 void TubeSequencerTask( void * pvParameter);
 void LogTask( void * pvParameters );
@@ -470,7 +470,7 @@ int main(void)
   xTaskCreate( ModbusTask, ( const char * ) "Modbus task", ( unsigned short ) 400, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &modbusCreatedTask );
   xTaskCreate( LogTask, ( const char * ) "Log task", ( unsigned short ) 400, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvLogTask );
   xTaskCreate( gdi_task, ( const char * ) "Debug task", ( unsigned short ) 600, NULL, ( ( unsigned portBASE_TYPE ) 1 ) | portPRIVILEGE_BIT, &gdiCreatedTask );
-  xTaskCreate( CooleAndLidTask, (const char *) "Cool Lid task" /*max 16 chars*/, 300, NULL, ( (unsigned portBASE_TYPE) 4 ) | portPRIVILEGE_BIT, &pvCooleAndLidTask );
+  xTaskCreate( CoolAndLidTask, (const char *) "Cool Lid task" /*max 16 chars*/, 300, NULL, ( (unsigned portBASE_TYPE) 4 ) | portPRIVILEGE_BIT, &pvCooleAndLidTask );
   xTaskCreate( TubeSequencerTask, ( const char * ) "TubeSeq task", ( unsigned short ) 1000, NULL, ( ( unsigned portBASE_TYPE ) 4 ) | portPRIVILEGE_BIT, &pvTubeSequencerTaskTask );
 
 #if 1 //
@@ -513,11 +513,14 @@ void assert_failed(unsigned char* file, unsigned int line)
 { 
   /* User can add his own implementation to report the file name and line number,
      ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
-  
+  char buf[100];
   GPIO_SetBits(GPIOB,GPIO_Pin_11);  /* Turn on error LED */
   GPIO_ResetBits(GPIOC,GPIO_Pin_9); /* Turn off hartbeat LED */  
   GPIO_ResetBits(GPIOB,GPIO_Pin_0);   /* Turn off RX LED */
   GPIO_ResetBits(GPIOB,GPIO_Pin_1);   /* Turn off TX LED */
+  sprintf(buf, "assert_failed: %s %d", file, line);
+  gdi_send_msg_on_monitor(buf);
+  //vTraceConsoleMessage("assert_failed: %s %d", file, line);
   /* Infinite loop */
   while (1)
   {
