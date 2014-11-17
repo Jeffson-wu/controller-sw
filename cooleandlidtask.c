@@ -42,7 +42,7 @@
 #include "util.h"
 
 /* ---------------------------------------------------------------------------*/
-#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
+//#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
 //#define DEBUG_COOL
 //#define STANDALONE /*Defines if the M3 Runs with or without Linux box*/
 
@@ -149,9 +149,8 @@ static peltierData_t peltierData[1] = {
   {PELTIER_1, {STOP_STATE, -26213, &pwmCh[0], &adcCh[0]}}
 };
 
-static lidData_t lidData[2] = {
-  {LID_HEATER_1, {STOP_STATE, -26213, &pwmCh[1], &adcCh[1]}},
-  {LID_HEATER_2, {STOP_STATE, -26213, &pwmCh[2], &adcCh[2]}}
+static lidData_t lidData[1] = {
+  {LID_HEATER_1, {STOP_STATE, -26213, &pwmCh[3], &adcCh[1]}}
 };
 
 static fanData_t fanData[1] = {
@@ -178,10 +177,46 @@ void standAlone() //These settings should be made from the Linux Box
   *peltierData[0].regulator.pwmVal = 8000;
   *fanData[0].regulator.pwmVal = 20000; //40% of 32767
 
-  *lidData[0].regulator.pwmVal = 15000;
-  *lidData[1].regulator.pwmVal = 15000;
+  *lidData[0].regulator.pwmVal = 25000;
+  *lidData[1].regulator.pwmVal = 0;
   pwmCh[3] = 12000; ///###JRJ DEBUG 10% on Aux
 }
+
+
+/* ---------------------------------------------------------------------------*/
+/* Fan handling */
+/* ---------------------------------------------------------------------------*/
+void fan(fanData_t *fanData){
+  regulatorData_t *reg;
+  reg = &fanData->regulator;
+  reg->setPoint = -10289; //50oC
+  int64_t out = 0;
+  int16_t Kp = -6;
+
+  switch (reg->state) {
+    case STOP_STATE:
+    {
+      *reg->pwmVal = 0;
+      reg->state = CTRL_CLOSED_LOOP_STATE; //Starts when power on
+    }
+    break;
+    case CTRL_CLOSED_LOOP_STATE:
+    {
+    	out = Kp*(reg->setPoint - *reg->adcVal);
+    }
+    break;
+    default:
+    break;
+
+  }
+
+	if (out > 32767)
+		out = 32767;
+	if (out < 15000)
+		out = 15000;
+	*reg->pwmVal = out;
+}
+
 
 /* ---------------------------------------------------------------------------*/
 /* Peltier handling */
@@ -189,40 +224,32 @@ void standAlone() //These settings should be made from the Linux Box
 void peltier(peltierData_t *peltierData){
   regulatorData_t *reg;
   reg = &peltierData->regulator;
+  reg->setPoint = -21705; //10oC
   reg->setPointLL = reg->setPoint - 200;
   reg->setPointHL = reg->setPoint + 200;
+  int64_t out = 0;
+  int16_t Kp = -20;
 
   switch (reg->state) {
     case STOP_STATE:
     {
       *reg->pwmVal = 0;
-      reg->hysteresisActiveFlag = 0;
       reg->state = CTRL_CLOSED_LOOP_STATE; //Starts when power on
     }
     break;
     case CTRL_CLOSED_LOOP_STATE:
     {
-      /*
-       * Hysteresis Control
-       */
-#if 0
-      if (*reg->adcVal > reg->setPointHL)// || reg->hysteresisActiveFlag == 0)
-      {
-        *reg->pwmVal = 32767;
-      //	reg->hysteresisActiveFlag = 0;
-      }
-      if (*reg->adcVal < reg->setPointLL)// || reg->hysteresisActiveFlag == 1)
-      {
-        *reg->pwmVal = 0;
-      //	reg->hysteresisActiveFlag = 1;
-      }
-#endif
+    	out = Kp*(reg->setPoint - *reg->adcVal);
     }
     break;
     default:
     break;
-
   }
+	if (out > 20000)
+		out = 20000;
+	if (out < 0)
+		out = 0;
+	*reg->pwmVal = out;
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -232,8 +259,11 @@ void lid(lidData_t *lidData)
 {
   regulatorData_t *reg;
   reg = &lidData->regulator;
+  reg->setPoint = 5597; //100oC
   reg->setPointLL = reg->setPoint - 200;
   reg->setPointHL = reg->setPoint + 200;
+  int64_t out = 0;
+  int16_t Kp = 120;
 
   switch (reg->state) {
     case STOP_STATE:
@@ -241,6 +271,7 @@ void lid(lidData_t *lidData)
       msgSent = FALSE;
       *reg->pwmVal = 0;
       reg->hysteresisActiveFlag = 0;
+      reg->state = CTRL_OPEN_LOOP_STATE;
     } 
     break;
     case MANUAL_STATE:
@@ -248,26 +279,30 @@ void lid(lidData_t *lidData)
       msgSent = FALSE;
     } 
     break;
+    case CTRL_OPEN_LOOP_STATE:
+    {
+    	out = 32767;
+
+    	if (*reg->adcVal > 3927) //95oC
+    		reg->state = CTRL_CLOSED_LOOP_STATE;
+    }
+    break;
     case CTRL_CLOSED_LOOP_STATE:
     {
-      /*
-       * Hysteresis Control
-       */
-      if (*reg->adcVal < reg->setPointLL) // || reg->hysteresisActiveFlag == 0)
-      {
-        *reg->pwmVal = 32767;
-        //reg->hysteresisActiveFlag = 0;
-      }
-      if (*reg->adcVal > reg->setPointHL)// || reg->hysteresisActiveFlag == 1)
-      {
-        *reg->pwmVal = 0;
-        //reg->hysteresisActiveFlag = 1;
-      }
+    	out = Kp*(reg->setPoint - *reg->adcVal);
+
+    	if (*reg->adcVal < 3264) //93oC
+    		reg->state = CTRL_OPEN_LOOP_STATE;
     }
     break;
     default:
     break;
   }
+	if (out > 20000)
+		out = 20000;
+	if (out < 0)
+		out = 0;
+	*reg->pwmVal = out;
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -450,14 +485,9 @@ void CoolAndLidTask( void * pvParameters )
   xSemaphoreHandle xADSSemaphore = NULL;
 
   xMessage *msg;
-#ifndef STANDALONE
-  int i; //iterator
-#endif
 
 #ifdef DEBUG_COOL
   int8_t cnt = 0;
-  //int count = 0;
-  //char str[20];
 #endif
 
   /* Create ADC synchrinization semaphore and let the ADC ISR know about it */
@@ -512,12 +542,11 @@ void CoolAndLidTask( void * pvParameters )
     adsGetLatest(&adcCh[0], &adcCh[1], &adcCh[2], &adcCh[3]);
 #ifndef STANDALONE
     peltier(&peltierData[0]);
-
-    for(i = 0; i < 2; i ++)
-    {
-      lid(&lidData[i]);
-    }
+    fan(&fanData[0]);
+    lid(&lidData[0]);
+    //lid(&lidData[1]);
 #endif
+
     PWM_Set(pwmCh[0], PeltierCtrl1PWM);
     PWM_Set(pwmCh[1], TopHeaterCtrl1PWM);
     PWM_Set(pwmCh[2], TopHeaterCtrl2PWM);
@@ -595,7 +624,7 @@ void CoolAndLidTask( void * pvParameters )
               lidData[0].regulator.setPoint = temp_2_dac(p->value);
               break;
             case 2:
-              lidData[1].regulator.setPoint = temp_2_dac(p->value);
+              //lidData[1].regulator.setPoint = temp_2_dac(p->value);
               break;
             case 3: //Aux PWM connecter
               pwmCh[3] = p->value * 32768/100;
@@ -624,3 +653,4 @@ void CoolAndLidTask( void * pvParameters )
   // We are not supposed to end, but if so kill this task.
   vTaskDelete(NULL);
 }
+
