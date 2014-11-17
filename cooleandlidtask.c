@@ -42,12 +42,13 @@
 #include "util.h"
 
 /* ---------------------------------------------------------------------------*/
-//#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
+#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
 //#define DEBUG_COOL
 //#define STANDALONE /*Defines if the M3 Runs with or without Linux box*/
 
-#ifdef DEBUG
 char buf[20];
+#define PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
+#ifdef DEBUG
 #define DEBUG_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
 #else
 #define DEBUG_PRINTF(fmt, args...)    /* Don't do anything in release builds */
@@ -297,7 +298,10 @@ cl_logDataElement_t * cl_enqueue(cl_logDataQueue_t * pQueue)
   t = pQueue->tail;
 #endif
   taskEXIT_CRITICAL();
-  DEBUG_PRINTF("Enqueue: head %d tail %d", h, t);
+#ifdef DEBUG
+  t = t; h = h;
+  //DEBUG_PRINTF("Enqueue: head %d tail %d", h, t);
+#endif
   return pElement;
 }
 
@@ -319,9 +323,10 @@ cl_logDataElement_t * cl_dequeue(cl_logDataQueue_t * pQueue)
 #ifdef DEBUG
   h = pQueue->head; 
   t = pQueue->tail;
+  t = t; h = h;
 #endif
   taskEXIT_CRITICAL();
-  DEBUG_PRINTF("Dequeue: head %d tail %d", h, t);
+  //DEBUG_PRINTF("Dequeue: head %d tail %d", h, t);
   return pElement;
 }
 
@@ -333,7 +338,7 @@ void cl_dataQueueAdd(u32 seqNumber, cl_data_t data[])
   poutData = cl_enqueue(&cl_logDataQueue);
   if(NULL != poutData)
   {
-    DEBUG_PRINTF("dataQueueAdd @0x%08X %04x %04x %04x %04x", (unsigned int)poutData, data[0], data[1], data[2], data[3]);
+    //DEBUG_PRINTF("dataQueueAdd @0x%08X %04x %04x %04x %04x", (unsigned int)poutData, data[0], data[1], data[2], data[3]);
     poutData->seqNum = seqNumber;
     poutData->cldata[0] = data[0];
     poutData->cldata[1] = data[1];
@@ -342,7 +347,7 @@ void cl_dataQueueAdd(u32 seqNumber, cl_data_t data[])
   }
   else
   {
-    DEBUG_PRINTF("DataQueueAdd - buffer full");
+    //DEBUG_PRINTF("DataQueueAdd - buffer full");
   }
 }
 
@@ -468,7 +473,7 @@ void CoolAndLidTask( void * pvParameters )
 #if 1
   if(0 == ads1148Init())
   {
-    DEBUG_PRINTF("ADS1148 OK\r\n");
+    PRINTF("ADS1148 OK\r\n");
 
     adsStartSeq();
     adsIrqEnable();
@@ -476,7 +481,7 @@ void CoolAndLidTask( void * pvParameters )
   else
   {
     // #### Fatal error handling    
-    DEBUG_PRINTF("ADS1148 NOT OK\r\n");
+    PRINTF("ADS1148 NOT OK\r\n");
     configASSERT(pdFALSE);
   }
 #endif
@@ -492,7 +497,7 @@ void CoolAndLidTask( void * pvParameters )
   #ifdef DEBUG_COOL
       if (cnt == 50)
       {
-        DEBUG_PRINTF("PELC:%ld,%d,PELH:%ld,LID1:%ld,%d,ST:%dLID2:%ld,%d,ST:%d", dac_2_temp(adcCh[0]), pwmCh[0], dac_2_temp(adcCh[3]), dac_2_temp(adcCh[1]), pwmCh[1],lidData[0].regulator.state, dac_2_temp(adcCh[2]), pwmCh[2],lidData[1].regulator.state);
+        DEBUG_PRINTF("PELC:%ld,%d,PELH:%ld,LID1:%ld,%d,ST:%d,LID2:%ld,%d,ST:%d", dac_2_temp(adcCh[0]), pwmCh[0], dac_2_temp(adcCh[3]), dac_2_temp(adcCh[1]), pwmCh[1],lidData[0].regulator.state, dac_2_temp(adcCh[2]), pwmCh[2],lidData[1].regulator.state);
         cnt = 0;
       }
       cnt++;

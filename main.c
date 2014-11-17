@@ -247,7 +247,6 @@ void ResetHeaters()
   if( xTimerStart(yTimer[3], 0 ) != pdPASS );
   vTraceConsoleMessage("ResetHeaters!");
   GPIO_ResetBits(GPIOA,GPIO_Pin_0);
-  GPIO_SetBits(GPIOB,GPIO_Pin_11);  /* Turn on error LED */
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -255,7 +254,6 @@ void vHeatersReset(xTimerHandle pxTimer )
 {
   GPIO_SetBits(GPIOA,GPIO_Pin_0);
   if( xTimerStop( yTimer[3], 0 ) != pdPASS );
-  GPIO_ResetBits(GPIOB,GPIO_Pin_11);  /* Turn off error LED */
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -494,8 +492,23 @@ int main(void)
     }
   }
 #endif
-  //ResetHeaters();
 
+  { // Synchronize M0 LEDs
+    xMessage *msg;
+    WriteModbusRegsReq *p;
+  
+    msg = pvPortMalloc(sizeof(xMessage)+sizeof(WriteModbusRegsReq));
+    if(msg)
+    {
+      msg->ucMessageID=BROADCAST_MODBUS;
+      p=(WriteModbusRegsReq *)msg->ucData;
+      p->slave    = 0;    //not used for broadcast
+      p->addr     = 0;
+      p->datasize = 0;    //datasize;
+      p->reply    = NULL; //No reply
+      xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);      
+    }
+  }
   vTaskStartScheduler();
   return 0;
 }

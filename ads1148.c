@@ -359,7 +359,7 @@ int adsDetectSensor(void)
     while(adsGetDrdy() == Bit_SET) {} //await /DRDY
     adsRead(&value);
 
-    DEBUG_PRINTF("ADS sensor #%d detect: ADC val: 0x%08x", i, value);
+    DEBUG_PRINTF("ADS sensor #%d detect: ADC val: 0x%04X", i, value);
 
     if( (FS < value)/* open circuit */ /*|| (-FS > value) short circuit */) {
       if(2 > i) {

@@ -25,6 +25,7 @@
 
 //#define SIMULATE_HEATER /*Disable communication to M0 CPU's return temperature reached when temp is requested*/
 //#define USE_DEVELOPMENT_LOGGING
+#define USE_SYNCHRONOUS_PROTOCOL /* All tubes are synced at temp hold timeout */
 
 extern xQueueHandle CoolAndLidQueueHandle;
 
@@ -50,6 +51,13 @@ extern xQueueHandle CoolAndLidQueueHandle;
 #define DEBUG_IF_PRINTF(fmt, args...)      snprintf(buf, DEBUG_BUFFER_SIZE, fmt, ## args);  gdi_send_msg_on_monitor(buf);
 #else
 #define DEBUG_IF_PRINTF(fmt, args...)                       /* Don't do anything in release builds */
+#endif
+
+//#define DEBUG_QUEUE /*Debug of stage queue */
+#ifdef DEBUG_QUEUE
+#define DEBUG_QUEUE_PRINTF(fmt, args...)      snprintf(buf, DEBUG_BUFFER_SIZE, fmt, ## args);  gdi_send_msg_on_monitor(buf);
+#else
+#define DEBUG_QUEUE_PRINTF(fmt, args...)                       /* Don't do anything in release builds */
 #endif
 
 /*STATUS_REG Bit definitions */
@@ -838,7 +846,7 @@ stageCmd_t * tubeenqueue(Tubeloop_t * pQueue)
     return NULL;
   }
   pQueue->tail++;
-  DEBUG_PRINTF("tube-enqueue: t:%d h:%d FREE:%d", pQueue->tail, pQueue->head, (pQueue->tail - pQueue->head));
+  DEBUG_QUEUE_PRINTF("tube-enqueue: t:%d h:%d FREE:%d", pQueue->tail, pQueue->head, (pQueue->tail - pQueue->head));
   return &pQueue->seq[pQueue->tail % STAGES_QUEUE_SIZE];
 }
 
@@ -853,7 +861,7 @@ stageCmd_t * tubedequeue(Tubeloop_t * pQueue)
   else
   {
     pQueue->head++;
-    DEBUG_PRINTF("tube-dequeue: t:%d h:%d FREE:%d : %ld", pQueue->tail ,pQueue->head, (pQueue->tail - pQueue->head), (long int)&pQueue->head);
+    DEBUG_QUEUE_PRINTF("tube-dequeue: t:%d h:%d FREE:%d : %ld", pQueue->tail ,pQueue->head, (pQueue->tail - pQueue->head), (long int)&pQueue->head);
     return &pQueue->seq[pQueue->head % STAGES_QUEUE_SIZE];
   }
 }
@@ -862,7 +870,7 @@ stageCmd_t * tubedequeue(Tubeloop_t * pQueue)
 int tubequefree(long tubeid)
 {
   Tubeloop_t * pQueue = &Tubeloop[tubeid-1];
-  DEBUG_SEQ_PRINTF("tubequefree: t:%d h:%d", pQueue->tail ,pQueue->head);
+  DEBUG_QUEUE_PRINTF("tubequefree: t:%d h:%d", pQueue->tail ,pQueue->head);
   return (int)STAGES_QUEUE_SIZE-(pQueue->tail - pQueue->head);
 }
 
@@ -880,7 +888,7 @@ bool tubedataQueueAdd(u8 tubeId,u16 seq_num, char state, stageCmd_t *data)
   // DEBUG_PRINTF("ENQUE:Tube:%ld:TEMP %d.%02dC @ TIME %d.%02dsecs STATE:%d ",tubeId,data->temp/10,data->temp%10,data->time/10,data->time%10,data->stage);
   if(NULL != (poutData = tubeenqueue(&Tubeloop[tubeId-1]))) //tubeId=[1..16],idx=[0..15]
   {
-    DEBUG_PRINTF("T%d:@QUE ADD:TEMP %d.%02dC @ TIME %ld.%02ldsecs SEQ_ID:%d STATE:%c FREE:%d CURR T ST:%d ", tubeId, data->temp/10, data->temp%10, data->time/10, data->time%10, seq_num,state, tubequefree(tubeId), pTubeloop->state);
+    DEBUG_QUEUE_PRINTF("T%d:@QUE ADD:TEMP %d.%02dC @ TIME %ld.%02ldsecs SEQ_ID:%d STATE:%c FREE:%d CURR T ST:%d ", tubeId, data->temp/10, data->temp%10, data->time/10, data->time%10, seq_num,state, tubequefree(tubeId), pTubeloop->state);
     poutData->temp  = data->temp;
     poutData->time  = data->time;
     poutData->seq_num = seq_num;
@@ -1178,10 +1186,10 @@ void TubeStageHandler(long TubeId, xMessage *msg)
         // Write both SETPOINT_REG and STAGE_NUM_REG at the same time to make sure the log stage and measurements are in sync.
         WriteTubeHeaterReg(TubeId, SETPOINT_REG, data_element, sizeof(data_element)/2);
         pTubeloop->state = TUBE_WAIT_TEMP;
-        DEBUG_PRINTF("### head=%d @ %08lX", pTubeloop->head, (long int)&pTubeloop->head);
+        DEBUG_QUEUE_PRINTF("### head=%d @ %08lX", pTubeloop->head, (long int)&pTubeloop->head);
         if(pTubeloop->head == 0) // First element in sequence
         {
-          DEBUG_PRINTF("### head==0 @ %08lX", (long int)&pTubeloop->head);
+          DEBUG_QUEUE_PRINTF("### head==0 @ %08lX", (long int)&pTubeloop->head);
           /*Set heater to automatic mode if a new sequence is started*/
           data = SET_AUTOMATIC_MODE;
           WriteTubeHeaterReg(TubeId, TUBE_COMMAND_REG, &data, sizeof(data)/2);
@@ -1296,7 +1304,7 @@ void TubeSequencerTask( void * pvParameter)
           DEBUG_PRINTF("Tube[%ld]@%s TubeSeq[%s] Stage:%s, Pause:%d", TubeId, tube_states[T->curr.stage],
             signals_txt[(unsigned char)msg->ucMessageID], stageToChar[(unsigned char)T->curr.stage],
             T->pausePendingState);
-        #ifdef USE_PAUSE_FEATURE
+      #ifdef USE_PAUSE_FEATURE
           if( (Extension == T->curr.stage) && (TUBE_P_PAUSE_REQUESTED == T->pausePendingState) )
           {
             u16 data;
@@ -1306,7 +1314,45 @@ void TubeSequencerTask( void * pvParameter)
             /* As we are pausing we do not goto next stage in sequence, this we do on "continue" command*/
           }
           else
-        #endif
+      #endif
+      #ifdef USE_SYNCHRONOUS_PROTOCOL
+          {
+            int time_done = TRUE;
+            int i;
+            
+            static int well_sync[16] = {FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE};
+            well_sync[TubeId - 1] = TRUE;
+            DEBUG_PRINTF("Tube %ld Timeout",TubeId);
+
+            // If all running tubes have timed out then proceed
+            for(i = 0; i < 16; i++)
+            {
+              //TUBE_INIT, TUBE_IDLE, TUBE_WAIT_TEMP, TUBE_WAIT_TIME, TUBE_WAIT_P_TEMP, TUBE_PAUSED, TUBE_OUT_OF_DATA, TUBE_NOT_INITIALIZED
+              if( (TUBE_WAIT_TIME   == Tubeloop[i].state) || (TUBE_PAUSED      == Tubeloop[i].state) || 
+                  (TUBE_OUT_OF_DATA == Tubeloop[i].state) || (TUBE_WAIT_P_TEMP == Tubeloop[i].state))
+              { // All running tubes
+                if(FALSE == well_sync[i])
+                time_done = FALSE;             
+              }
+            }
+            if(TRUE == time_done)
+            { //Start next stage on all tubes running
+              DEBUG_PRINTF("Last tube timeout");
+              for(i = 0; i < 16; i++)
+              {
+                if(TRUE == well_sync[i])
+                {
+                  new_msg = pvPortMalloc(sizeof(xMessage)+sizeof(long));
+                  new_msg->ucMessageID = NEXT_TUBE_STAGE;
+                  p=(long *)new_msg->ucData;
+                  *p=i+1; // i to TubeId
+                  xQueueSend(TubeSequencerQueueHandle, &new_msg, portMAX_DELAY);
+                }
+                well_sync[i] = FALSE; //Make sure all wells are in the not synched state
+              }
+            }
+          }
+      #else
           {
             new_msg = pvPortMalloc(sizeof(xMessage)+sizeof(long));
             new_msg->ucMessageID = NEXT_TUBE_STAGE;
@@ -1314,6 +1360,7 @@ void TubeSequencerTask( void * pvParameter)
             *p=TubeId;
             xQueueSend(TubeSequencerQueueHandle, &new_msg, portMAX_DELAY);
           }
+      #endif
           break;
         case WRITE_MODBUS_REGS_RES:
           wres = ((WriteModbusRegsRes *)(msg->ucData));
