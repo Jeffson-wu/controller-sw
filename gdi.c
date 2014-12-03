@@ -332,6 +332,7 @@ void gdi_get_func_parameters(char *param_list)
       if (idx < count)
       {
         *(gdi_req_func_info.parameters + idx) = pvPortMalloc(strlen(token)+1);
+        if(NULL == *(gdi_req_func_info.parameters + idx)) { configASSERT(pdFALSE); } // This is a fatal error
         //GDI_PRINTF("T:%s-%d--%x/r/n",token,strlen(token)+1,*(gdi_req_func_info.parameters + idx));
         strcpy(*(gdi_req_func_info.parameters + idx++), token);
         token = strtok(0, ",");
@@ -566,8 +567,6 @@ void gdi_map_to_functions()
         uid = (u16) atoi(*(gdi_req_func_info.parameters + i));
         i++;
       }
-      SetCooleAndLidReq *p;
-      msg = pvPortMalloc(sizeof(xMessage)+sizeof(SetCooleAndLidReq)+20);
       fn_idx   = (u8)  atoi(*(gdi_req_func_info.parameters + i));
 
       if(6 == fn_idx) {
@@ -585,6 +584,9 @@ void gdi_map_to_functions()
       } 
       else
       {
+        SetCooleAndLidReq *p;
+        msg = pvPortMalloc(sizeof(xMessage)+sizeof(SetCooleAndLidReq)+20);
+        if(NULL == msg) { configASSERT(pdFALSE); } // This is a fatal error
         if(msg)
         {
           i++;

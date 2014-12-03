@@ -455,6 +455,7 @@ void WriteTubeHeaterReg(u8 tube, u16 reg, u16 *data, u16 datasize)
   if (reg == SETPOINT_REG)                                  /*Make virtual response if setpoint is set*/
   {
     msg=pvPortMalloc(sizeof(xMessage)+sizeof(ReadModbusRegsRes)+5*sizeof(u16));
+    if(NULL == msg) { configASSERT(pdFALSE); } // This is a fatal error
     msg->ucMessageID=READ_MODBUS_REGS_RES;
     p=(ReadModbusRegsRes *)msg->ucData;
     data_p = (u16*)p->data;
@@ -513,6 +514,7 @@ void ReadTubeHeaterReg(u8 tube, u16 reg, u16 datasize, xQueueHandle xQueue, bool
   u16 event = (tube%4)==1?SEQUENCE_EVENT_TUBE1:0|(tube%4)==2?SEQUENCE_EVENT_TUBE2:0|(tube%4)==3?SEQUENCE_EVENT_TUBE3:0|(tube%4)==0?SEQUENCE_EVENT_TUBE4:0;
   signed portBASE_TYPE xHigherPriorityTaskWoken = pdFALSE;
   msg = pvPortMalloc(sizeof(xMessage)+sizeof(ReadModbusRegsRes));
+  if(NULL == msg) { configASSERT(pdFALSE); } // This is a fatal error
   msg->ucMessageID = READ_MODBUS_REGS_RES;
   preg = (ReadModbusRegsRes *)msg->ucData;
   preg->slave = (tube/4)*3+1;;
@@ -1355,6 +1357,7 @@ void TubeSequencerTask( void * pvParameter)
       #else
           {
             new_msg = pvPortMalloc(sizeof(xMessage)+sizeof(long));
+            if(NULL == new_msg) { configASSERT(pdFALSE); } // This is a fatal error
             new_msg->ucMessageID = NEXT_TUBE_STAGE;
             p=(long *)new_msg->ucData;
             *p=TubeId;
@@ -1420,6 +1423,7 @@ void vTimerCallback( xTimerHandle pxTimer )
 
     xTimerStop( pxTimer, 0 );
     msg = pvPortMalloc(sizeof(xMessage)+sizeof(long));
+    if(NULL == msg) { configASSERT(pdFALSE); } // This is a fatal error
     msg->ucMessageID = TIMER_EXPIRED;
     p = (long *)msg->ucData;
     *p = lArrayIndex+1;
