@@ -87,6 +87,16 @@ void ErrorOff();
 void LogOn(int log_time);
 void LogOff();
 
+#ifdef DEBUG
+#define DEBUG_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
+#else
+#define DEBUG_PRINTF(fmt, args...)      /* Don't do anything in release builds */
+#endif
+/* ---------------------------------------------------------------------------*/
+/* Global variables                                                           */
+/* ---------------------------------------------------------------------------*/
+char buf[300]; /*buffer for debug printf*/
+
 /* ---------------------------------------------------------------------------*/
 /* Functions                                                                  */
 /* ---------------------------------------------------------------------------*/
@@ -108,34 +118,28 @@ void HeartBeat_ErrorLed_Pinconfig()
   /* Enable the GPIO_LED Clock */
   RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOC, ENABLE);
 
-  /* Configure the GPIO_LED pin */
+  /* Configure the GPIO_LED pin HeartBeatLED PC9 */
   GPIO_InitStructure.GPIO_Pin = GPIO_Pin_9;
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
   GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
   GPIO_Init(GPIOC, &GPIO_InitStructure);
   GPIO_SetBits(GPIOC,GPIO_Pin_9);
-  /*ErrorLED PB11 to test*/
+
   /* Enable the GPIO_LED Clock */
   RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
 
   /* Configure the GPIO_LED pin */
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_11;
+  /* Configure the GPIO_LED pins RxTx LEDs PB0,PB1 & ErrorLED PB11 */
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0 | GPIO_Pin_1 | GPIO_Pin_11;
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
   GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
   GPIO_Init(GPIOB, &GPIO_InitStructure);
-  GPIO_ResetBits(GPIOB,GPIO_Pin_11);
+  GPIO_ResetBits(GPIOB,GPIO_Pin_11);/*ErrorLED */
+  GPIO_ResetBits(GPIOB,GPIO_Pin_0); /*RX LED*/
+  GPIO_ResetBits(GPIOB,GPIO_Pin_1); /*TX LED*/
 
-  /*ErrorLED PB0-1 to test*/
-  /* Enable the GPIO_LED Clock */
+  /* Enable the GPIO M0_RESET Clock */
   RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
-
-  /* Configure the GPIO_LED pin */
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0 | GPIO_Pin_1;
-  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
-  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
-  GPIO_Init(GPIOB, &GPIO_InitStructure);
-  GPIO_ResetBits(GPIOB,GPIO_Pin_0);/*RX LED*/
-  GPIO_ResetBits(GPIOB,GPIO_Pin_1);/*TX LED*/
 
   GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0;/*M0_RESET*/
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
@@ -165,7 +169,6 @@ void HW_Init(void)
   GPIO_Init(GPIOA, &GPIO_InitStructure);
 #if 1
    /*Setup for USART3 - MONITOR SEQ*/
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10;
   RCC->APB2ENR |= RCC_APB2ENR_AFIOEN | RCC_APB2Periph_GPIOC;
   AFIO->MAPR |= AFIO_MAPR_USART3_REMAP_PARTIALREMAP;
   RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOC, ENABLE);
@@ -287,8 +290,6 @@ void vError_LEDToggle(xTimerHandle pxTimer )
   GPIOB->ODR ^= GPIO_Pin_11;
 }
 
-#define DEBUG_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_response(buf);
-
 /* ---------------------------------------------------------------------------*/
 void vHeartBeat_LEDToggle(xTimerHandle pxTimer )
 {
@@ -348,9 +349,6 @@ void ConfigOSTimer ()
     }
   }
 }
-#define DEBUG_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_response(buf);
-
-char buf[300]; /*buffer for debug printf*/
 
 #if (SELECTED_PORT == PORT_ARM_CortexM)
 
@@ -406,7 +404,6 @@ void init_os_trace()
   }
 }
 
-
 /* ---------------------------------------------------------------------------*/
 /* Defined in main.c. */
 void vConfigureTimerForRunTimeStats( void )
@@ -433,6 +430,12 @@ unsigned long vGetCounter()
 }
 
 /* ---------------------------------------------------------------------------*/
+/* Dummy recieve CB function for the debug UART that does not recieve.        */
+void noRecieve(void) 
+{
+}
+
+/* ---------------------------------------------------------------------------*/
 /**
   * @brief  Main program.
   * @param  None
@@ -441,9 +444,8 @@ unsigned long vGetCounter()
 int main(void)
 {
   HW_Init();
+  UART_Init(USART3,noRecieve); /*Only for monitoring no RX*/
   PWM_Init(20000,20000); //20kHz PWM : (TIM3(Topheater2,Peltier, Aux), TIM4(Topheater1, Fan))
-  gdi_init(); /*Setup debug uart*/
-  
   UART_SendMsg(USART3, (u8*)"Monitor Port UP\r\n" , 16);
   init_os_trace(); /*GDB CMD:dump binary memory gdb_dump_23.txt 0x20000000 0x20010000  -- http://percepio.com/*/
   Modbus_init(USART2);

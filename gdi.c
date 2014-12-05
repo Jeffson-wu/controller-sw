@@ -160,7 +160,7 @@ int send_led_cmd(u16 fn, long TubeId)
     p->slave = TubeId;
     p->addr = TUBE_COMMAND_REG;
     memcpy(p->data, &fn, sizeof(u16));
-    p->datasize = 2; //datasize;
+    p->datasize = 1; //datasize (nof regs)
     p->reply = NULL; //No reply
     return xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);     
   }
@@ -248,9 +248,7 @@ void gdi_send_msg_response(char * response)
   for(i=0;i<strlen(message);i++)
   {
     while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
-//     UART_SendMsg(uart, message , strlen(message));
     USART_SendData(uart, *(message+i));
-//     while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
   }
 }
 
@@ -258,28 +256,17 @@ void gdi_send_msg_response(char * response)
 void gdi_send_msg_on_monitor(char * response)
 {
   char i = 0;
-  int len = strlen(response)+5;
-  char message[strlen(response)+5];
+  int len = strlen(response)+3;
+  char message[strlen(response)+3];
   strcpy(message, "\0");
   strcat(message, response);
   strcat(message, "\r\n");
-  for(i = 0; i < strlen(message); i++)
-  {
-    while(USART_GetFlagStatus(USART3, USART_FLAG_TXE)==RESET);
-    //UART_SendMsg(uart, message , strlen(message));
-    USART_SendData(USART3, *(message+i));
-    //while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
-  }
   while(i<len)
   {
-    while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
+    while(USART_GetFlagStatus(USART3, USART_FLAG_TXE)==RESET);
     USART_SendData(USART3,*(message+i));
     i++;
   }
-  while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
-  USART_SendData(USART3,'\r');
-  while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
-  USART_SendData(USART3,'\n');
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -1106,16 +1093,14 @@ void gdi_deinit_req_func_info()
 void gdi_init()
 {
   UART_Init(uart, recieveCMD);
-  UART_Init(USART3,recieveCMD); /*Only for monitoring no RX*/
-
 }
 
 /* ---------------------------------------------------------------------------*/
 void gdi_task(void *pvParameters)
 {
-   GDI_RXSemaphore = xSemaphoreCreateMutex();
-   xSemaphoreTake( GDI_RXSemaphore, portMAX_DELAY );
-  gdi_send_msg_response("HEATER CONTROLLER BOOTING ...");
+  GDI_RXSemaphore = xSemaphoreCreateMutex();
+  xSemaphoreTake( GDI_RXSemaphore, portMAX_DELAY );
+  gdi_init(); /*Setup debug uart, This must be after the GDI_RXSemaphore is instantiated */
 
   while(1)
   {

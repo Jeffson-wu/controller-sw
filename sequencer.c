@@ -491,7 +491,7 @@ void WriteTubeHeaterReg(u8 tube, u16 reg, u16 *data, u16 datasize)
     }
     msg->ucMessageID=WRITE_MODBUS_REGS;
     p=(WriteModbusRegsReq *)msg->ucData;
-    p->slave=tube/*+0x02*/;
+    p->slave=tube;
     p->addr=reg;
     memcpy(p->data, data, datasize*sizeof(u16));
     p->datasize=datasize;
@@ -565,7 +565,7 @@ void ReadTubeHeaterReg(u8 tube, u16 reg, u16 datasize, xQueueHandle xQueue, bool
 }
 
 /* ---------------------------------------------------------------------------*/
-/* Configure the GPIO Pins to PWM using TIM1 */
+/* Configure the GPIO Pins to input */
 void Heater_PinConfig(void)
 {
   /*Setup for Heater Interrupt*/
@@ -574,7 +574,7 @@ void Heater_PinConfig(void)
   /* GPIOC Clocks enable */
   RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOC, ENABLE);
 
-  /* GPIOC Configuration: Channel 1, 2 and 3 as alternate function push-pull */
+  /* GPIOC Configuration: Channel 3, 4, 11 and 12 as input pull-down */
   GPIO_InitStructure.GPIO_Pin = GPIO_Pin_3 | GPIO_Pin_4 | GPIO_Pin_11 | GPIO_Pin_12;
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPD;
   GPIO_Init(GPIOC, &GPIO_InitStructure);
@@ -1396,7 +1396,7 @@ void TubeSequencerTask( void * pvParameter)
             }
             if (Initialized == TRUE)
             {
-              gdi_send_msg_response("READY FOR OPERATION");
+              DEBUG_PRINTF("SequencerTask ready for operation!");
             }
           }
           break;
