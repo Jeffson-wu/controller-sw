@@ -207,19 +207,13 @@ int getLog(char *poutText,int tubeId )
     if(nElements == 0)
     {
       strcat(poutText,";log={");
-      Itoa(pinData->seqNum*LOG_ELEMENT_SIZE, str);
-      //sprintf(str,"%d,", pinData->seqNum /*####JRJlogcount[tubeId]*/); /*total number of log elements*/
+      Itoa(pinData->seqNum*LOG_ELEMENT_SIZE, str); /*total number of log elements*/
       strcat(poutText,str);
       strcat(poutText,",");
     }
-    //   sprintf(str,"%03D,",pinData->seqNum); // 3 digits allows for temperatures up to 409,5 degrees
-    //   strcat(poutText,str);
-#if 1    
-    // strncpy(str,"22,33",strlen("22,33"));
     for(i=0; i<LOG_ELEMENT_SIZE; i++)
     {
       int templen=0;
-      //sprintf(str,"%d,%d",pinData->ldata[i].stage_num, pinData->ldata[i].temp);
       Itoa(pinData->ldata[i].stage_num, str);
       templen = strlen(str);
       str[templen]=',';
@@ -231,8 +225,6 @@ int getLog(char *poutText,int tubeId )
       }
     }
     strcat(poutText, ","); 
-#endif
-    //strcat(poutText,str);
     nElements+=LOG_ELEMENT_SIZE;
 
   }
@@ -339,7 +331,8 @@ void LogTask( void * pvParameters )
     {
       switch(msg->ucMessageID)
       {
-      case START_LOG:
+/* --> For USE_DEVELOPMENT_LOGGING feature */
+      case START_DEV_LOG:
         i=1;
         TubeId = *((long *)(msg->ucData));
         while((i < NUM_OF_TUBES)&&(log_tubes[i++]== FALSE));/*Check if this is the first tube to enable log on then enable log timer*/
@@ -352,7 +345,7 @@ void LogTask( void * pvParameters )
         log_tubes[TubeId]= TRUE;
         if (TubeId > last_tube_to_log) last_tube_to_log = TubeId;
       break;
-      case END_LOG:
+      case END_DEV_LOG:
         i=1;
         TubeId = *((long *)(msg->ucData));
         log_tubes[TubeId]= FALSE;
@@ -363,11 +356,24 @@ void LogTask( void * pvParameters )
           LogOff();
         }
       break;
+      case SET_DEV_LOG_INTERVAL:
+        log_interval = *((long *)(msg->ucData));
+        if(0 == log_interval) {
+          LogOff();
+        } else {
+          LogOn(log_interval);
+        }
+        if(xTimerChangePeriod( yTimer[2],1 * log_interval,100)!= pdPASS ) {
+          //error handling
+        }
+      break;
+/* <-- For USE_DEVELOPMENT_LOGGING feature */
       case READ_MODBUS_REGS_RES:
         preg=(ReadModbusRegsRes *)msg->ucData;
         TubeId = preg->slave;
         modbus_addr = preg->addr;
         if(preg->resultOk == NO_ERROR) {
+/* --> For USE_DEVELOPMENT_LOGGING feature */
           if( (TUBE1_TEMP_REG == modbus_addr) || (TUBE2_TEMP_REG == modbus_addr)||(TUBE3_TEMP_REG == modbus_addr) || (TUBE4_TEMP_REG == modbus_addr) )
           { // Debug Logging
             modbus_data =(((u16)(preg->data[0])<<8)|(preg->data[1]));
@@ -385,6 +391,7 @@ void LogTask( void * pvParameters )
               while (USART_GetFlagStatus(uart, USART_FLAG_TXE) == RESET);
             }
           }
+/* <-- For USE_DEVELOPMENT_LOGGING feature */
           else if(modbus_addr == DATA_LOG)
           { // Auto Logging
             // Data log is {seq#,stage#,t1,stage#,t2,stage#,t3,stage#,t4,stage#,t5,stage#,t6,stage#,t7,stage#,t8,stage#,t9,stage#,t10}
@@ -395,17 +402,6 @@ void LogTask( void * pvParameters )
           {
             DEBUG_LOG_PRINTF("Tube[%d]ERROR MODBUS read log FAILED!!! %d",TubeId,preg->resultOk);
           }
-        }
-      break;
-      case SET_LOG_INTERVAL:
-        log_interval = *((long *)(msg->ucData));
-        if(0 == log_interval) {
-          LogOff();
-        } else {
-          LogOn(log_interval);
-        }
-        if(xTimerChangePeriod( yTimer[2],1 * log_interval,100)!= pdPASS ) {
-          //error handling
         }
       break;
       }

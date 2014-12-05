@@ -272,6 +272,7 @@ void ErrorOff()
 }
 
 /* ---------------------------------------------------------------------------*/
+/* --> For USE_DEVELOPMENT_LOGGING feature */
 void LogOn(int log_time)/*In secs*/
 {
   if( xTimerStart(yTimer[2], 0 ) != pdPASS );
@@ -283,7 +284,7 @@ void LogOff()
 {
   if( xTimerStop( yTimer[2], 0 ) != pdPASS );
 }
-
+/* <-- For USE_DEVELOPMENT_LOGGING feature */
 /* ---------------------------------------------------------------------------*/
 void vError_LEDToggle(xTimerHandle pxTimer )
 {
@@ -318,12 +319,14 @@ void ConfigOSTimer ()
               ( void * ) 102,       // Assign each timer a unique id equal to its array index.
               vError_LEDToggle      // Each timer calls the same callback when it expires.
               );
+/* --> For USE_DEVELOPMENT_LOGGING feature */
   yTimer[2]= xTimerCreate((char *)"LogTimer",       // Just a text name, not used by the kernel.
               ( 100 * z ),          // The timer period in ticks.
               pdTRUE,               // The timers will auto-reload themselves when they expire.
               ( void * ) 103,       // Assign each timer a unique id equal to its array index.
               vReadTubeTemp         // Each timer calls the same callback when it expires.
               );
+/* <-- For USE_DEVELOPMENT_LOGGING feature */
   yTimer[3]= xTimerCreate((char *)"ResetHeaters",       // Just a text name, not used by the kernel.
               ( 100 * r ),          // The timer period in ticks.
               pdTRUE,               // The timers will auto-reload themselves when they expire.

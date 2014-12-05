@@ -104,9 +104,9 @@ const char *  signals_txt[] =
   "SET_LID_TEMP_RES",
   "SET_LID_LOCK",
   "SET_LID_LOCK_RES",
-  "START_LOG",
-  "END_LOG",
-  "SET_LOG_INTERVAL",
+  "START_DEV_LOG",
+  "END_DEV_LOG",
+  "SET_DEV_LOG_INTERVAL",
   "GDI_NEW_CMD",
   "BROADCAST_MODBUS",
   "START_SWU",
@@ -207,7 +207,6 @@ const char *  heater[] =
 
 const ExtiGpioTypeDef tube2heater[]=
 {
-  0,
   Heater1,
   Heater1,
   Heater1,
@@ -441,7 +440,7 @@ void ExtIrqEnable(ExtiGpioTypeDef heater)
 }
 
 /* ---------------------------------------------------------------------------*/
-/*  data size is number of registers (2 bytes) */
+/*  data size is number of registers (quantities of 2 bytes)                  */
 /* ---------------------------------------------------------------------------*/
 void WriteTubeHeaterReg(u8 tube, u16 reg, u16 *data, u16 datasize)
 {
@@ -756,7 +755,7 @@ bool stop_tube_seq( long TubeId)
     new_msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
     if(new_msg)
     {
-      new_msg->ucMessageID=END_LOG;
+      new_msg->ucMessageID=END_DEV_LOG;
       p=(long *)new_msg->ucData;
       *p=TubeId;
       xQueueSend(LogQueueHandle, &new_msg, portMAX_DELAY);
@@ -1014,8 +1013,8 @@ void TubeEventHandler (long TubeId, int event, xMessage *msg)
     #if defined(SIMULATE_HEATER)
     ReadTubeHeaterReg(TubeId, EVENT_REG, 1, TubeSequencerQueueHandle, FALSE);
     #else
-    ExtIrqEnable(tube2heater[TubeId]);
-    DEBUG_PRINTF("ENABLE IRQ ON HEATER[%d]",tube2heater[TubeId]);
+    ExtIrqEnable(tube2heater[TubeId-1]);
+    DEBUG_PRINTF("ENABLE IRQ ON HEATER[%d]",tube2heater[TubeId-1]);
     WriteTubeHeaterReg(TubeId, EVENT_REG, &modbus_data[0], 1); /* TEST to force the heater to create an event*/
     #endif
   }
@@ -1170,7 +1169,7 @@ void TubeStageHandler(long TubeId, xMessage *msg)
         new_msg = pvPortMalloc(sizeof(xMessage)+sizeof(long));
         if(new_msg)
         {
-          new_msg->ucMessageID=END_LOG;
+          new_msg->ucMessageID=END_DEV_LOG;
           p=(long *)new_msg->ucData;
           *p=TubeId;
           xQueueSend(LogQueueHandle, &new_msg, portMAX_DELAY);
@@ -1206,7 +1205,7 @@ void TubeStageHandler(long TubeId, xMessage *msg)
         new_msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
         if(new_msg)
         {
-          new_msg->ucMessageID=START_LOG;
+          new_msg->ucMessageID=START_DEV_LOG;
           p=(long *)new_msg->ucData;
           *p=TubeId;
           xQueueSend(LogQueueHandle, &new_msg, portMAX_DELAY);
