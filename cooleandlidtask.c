@@ -494,29 +494,22 @@ void CoolAndLidTask( void * pvParameters )
   vSemaphoreCreateBinary(xADSSemaphore);
   assert_param(NULL != xADSSemaphore);
   xSemaphoreTake(xADSSemaphore, portMAX_DELAY); //Default is taken. ISR will give.
-
   adsSetIsrSemaphore(xADSSemaphore);
-  /* Start convertion and let timeout handle subsequent calls to adsContiniueSequence */
-
   logInit();
-
-#if 1
+  vTaskDelay(1000); /* Wait for ADC to be ready */
+  adsConfigConversionTimer(&adsTimerCallback);
   if(0 == ads1148Init())
   {
     PRINTF("ADS1148 OK\r\n");
-
+    /* Start convertion and let timeout handle subsequent calls to adsContiniueSequence */
     adsStartSeq();
     adsIrqEnable();
   }
   else
-  {
-    // #### Fatal error handling    
+  {// #### Fatal error handling    
     PRINTF("ADS1148 NOT OK\r\n");
     configASSERT(pdFALSE);
   }
-#endif
-
-  adsConfigConversionTimer(&adsTimerCallback);
 
 #ifdef STANDALONE
   standAlone();

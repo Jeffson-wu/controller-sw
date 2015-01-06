@@ -39,14 +39,14 @@ extern xQueueHandle CoolAndLidQueueHandle;
 #define DEBUG_PRINTF(fmt, args...)                          /* Don't do anything in release builds */
 #endif
 
-//#define DEBUG_SEQ /*Debug of sequencer, to follow state of sequencer*/
+#define DEBUG_SEQ /*Debug of sequencer, to follow state of sequencer*/
 #ifdef DEBUG_SEQ
 #define DEBUG_SEQ_PRINTF(fmt, args...)      snprintf(buf, DEBUG_BUFFER_SIZE, fmt, ## args);  gdi_send_msg_on_monitor(buf);
 #else
 #define DEBUG_SEQ_PRINTF(fmt, args...)                      /* Don't do anything in release builds */
 #endif
 
-//#define DEBUG_IF /*Debug of external interfaces modbus, IRQ and serial */
+#define DEBUG_IF /*Debug of external interfaces modbus, IRQ and serial */
 #ifdef DEBUG_IF
 #define DEBUG_IF_PRINTF(fmt, args...)      snprintf(buf, DEBUG_BUFFER_SIZE, fmt, ## args);  gdi_send_msg_on_monitor(buf);
 #else
@@ -125,7 +125,8 @@ typedef enum
   TUBE_WAIT_P_TEMP,                                         /*Wait until pause temperature is reached  */
   TUBE_PAUSED,                                              /*Wait until continiue is requested        */
   TUBE_OUT_OF_DATA,                                         /*No more data in que and no end tag is found*/
-  TUBE_NOT_INITIALIZED
+  TUBE_NOT_INITIALIZED,
+  TUBE_ERROR_STATE
 }TubeStates;
 
 const char *  tube_states[] =
@@ -167,6 +168,7 @@ typedef struct
   portCHAR ucMessageID;                                     /* last message processed in state machine  */
   uint16_t pauseTemp;                                       /* Temperature to maintain during pause     */
   uint16_t event_reg;                                       /* last event/status register read from tube*/
+  uint16_t hw_status_reg;                                   /* last hw status register read from tube   */
   int tail;                                                 /* Read Pointer                             */
   int head;                                                 /* Write Pointer                            */
   stageCmd_t seq[STAGES_QUEUE_SIZE];                        /* The sequence                             */
@@ -250,25 +252,25 @@ const gpio_extint_t gpio_EXTI_CNF[nExtiGpio+1]={
 
 /*Tube state register*/
 Tubeloop_t Tubeloop[NTUBES] = {
-  { TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0, {}, {0,0,End,0} },
-  { TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0, {}, {0,0,End,0} },
-  { TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0, {}, {0,0,End,0} },
-  { TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0, {}, {0,0,End,0} },
+  { TUBE_INIT, TUBE_P_NORM,0,0,0,0,0,0, {}, {0,0,End,0} },
+  { TUBE_INIT, TUBE_P_NORM,0,0,0,0,0,0, {}, {0,0,End,0} },
+  { TUBE_INIT, TUBE_P_NORM,0,0,0,0,0,0, {}, {0,0,End,0} },
+  { TUBE_INIT, TUBE_P_NORM,0,0,0,0,0,0, {}, {0,0,End,0} },
     
-  { TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0, {}, {0,0,End,0} },
-  { TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0, {}, {0,0,End,0} },
-  { TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0, {}, {0,0,End,0} },
-  { TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0, {}, {0,0,End,0} },
+  { TUBE_INIT, TUBE_P_NORM,0,0,0,0,0,0, {}, {0,0,End,0} },
+  { TUBE_INIT, TUBE_P_NORM,0,0,0,0,0,0, {}, {0,0,End,0} },
+  { TUBE_INIT, TUBE_P_NORM,0,0,0,0,0,0, {}, {0,0,End,0} },
+  { TUBE_INIT, TUBE_P_NORM,0,0,0,0,0,0, {}, {0,0,End,0} },
     
-  { TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0, {}, {0,0,End,0} },
-  { TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0, {}, {0,0,End,0} },
-  { TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0, {}, {0,0,End,0} },
-  { TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0, {}, {0,0,End,0} },
+  { TUBE_INIT, TUBE_P_NORM,0,0,0,0,0,0, {}, {0,0,End,0} },
+  { TUBE_INIT, TUBE_P_NORM,0,0,0,0,0,0, {}, {0,0,End,0} },
+  { TUBE_INIT, TUBE_P_NORM,0,0,0,0,0,0, {}, {0,0,End,0} },
+  { TUBE_INIT, TUBE_P_NORM,0,0,0,0,0,0, {}, {0,0,End,0} },
     
-  { TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0, {}, {0,0,End,0} },
-  { TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0, {}, {0,0,End,0} },
-  { TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0, {}, {0,0,End,0} },
-  { TUBE_NOT_INITIALIZED,TUBE_P_NORM,0,0,0,0,0, {}, {0,0,End,0} }
+  { TUBE_INIT, TUBE_P_NORM,0,0,0,0,0,0, {}, {0,0,End,0} },
+  { TUBE_INIT, TUBE_P_NORM,0,0,0,0,0,0, {}, {0,0,End,0} },
+  { TUBE_INIT, TUBE_P_NORM,0,0,0,0,0,0, {}, {0,0,End,0} },
+  { TUBE_INIT, TUBE_P_NORM,0,0,0,0,0,0, {}, {0,0,End,0} }
 };
 
 extern xQueueHandle ModbusQueueHandle;
@@ -699,6 +701,13 @@ bool start_tube_seq( long TubeId)
 }
 
 /* ---------------------------------------------------------------------------*/
+void stop_tube_error(long TubeId)
+{
+  stop_tube_seq(TubeId);
+  Tubeloop[TubeId-1].state = TUBE_ERROR_STATE;
+}
+
+/* ---------------------------------------------------------------------------*/
 bool stop_tube_seq( long TubeId)
 {
   u16 data;
@@ -733,7 +742,7 @@ bool stop_tube_seq( long TubeId)
       for(i = 0; i < 16; i++)
       {
         //TUBE_INIT, TUBE_IDLE, TUBE_WAIT_TEMP, TUBE_WAIT_TIME, TUBE_WAIT_P_TEMP, TUBE_PAUSED, TUBE_OUT_OF_DATA, TUBE_NOT_INITIALIZED
-        if(! ( (TUBE_INIT == Tubeloop[i].state) || (TUBE_IDLE  == Tubeloop[i].state) || (TUBE_NOT_INITIALIZED == Tubeloop[i].state) ))
+        if(! ( (TUBE_INIT == Tubeloop[i].state) || (TUBE_IDLE  == Tubeloop[i].state) || (TUBE_NOT_INITIALIZED == Tubeloop[i].state) || (TUBE_ERROR_STATE == Tubeloop[i].state) ))
         {
           sequences_done = FALSE;             
           DEBUG_PRINTF("sequence NOT done Tube:%d", i);
@@ -809,6 +818,10 @@ char * get_tube_state(long TubeId, char *poutText)
   else if(Tubeloop[TubeId-1].state == TUBE_IDLE)
   {
     strcpy(state, "idle");
+  }
+  else if(Tubeloop[TubeId-1].state == TUBE_ERROR_STATE)
+  {
+    strcpy(state, "error");
   }
   Itoa(Tubeloop[TubeId-1].curr.seq_num, stage_nr);
   strcpy(poutText, "OK<state=\"");
@@ -949,9 +962,154 @@ bool getseq(u8 tubeId, stageCmd_t *data)
 
 /* ---------------------------------------------------------------------------*/
 /* Handle HW Status                                                           */
+/* This function handles a read of the HW_STATUS_REG of an M0                 */
+/* See heater_reg.h for HW_STATUS_REG Bit definitions                         */
 /* ---------------------------------------------------------------------------*/
 void HW_EventHandler(ReadModbusRegsRes *preg, xMessage *msg){
-  // Change tube state to some out of order state
+  ExtiGpioTypeDef heater;
+  long TubeId = preg->slave;
+  Tubeloop[TubeId-1].hw_status_reg =(((u16)(preg->data[0])<<8)|(preg->data[1]));
+
+  DEBUG_PRINTF("Tube[%2ld] HW Status:%04x", TubeId, Tubeloop[TubeId-1].hw_status_reg);
+
+  heater = tube2heater[TubeId-1];
+  if(Tubeloop[TubeId-1].hw_status_reg & HW_ERR_ADS_FAILURE)
+  { // ADC error all four wells are out of service
+    switch(heater)
+    {
+      case Heater1:
+        Tubeloop[0].state = Tubeloop[1].state = Tubeloop[2].state = Tubeloop[3].state = TUBE_ERROR_STATE;
+        break;
+      case Heater2:
+        Tubeloop[5].state = Tubeloop[6].state = Tubeloop[7].state = Tubeloop[8].state = TUBE_ERROR_STATE;
+        break;
+      case Heater3:
+        Tubeloop[9].state = Tubeloop[10].state = Tubeloop[11].state = Tubeloop[12].state = TUBE_ERROR_STATE;
+        break;
+      case Heater4:
+        Tubeloop[13].state = Tubeloop[14].state = Tubeloop[15].state = Tubeloop[16].state = TUBE_ERROR_STATE;
+        break;
+      default:
+        break;
+    }
+  }
+  else if(Tubeloop[TubeId-1].hw_status_reg & (HW_ERR_SENSOR1_SHORTED | HW_ERR_SENSOR1_OPEN))
+  { // sensor error on sensor 1
+    switch(heater)
+    {
+      case Heater1:
+        Tubeloop[0].state = TUBE_ERROR_STATE;
+        break;
+      case Heater2:
+        Tubeloop[5].state = TUBE_ERROR_STATE;
+        break;
+      case Heater3:
+        Tubeloop[9].state = TUBE_ERROR_STATE;
+        break;
+      case Heater4:
+        Tubeloop[13].state = TUBE_ERROR_STATE;
+        break;
+      default:
+        break;
+    }
+  }
+  else if(Tubeloop[TubeId-1].hw_status_reg & (HW_ERR_SENSOR2_SHORTED | HW_ERR_SENSOR2_OPEN))
+  { // sensor error on sensor 2
+    switch(heater)
+    {
+      case Heater1:
+        Tubeloop[1].state = TUBE_ERROR_STATE;
+        break;
+      case Heater2:
+        Tubeloop[6].state = TUBE_ERROR_STATE;
+        break;
+      case Heater3:
+        Tubeloop[10].state = TUBE_ERROR_STATE;
+        break;
+      case Heater4:
+        Tubeloop[14].state = TUBE_ERROR_STATE;
+        break;
+      default:
+        break;
+    }
+  }
+  else if(Tubeloop[TubeId-1].hw_status_reg & (HW_ERR_SENSOR3_SHORTED | HW_ERR_SENSOR3_OPEN))
+  { // sensor error on sensor 3
+    switch(heater)
+    {
+      case Heater1:
+        Tubeloop[2].state = TUBE_ERROR_STATE;
+        break;
+      case Heater2:
+        Tubeloop[7].state = TUBE_ERROR_STATE;
+        break;
+      case Heater3:
+        Tubeloop[11].state = TUBE_ERROR_STATE;
+        break;
+      case Heater4:
+        Tubeloop[15].state = TUBE_ERROR_STATE;
+        break;
+      default:
+        break;
+    }
+  }
+  else if(Tubeloop[TubeId-1].hw_status_reg & (HW_ERR_SENSOR4_SHORTED | HW_ERR_SENSOR4_OPEN))
+  { // sensor error on sensor 4
+    switch(heater)
+    {
+      case Heater1:
+        Tubeloop[3].state = TUBE_ERROR_STATE;
+        break;
+      case Heater2:
+        Tubeloop[8].state = TUBE_ERROR_STATE;
+        break;
+      case Heater3:
+        Tubeloop[12].state = TUBE_ERROR_STATE;
+        break;
+      case Heater4:
+        Tubeloop[16].state = TUBE_ERROR_STATE;
+        break;
+      default:
+        break;
+    }
+  }
+  else if(Tubeloop[TubeId-1].hw_status_reg & HW_DEFAULT_CAL_USED)
+  { // Calibration data does not exist */
+  //Dette skal fremgaa af loggen eller hvordan nu??
+  }
+  else if(Tubeloop[TubeId-1].hw_status_reg & HW_BITTEN_BY_WATCH_DOG)
+  { // Reset caused by watch dog
+    switch(heater)
+    {
+      case Heater1:
+        stop_tube_seq(1);
+        stop_tube_seq(2);
+        stop_tube_seq(3);
+        stop_tube_seq(4);
+        break;
+      case Heater2:
+        stop_tube_seq(5);
+        stop_tube_seq(6);
+        stop_tube_seq(7);
+        stop_tube_seq(8);
+        break;
+      case Heater3:
+        stop_tube_seq(9);
+        stop_tube_seq(10);
+        stop_tube_seq(11);
+        stop_tube_seq(12);
+        break;
+      case Heater4:
+        stop_tube_seq(13);
+        stop_tube_seq(14);
+        stop_tube_seq(15);
+        stop_tube_seq(16);
+        break;
+      default:
+        break;
+    }
+    //#### HOW TO NOTIFY THE LINUX BOX!!! 
+  }
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -1038,7 +1196,7 @@ void HeaterEventHandler (ReadModbusRegsRes *preg, xMessage *msg)
     modbus_data[i] =(((u16)(preg->data[i*2])<<8)|(preg->data[(i*2)+1]));
   }
   Tubeloop[TubeId-1].event_reg = modbus_data[0];
-  #if 1                                                     // event debug out
+  // event debug out
   DEBUG_SEQ_PRINTF("T%ld:EVENT[%04x]:%s-%s-%s-%s-%s-%s-%s-%s-%s-%s-%s-%s-%s-%s-%s-%s",
     TubeId,modbus_data[0],
     ((modbus_data[0] & SEQUENCE_EVENT_TUBE1)? "S_EV_T1 "  : " "),
@@ -1057,7 +1215,7 @@ void HeaterEventHandler (ReadModbusRegsRes *preg, xMessage *msg)
     ((modbus_data[0] & TUBE2_LOGGING_READY) ? "LogT2 "    : " "),
     ((modbus_data[0] & TUBE3_LOGGING_READY) ? "LogT3 "    : " "),
     ((modbus_data[0] & TUBE4_LOGGING_READY) ? "LogT4 "    : " "));
-  #endif
+  
   event = 0;
   event |= (modbus_data[0] & SEQUENCE_EVENT_TUBE1) ? SEQUENCE_EVENT : 0;
   event |= (modbus_data[0] & TUBE1_LOGGING_READY)  ? LOGGING_READY  : 0;
@@ -1087,12 +1245,38 @@ void HeaterEventHandler (ReadModbusRegsRes *preg, xMessage *msg)
   
   if(modbus_data[0] & M0_BOOT)
   { // M0 booted 
-    
+    if((Tubeloop[i].state != TUBE_IDLE) && (Tubeloop[i].state != TUBE_INIT))
+    {
+      DEBUG_PRINTF("%s rebooted", heater[tube2heater[TubeId-1]] );
+      //#### - Handle event - 
+      //#### HOW TO NOTIFY THE LINUX BOX!!! 
+    }
+#if 1
+    if(Tubeloop[TubeId-1].state == TUBE_INIT)
+    { // Set current tube to IDLE so its ready for use
+      Tubeloop[TubeId-1].state = TUBE_IDLE;
+      bool Initialized = TRUE;
+      i = 0;
+      while(i<NTUBES)
+      {
+        if((Tubeloop[i].state != TUBE_IDLE) && (Tubeloop[i].state != TUBE_ERROR_STATE))
+        {
+          Initialized = FALSE;
+          break;
+        }
+        i++;
+      }
+      if (Initialized == TRUE)
+      {
+        DEBUG_PRINTF("SequencerTask ready for operation!");
+      }
+    }
+#endif
   }
 
   if(modbus_data[0] & M0_PING)
   { //Answer to a ping
-    
+    DEBUG_IF_PRINTF("Tube[%ld] Ping response", TubeId);
   }
 }
 
@@ -1233,7 +1417,7 @@ void TubeSequencerTask( void * pvParameter)
   xMessage *msg,*new_msg;
   long TubeId;
   USART_ERROR modbus_result;
-  long *p,i=0;
+  long *p/*####,i=0*/;
   ReadModbusRegsRes *preg;
   WriteModbusRegsRes *wres;
   Tubeloop_t *T;
@@ -1243,6 +1427,12 @@ void TubeSequencerTask( void * pvParameter)
 
   InitTubeTimers();
   vTaskDelay(1000);                                       /*Wait for heaters to boot*/
+
+  ExtIrqEnable(Heater1);
+  ExtIrqEnable(Heater2);
+  ExtIrqEnable(Heater3);
+  ExtIrqEnable(Heater4);
+  
   #ifdef SIMULATE_HEATER
   gdi_send_msg_on_monitor("System is using SIMULATE_HEATER!!");
   #endif
@@ -1279,12 +1469,11 @@ void TubeSequencerTask( void * pvParameter)
           {
             if(preg->addr == EVENT_REG)
             {
-              //  DEBUG_PRINTF("Tube[%d]Event[%x]",TubeId,*preg->data);
+              //  DEBUG_PRINTF("Tube[%ld]Event[%x]",TubeId,*preg->data);
               HeaterEventHandler(preg, msg);
             }
             else if(preg->addr == HW_STATUS_REG)
             {
-              //  DEBUG_PRINTF("Tube[%d] HW Status:%x",TubeId,*preg->data);
               HW_EventHandler(preg, msg);
             }            
             else
@@ -1373,12 +1562,13 @@ void TubeSequencerTask( void * pvParameter)
           if(modbus_result != NO_ERROR)
           {
             DEBUG_PRINTF("####Tube[%ld]ERROR MODBUS WRITE FAILED!!! %d",TubeId,modbus_result);
-            configASSERT(pdFALSE); //This is a fatal as the sequence will halt with no recovery
+            stop_tube_error(TubeId); //This is a fatal as the sequence will halt with no recovery
+            //configASSERT(pdFALSE); //This is a fatal as the sequence will halt with no recovery
           }
-          DEBUG_PRINTF("Tube[%ld]@%s TubeSeq[%s] Tube[%d]ADDR[%d]size[%d]STATUS[%s]",
-            TubeId, tube_states[Tubeloop[TubeId-1].state], signals_txt[(unsigned char)msg->ucMessageID], wres->slave, wres->addr,
-            wres->datasize, (wres->resultOk==NO_ERROR)?"PASS":"FAIL");
-
+          DEBUG_PRINTF("Tube[%ld]@%s TubeSeq[%s] ADDR[%d]size[%d]",
+            TubeId, tube_states[Tubeloop[TubeId-1].state], signals_txt[(unsigned char)msg->ucMessageID], 
+            wres->addr, wres->datasize);
+#if 0
           if(Tubeloop[TubeId-1].state == TUBE_INIT)         /*No errors on current tube, set it to IDLE so its ready for use*/
           {
             Tubeloop[TubeId-1].state = TUBE_IDLE;
@@ -1398,6 +1588,7 @@ void TubeSequencerTask( void * pvParameter)
               DEBUG_PRINTF("SequencerTask ready for operation!");
             }
           }
+#endif
           break;
         default:
           DEBUG_SEQ_PRINTF("***UNHANDLED MESSAGE*** %s",

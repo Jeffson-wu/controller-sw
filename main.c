@@ -451,7 +451,6 @@ int main(void)
   PWM_Init(20000,20000); //20kHz PWM : (TIM3(Topheater2,Peltier, Aux), TIM4(Topheater1, Fan))
   UART_SendMsg(USART3, (u8*)"Monitor Port UP\r\n" , 16);
   init_os_trace(); /*GDB CMD:dump binary memory gdb_dump_23.txt 0x20000000 0x20010000  -- http://percepio.com/*/
-  Modbus_init(USART2);
   PWM_Set(0,TopHeaterCtrl1PWM);
   PWM_Set(0,TopHeaterCtrl2PWM);
   PWM_Set(0,FANctrlPWM); 
@@ -472,31 +471,9 @@ int main(void)
   vQueueAddToRegistry(TubeSequencerQueueHandle,(char *)"GDI");
   xTaskCreate( ModbusTask, ( const char * ) "Modbus task", ( unsigned short ) 400, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &modbusCreatedTask );
   xTaskCreate( LogTask, ( const char * ) "Log task", ( unsigned short ) 400, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvLogTask );
-  xTaskCreate( gdi_task, ( const char * ) "Debug task", ( unsigned short ) 600, NULL, ( ( unsigned portBASE_TYPE ) 1 ) | portPRIVILEGE_BIT, &gdiCreatedTask );
+  xTaskCreate( gdi_task, ( const char * ) "Gdi task", ( unsigned short ) 600, NULL, ( ( unsigned portBASE_TYPE ) 1 ) | portPRIVILEGE_BIT, &gdiCreatedTask );
   xTaskCreate( CoolAndLidTask, (const char *) "Cool Lid task" /*max 16 chars*/, 300, NULL, ( (unsigned portBASE_TYPE) 4 ) | portPRIVILEGE_BIT, &pvCooleAndLidTask );
   xTaskCreate( TubeSequencerTask, ( const char * ) "TubeSeq task", ( unsigned short ) 1000, NULL, ( ( unsigned portBASE_TYPE ) 4 ) | portPRIVILEGE_BIT, &pvTubeSequencerTaskTask );
-
-#if 1 //
-  {
-    int i;
-    long *p;
-    long TubeId;
-    xMessage *msg;
-
-    for(i = 1; i < 17; i++)
-    {
-      TubeId = i;
-      msg = pvPortMalloc(sizeof(xMessage)+sizeof(long));
-      if(msg)
-      {
-        msg->ucMessageID = TUBE_TEST_SEQ;
-        p = (long *)msg->ucData;
-        *p = TubeId;
-        xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
-      }
-    }
-  }
-#endif
 
   { // Synchronize M0 LEDs
     xMessage *msg;

@@ -976,7 +976,7 @@ void gdi_map_to_functions()
           }
           if(0==TubeId)
           {
-            while(TubeId < 17)
+            while(TubeId < 16)
             {
               TubeId++;
               if(pdTRUE != send_led_cmd(fn, TubeId)) { result = 0; }
