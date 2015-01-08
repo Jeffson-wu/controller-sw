@@ -19,13 +19,21 @@
 
 /* Includes ------------------------------------------------------------------*/
 /* Exported types ------------------------------------------------------------*/
-/* Private define ------------------------------------------------------------*/
+typedef enum {
+  LID_ADDR = 17,
+  PELTIER_ADDR,
+  //PELTIER_ADDR2,
+  FAN_ADDR,
+  nofADDR
+} coolandlid_addrs_t;
 /* Exported constants --------------------------------------------------------*/
 /* Exported macro ------------------------------------------------------------*/
 /* Exported functions ------------------------------------------------------- */
 
 void CoolAndLidTask( void * pvParameters );
 int getClLog(char *poutText );
+bool coolLidReadRegs(u8 slave, u16 addr, u16 datasize, u16 *buffer);
+bool coolLidWriteRegs(u8 slave, u16 addr, u16 *data, u16 datasize);
 
 #endif /* __COOLERANDLIDTASK_H */
 

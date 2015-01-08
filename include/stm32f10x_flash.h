@@ -364,16 +364,17 @@ typedef enum
   */
 
 /*------------ Functions used for all STM32F10x devices -----*/
+/* FLASH Memory Programming functions *****************************************/
 void FLASH_SetLatency(uint32_t FLASH_Latency);
 void FLASH_HalfCycleAccessCmd(uint32_t FLASH_HalfCycleAccess);
 void FLASH_PrefetchBufferCmd(uint32_t FLASH_PrefetchBuffer);
-void FLASH_Unlock(void);
-void FLASH_Lock(void);
-FLASH_Status FLASH_ErasePage(uint32_t Page_Address);
+void FLASH_Unlock(void) __attribute__ ((section (".fl_text")));
+void FLASH_Lock(void) __attribute__ ((section (".fl_text")));
+FLASH_Status FLASH_ErasePage(uint32_t Page_Address) __attribute__ ((section (".fl_text")));
 FLASH_Status FLASH_EraseAllPages(void);
 FLASH_Status FLASH_EraseOptionBytes(void);
 FLASH_Status FLASH_ProgramWord(uint32_t Address, uint32_t Data);
-FLASH_Status FLASH_ProgramHalfWord(uint32_t Address, uint16_t Data);
+FLASH_Status FLASH_ProgramHalfWord(uint32_t Address, uint16_t Data) __attribute__ ((section (".fl_text")));
 FLASH_Status FLASH_ProgramOptionByteData(uint32_t Address, uint8_t Data);
 FLASH_Status FLASH_EnableWriteProtection(uint32_t FLASH_Pages);
 FLASH_Status FLASH_ReadOutProtection(FunctionalState NewState);

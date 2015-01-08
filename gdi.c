@@ -846,7 +846,18 @@ void gdi_map_to_functions()
           if((0 == addr) || (0 == datasize)) {
             gdi_send_data_response("ERROR", newline_both);
           } else {
-            result = DebugModbusReadRegs(slave, addr, datasize, (u8 *)buffer);
+            if(addr <= 16)
+            { // Adresses 0 - 16 are actually on the MODBUS
+              result = DebugModbusReadRegs(slave, addr, datasize, (u8 *)buffer);
+            }
+            else if(addr <= 20)
+            { // Adresses 17 - 20 are mapped to cool and lid, addr is reg, datasize is reg count, buffer is wrong endian
+              result = coolLidReadRegs(slave, addr, datasize, (u16 *)buffer);
+            }
+            else
+            {
+              result = -1;
+            }
 
             if(NO_ERROR == result)
             {
@@ -878,7 +889,7 @@ void gdi_map_to_functions()
           gdi_send_data_response("ERROR", newline_both);
         else
         {
-          result = gdi_get_regwrite_values(buffer);	
+          result = gdi_get_regwrite_values(buffer);
           if (result == 0) {
             gdi_send_data_response("ERROR", newline_both);
           } else {
@@ -894,8 +905,14 @@ void gdi_map_to_functions()
             for(i=0;i < datasize;i++) {
               gdi_print_wrong_endian_number(buffer[i], space_end);
             }
-            result = DebugModbusWriteRegs(slave,addr, (u8 *)buffer, datasize);
-
+            if(addr <= 16)
+            { // Adresses 0 - 16 are actually on the MODBUS
+              result = DebugModbusWriteRegs(slave,addr, (u8 *)buffer, datasize);
+            }
+            else if(addr <= 20)
+            { // Adresses 17 - 20 are mapped to cool and lid, addr is reg, datasize is reg count, buffer is wrong endian
+              result = coolLidWriteRegs(slave, addr, (u16 *)buffer, datasize);
+            }
             gdi_send_data_response("The return value is : ", newline_start);
             gdi_print_number(result, newline_end);
 
@@ -976,7 +993,7 @@ void gdi_map_to_functions()
           }
           if(0==TubeId)
           {
-            while(TubeId < 17)
+            while(TubeId < 16)
             {
               TubeId++;
               if(pdTRUE != send_led_cmd(fn, TubeId)) { result = 0; }

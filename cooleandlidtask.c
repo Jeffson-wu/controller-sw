@@ -40,7 +40,9 @@
 #include "pwm.h"
 #include "gdi.h"
 #include "util.h"
-
+#include "nvs.h"
+#include "../heater-sw/heater_reg.h"
+#include "cooleandlidtask.h"
 /* ---------------------------------------------------------------------------*/
 //#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
 //#define DEBUG_COOL
@@ -60,6 +62,9 @@ char buf[20];
   #define CL_LOG_ELEMENT_SIZE 4     //Log all four sensors
   #define CL_LOG_QUEUE_SIZE   4     //Queue length
 #endif
+
+#define Swap2Bytes(val) ( (((val) >> 8) & 0x00FF) | (((val) << 8) & 0xFF00) )
+
 /* Private typedef -----------------------------------------------------------*/
 typedef enum {
   STOP_STATE,
@@ -114,6 +119,10 @@ typedef struct LID_DATA{
   regulatorData_t regulator;
 } lidData_t;
 
+typedef struct CALIB_DATA_T {
+  int16_t c_1;
+} calib_data_t;
+
 #ifdef USE_CL_DATA_LOGGING
 typedef int16_t cl_data_t;
 typedef struct CL_LOG_DATA_ELEMENT {
@@ -156,6 +165,13 @@ static lidData_t lidData[1] = {
 static fanData_t fanData[1] = {
   {FAN_1, {STOP_STATE, 0, &pwmCh[4], &adcCh[3]}}
 };
+
+calib_data_t __attribute__ ((aligned (2))) calib_data[3] = {
+  /* Default calibration data - use if no valid data found in NVS */
+    { 5597   },       /* Lid     100degC */ 
+    { -21705 },       /* Peltier  10degC */
+    { -10289 }        /* Fan      50degC */ 
+  };
 
 #ifdef USE_CL_DATA_LOGGING
 static cl_dataLog_t cl_dataLog = {0,0,{0,0,0,0}};
@@ -267,13 +283,14 @@ void lid(lidData_t *lidData)
     {
       msgSent = FALSE;
       *reg->pwmVal = 0;
+      reg->hysteresisActiveFlag = 0;
       reg->state = CTRL_OPEN_LOOP_STATE;
     } 
     break;
     case MANUAL_STATE:
     {
-    	out = reg->setPoint;
       msgSent = FALSE;
+      return; //Do not set PWM in this state
     } 
     break;
     case CTRL_OPEN_LOOP_STATE:
@@ -421,6 +438,9 @@ void logUpdate(int16_t * ch0value, int16_t * ch1value, int16_t * ch2value, int16
 }
 
 /* ---------------------------------------------------------------------------*/
+/* Public functions                                                           */
+/* ---------------------------------------------------------------------------*/
+
 /* Write log data to Linux box (Called from gdi, thus running in gdi context) */
 /* <uid>,<seq_number=s;log={t1,t2,t3,t4[,t1,t2,t3,t4 [,t1,t2,t3,t4[,t1,t2,t3,t4]]]}> */
 /* or <uid>,OK\r  */
@@ -475,6 +495,85 @@ int getClLog(char *poutText )
 #endif //USE_CL_DATA_LOGGING
 
 /* ---------------------------------------------------------------------------*/
+/* coolLidReadRegs and coolLidWriteRegs are implemented use the same com i/f  */
+/* as for controlling the heaters (on the M0s)                                */
+/* "addr" is first reg, "datasize" is reg count, "buffer" is wrong endian     */
+/* ---------------------------------------------------------------------------*/
+bool coolLidReadRegs(u8 slave, u16 addr, u16 datasize, u16 *buffer)
+{
+  int reg;
+  u16 val;
+  for (reg = 0; reg < datasize; reg++)
+  {
+    switch((heater_regs_t)(addr + reg))
+    {
+      case SETPOINT_REG:
+        switch(slave)
+        {
+          case LID_ADDR:
+            val = lidData[0].regulator.setPoint;
+            break;
+          case PELTIER_ADDR:
+            val = peltierData[0].regulator.setPoint;
+            break;
+          case FAN_ADDR:
+            val = fanData[0].regulator.setPoint;
+            break;
+          default:
+            break;
+        }
+      default:
+        break;
+    }
+    *(buffer + reg) = Swap2Bytes(val); // correct endianess
+  }
+  return FALSE;
+}
+
+/* ---------------------------------------------------------------------------*/
+/* "addr" is first reg, "datasize" is reg count, "data" is wrong endian       */
+bool coolLidWriteRegs(u8 slave, u16 addr, u16 *data, u16 datasize)
+{
+  int reg;
+  u16 val;
+  for (reg = 0; reg < datasize; reg++)
+  {
+    val = Swap2Bytes(*(data + reg)); // correct endianess
+    switch((heater_regs_t)(addr + reg))
+    {
+      case SETPOINT_REG:
+        switch(slave)
+        {
+          case LID_ADDR:
+            lidData[0].regulator.setPoint = val;
+            break;
+          case PELTIER_ADDR:
+            peltierData[0].regulator.setPoint = val;
+            break;
+          case FAN_ADDR:
+            fanData[0].regulator.setPoint = val;
+            break;
+          default:
+            break;
+        }
+      case TUBE_COMMAND_REG:
+        /* Here the slave is irrelevant */
+        if (WRITE_CAL_DATA == val) {
+          calib_data[0].c_1 = lidData[0].regulator.setPoint;
+          calib_data[1].c_1 = peltierData[0].regulator.setPoint;
+          calib_data[2].c_1 = fanData[0].regulator.setPoint;
+          NVSwrite(sizeof(calib_data), calib_data);
+          DEBUG_PRINTF("\r\nWrote calib.\r\n");
+        }
+        break;
+      default:
+        break;
+    }
+  }
+  return FALSE;
+}
+
+/* ---------------------------------------------------------------------------*/
 /* Task main loop                                                             */
 /* ---------------------------------------------------------------------------*/
 void CoolAndLidTask( void * pvParameters )
@@ -497,27 +596,36 @@ void CoolAndLidTask( void * pvParameters )
 
   logInit();
 
-#if 1
+  vTaskDelay(1000); /* Wait for ADC to be ready */
+  adsConfigConversionTimer(&adsTimerCallback);
   if(0 == ads1148Init())
   {
     PRINTF("ADS1148 OK\r\n");
-
+    /* Start convertion and let timeout handle subsequent calls to adsContiniueSequence */
     adsStartSeq();
     adsIrqEnable();
   }
   else
-  {
-    // #### Fatal error handling    
+  { // #### Fatal error handling    
     PRINTF("ADS1148 NOT OK\r\n");
     configASSERT(pdFALSE);
   }
-#endif
+
 
   adsConfigConversionTimer(&adsTimerCallback);
 
 #ifdef STANDALONE
   standAlone();
 #endif
+  /* Read calibration data form NVS */
+  if(0 != NVSread(sizeof(calib_data), calib_data) ) { 
+    PRINTF("\r\nUsing default calib:\r\n");    // How to do this on the M3?? - setHWStatusReg(HW_DEFAULT_CAL_USED);
+  } else {
+    PRINTF("\r\nUsing stored calib:\r\n");
+  }
+  lidData[0].regulator.setPoint     = calib_data[0].c_1;
+  peltierData[0].regulator.setPoint = calib_data[1].c_1;
+  fanData[0].regulator.setPoint     = calib_data[2].c_1;
 
   while(1)
   {
@@ -583,10 +691,10 @@ void CoolAndLidTask( void * pvParameters )
         break;
         case SET_LID_PWM:
         {
-        SetCooleAndLidReq *p;
-        p=(SetCooleAndLidReq *)(msg->ucData);
-        *(lidData[p->idx-1].regulator.pwmVal) = (p->value);
-        lidData[p->idx-1].regulator.state = MANUAL_STATE;
+		    SetCooleAndLidReq *p;
+		    p=(SetCooleAndLidReq *)(msg->ucData);
+		    *(lidData[p->idx-1].regulator.pwmVal) = (p->value);
+		    lidData[p->idx-1].regulator.state = MANUAL_STATE;
         }
         break;
         case START_LID_HEATING:

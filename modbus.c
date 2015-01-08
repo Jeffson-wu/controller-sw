@@ -62,6 +62,7 @@ rx_debug debug[200];
 int debug_cnt = 0;
 
 void UART_SendMsg(USART_TypeDef *uart, u8 *buffer, int len);
+void Modbus_init(USART_TypeDef *uart);
 
 xQueueHandle ModbusQueueHandle;
 static  xTimerHandle TimerHandle;
@@ -212,6 +213,7 @@ USART_ERROR waitForRespons(u8 *telegram, int *telegramSize)
   return modbus_err;
 }
 
+/* datasize is reg count */
 static USART_ERROR ModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer)
 {
   u16 crc;
@@ -250,6 +252,7 @@ static USART_ERROR ModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer)
   }
 }
 
+/* datasize is reg count */
 static USART_ERROR ModbusWriteRegs(u8 slave, u16 addr, u8 *data, u16 datasize)
 {
   u16 crc;
@@ -302,6 +305,8 @@ void ModbusTask( void * pvParameters )
 {
   xMessage *msg;
   xMessage *msgout;
+
+  Modbus_init(USART2);
   while(1)
   {
     /*wait for queue msg*/

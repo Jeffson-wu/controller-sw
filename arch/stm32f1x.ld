@@ -7,7 +7,7 @@
  */
 MEMORY
 {
-  FLASH (rx) : ORIGIN = 0x08000000, LENGTH = 0x40000 /* 256K */
+  FLASH (rx) : ORIGIN = 0x08000000, LENGTH = 0x3F800 /* 254K  (2k for NVS)*/
   RAM (rwx) : ORIGIN = 0x20000000, LENGTH = 0x10000 /* 64K */
 }
 
@@ -87,6 +87,12 @@ SECTIONS
 	.data : AT (__etext)
 	{
 		__data_start__ = .;
+		__fl_code_start__ = .;
+		*(.fl_text)
+		*(.fl_text*)
+		*(.fl_rodata*)
+		*(.fl_rodata*)
+ 		__fl_code_end__ = .;
 		*(vtable)
 		*(.data*)
 
