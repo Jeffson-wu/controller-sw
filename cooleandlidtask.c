@@ -189,9 +189,9 @@ void standAlone() //These settings should be made from the Linux Box
 void fan(fanData_t *fanData){
   regulatorData_t *reg;
   reg = &fanData->regulator;
-  reg->setPoint = -10289; //50oC
+  reg->setPoint = -13528; //40oC
   int64_t out = 0;
-  int16_t Kp = -6;
+  int16_t Kp = -10;
 
   switch (reg->state) {
     case STOP_STATE:
@@ -224,9 +224,7 @@ void fan(fanData_t *fanData){
 void peltier(peltierData_t *peltierData){
   regulatorData_t *reg;
   reg = &peltierData->regulator;
-  reg->setPoint = -21705; //10oC
-  reg->setPointLL = reg->setPoint - 200;
-  reg->setPointHL = reg->setPoint + 200;
+  reg->setPoint = -26811; //4oC
   int64_t out = 0;
   int16_t Kp = -20;
 
@@ -245,8 +243,8 @@ void peltier(peltierData_t *peltierData){
     default:
     break;
   }
-	if (out > 20000)
-		out = 20000;
+	if (out > 25000)
+		out = 25000;
 	if (out < 0)
 		out = 0;
 	*reg->pwmVal = out;
@@ -259,23 +257,22 @@ void lid(lidData_t *lidData)
 {
   regulatorData_t *reg;
   reg = &lidData->regulator;
-  reg->setPoint = 5597; //100oC
-  reg->setPointLL = reg->setPoint - 200;
-  reg->setPointHL = reg->setPoint + 200;
+  reg->setPoint = 14620; //145oC
   int64_t out = 0;
   int16_t Kp = 120;
+
 
   switch (reg->state) {
     case STOP_STATE:
     {
       msgSent = FALSE;
       *reg->pwmVal = 0;
-      reg->hysteresisActiveFlag = 0;
       reg->state = CTRL_OPEN_LOOP_STATE;
     } 
     break;
     case MANUAL_STATE:
     {
+    	out = reg->setPoint;
       msgSent = FALSE;
     } 
     break;
@@ -283,7 +280,7 @@ void lid(lidData_t *lidData)
     {
     	out = 32767;
 
-    	if (*reg->adcVal > 3927) //95oC
+    	if (*reg->adcVal > (reg->setPoint-2000)) //ca -10oC
     		reg->state = CTRL_CLOSED_LOOP_STATE;
     }
     break;
@@ -291,15 +288,15 @@ void lid(lidData_t *lidData)
     {
     	out = Kp*(reg->setPoint - *reg->adcVal);
 
-    	if (*reg->adcVal < 3264) //93oC
+    	if (*reg->adcVal < reg->setPoint-2500)
     		reg->state = CTRL_OPEN_LOOP_STATE;
     }
     break;
     default:
     break;
   }
-	if (out > 20000)
-		out = 20000;
+	if (out > 32767)
+		out = 32767;
 	if (out < 0)
 		out = 0;
 	*reg->pwmVal = out;
