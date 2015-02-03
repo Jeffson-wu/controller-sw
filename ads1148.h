@@ -118,6 +118,8 @@
 /* Exported macro ------------------------------------------------------------*/
 /* Exported functions ------------------------------------------------------- */
 
+// read error state
+uint16_t getADSStatusReg(void);
 // Set up as we use it.
 int ads1148Init(void);
 // Get state of DRDY

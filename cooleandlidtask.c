@@ -11,17 +11,16 @@
   * <h2><center>&copy; COPYRIGHT 2013 Xtel </center></h2>
   *
   ******************************************************************************
-  * TIM3,CH1:
-  * TIM3,CH2:
-  * TIM3,CH3:
-  * TIM4,CH3:
-  * TIM4,CH4:
-  * ADC CH0:
-  * ADC CH1:
-  * ADC CH2:
-  * ADC CH3: 
+  * pwmCh[0], TIM4,CH3 - PB8 -  J175 : PWM0_TIM4CH3 - TopHeater1Ctrl
+  * pwmCh[1], TIM4,CH4 - PB9 -  J26  : PWM1_TIM4CH4 - FAN control
+  * pwmCh[2], TIM3,CH1 - PC6 -  J33  : PWM2_TIM3CH1 - Peltier PWM 1
+  * pwmCh[3], TIM3,CH2 - PC7 -  J176 : PWM3_TIM3CH2 - TopHeater2Ctrl
+  * pwmCh[4], TIM3,CH3 - PC8 -  J35  : PWM4_TIM3CH3 - Peltier PWM 2
+  * adcCh[0], ADC CH0 -         J177 : RTD1         - Peltier_sens1  (Cold side)
+  * adcCh[1], ADC CH1 -         J173 : RTD2         - TopHeaterSens1
+  * adcCh[2], ADC CH2 -         J174 : RTD3         - TopHeaterSens2 (Ambient Air)
+  * adcCh[3], ADC CH3 -         J178 : RTD4         - Peltier_sens2  (Hot side)
   */ 
-
 /* Includes ------------------------------------------------------------------*/
 #include <stdio.h>
 #include <stdlib.h>
@@ -40,6 +39,7 @@
 #include "pwm.h"
 #include "gdi.h"
 #include "util.h"
+#include "../heater-sw/heater_reg.h" // Error codes
 
 /* ---------------------------------------------------------------------------*/
 //#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
@@ -71,15 +71,13 @@ typedef enum {
 
 typedef enum {
   PELTIER_1,
-  //PELTIER_2,
-  //PELTIER_3,
+  PELTIER_2,
   nPELTIER
 } peltierID_t;
 
 typedef enum {
   FAN_1,
-  //PELTIER_2,
-  //PELTIER_3,
+  //FAN_2,
   nFAN
 } fanID_t;
 
@@ -137,24 +135,29 @@ typedef struct CL_DATA_LOG_T {
 // command queue
 xQueueHandle CoolAndLidQueueHandle;
 extern xQueueHandle TubeSequencerQueueHandle;
-bool msgSent = FALSE;
+
+// Events to be sent to the Linux box
+static uint16_t cl_status = 0;
 
 // Parameters for ADC
 static int16_t adcCh[4] = {0, 0, 0, 0};
+
+// ADC diff for Fan
+static int16_t adcDiff[1] = {0};
 
 // Parameters for PWM
 static uint16_t pwmCh[5] = {0, 0, 0, 0, 0};
 
 static peltierData_t peltierData[1] = {
-  {PELTIER_1, {STOP_STATE, -26213, &pwmCh[0], &adcCh[0]}}
+  {PELTIER_1, {STOP_STATE, -26213, &pwmCh[2], &adcCh[0]}}
 };
 
 static lidData_t lidData[1] = {
-  {LID_HEATER_1, {STOP_STATE, -26213, &pwmCh[3], &adcCh[1]}}
+  {LID_HEATER_1, {STOP_STATE, -26213, &pwmCh[0], &adcCh[1]}}
 };
 
 static fanData_t fanData[1] = {
-  {FAN_1, {STOP_STATE, 0, &pwmCh[4], &adcCh[3]}}
+  {FAN_1, {STOP_STATE, 0, &pwmCh[1], &adcDiff[0]/*&adcCh[3]*/}}
 };
 
 #ifdef USE_CL_DATA_LOGGING
@@ -169,7 +172,9 @@ cl_logDataElement_t * cl_enqueue(cl_logDataQueue_t * pQueue);
 cl_logDataElement_t * cl_dequeue(cl_logDataQueue_t * pQueue);
 
 /* ---------------------------------------------------------------------------*/
-/* Private functions                                                          */
+/* functions                                                                  */
+/* ---------------------------------------------------------------------------*/
+
 /* ---------------------------------------------------------------------------*/
 void standAlone() //These settings should be made from the Linux Box
 {
@@ -182,6 +187,51 @@ void standAlone() //These settings should be made from the Linux Box
   pwmCh[3] = 12000; ///###JRJ DEBUG 10% on Aux
 }
 
+/* ---------------------------------------------------------------------------*/
+void setCLStatusReg(uint16_t status)
+{
+  taskENTER_CRITICAL(); //push irq state
+  cl_status |= status;
+  taskEXIT_CRITICAL();
+}
+
+/* ---------------------------------------------------------------------------*/
+uint16_t getCLStatusReg(void)
+{
+  uint16_t ret;
+  taskENTER_CRITICAL();
+  ret = cl_status;
+  cl_status = 0;
+  taskEXIT_CRITICAL();
+  return ret;
+}
+
+/* ---------------------------------------------------------------------------*/
+/* Read out latest ACD values                                                 */
+/* This function is called from gdi and thus is executed in gdi context.      */
+/* ---------------------------------------------------------------------------*/
+int getAdc(char *poutText)
+{
+  char str[20];
+  int16_t adcData[4];
+
+  *poutText = 0;
+  adsGetLatest(&adcData[0], &adcData[1], &adcData[2], &adcData[3]);
+  strcat(poutText,"<adc_values={");
+  Itoa(adcData[0], str);
+  strcat(poutText,str);
+  strcat(poutText, ","); 
+  Itoa(adcData[1], str);
+  strcat(poutText,str);
+  strcat(poutText, ","); 
+  Itoa(adcData[2], str);
+  strcat(poutText,str);
+  strcat(poutText, ","); 
+  Itoa(adcData[3], str);
+  strcat(poutText,str);
+  strcat(poutText, "}>");
+  return 0;
+}
 
 /* ---------------------------------------------------------------------------*/
 /* Fan handling */
@@ -200,9 +250,19 @@ void fan(fanData_t *fanData){
       reg->state = CTRL_CLOSED_LOOP_STATE; //Starts when power on
     }
     break;
+    case MANUAL_STATE:
+    {
+      return; // No action in manuel state
+    } 
+    break;
+    case CTRL_OPEN_LOOP_STATE:
+    {
+      reg->state = CTRL_CLOSED_LOOP_STATE;
+    } 
+    break;
     case CTRL_CLOSED_LOOP_STATE:
     {
-    	out = Kp*(reg->setPoint - *reg->adcVal);
+      out = Kp*(reg->setPoint - *reg->adcVal);
     }
     break;
     default:
@@ -210,13 +270,12 @@ void fan(fanData_t *fanData){
 
   }
 
-	if (out > 32767)
-		out = 32767;
-	if (out < 15000)
-		out = 15000;
-	*reg->pwmVal = out;
+  if (out > 32767)
+    out = 32767;
+  if (out < 15000)
+    out = 15000;
+  *reg->pwmVal = out;
 }
-
 
 /* ---------------------------------------------------------------------------*/
 /* Peltier handling */
@@ -237,19 +296,29 @@ void peltier(peltierData_t *peltierData){
       reg->state = CTRL_CLOSED_LOOP_STATE; //Starts when power on
     }
     break;
+    case MANUAL_STATE:
+    {
+      return; // No action in manuel state
+    } 
+    break;
+    case CTRL_OPEN_LOOP_STATE:
+    {
+      reg->state = CTRL_CLOSED_LOOP_STATE;
+    } 
+    break;
     case CTRL_CLOSED_LOOP_STATE:
     {
-    	out = Kp*(reg->setPoint - *reg->adcVal);
+      out = Kp*(reg->setPoint - *reg->adcVal);
     }
     break;
     default:
     break;
   }
-	if (out > 20000)
-		out = 20000;
-	if (out < 0)
-		out = 0;
-	*reg->pwmVal = out;
+  if (out > 20000)
+    out = 20000;
+  if (out < 0)
+    out = 0;
+  *reg->pwmVal = out;
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -268,7 +337,6 @@ void lid(lidData_t *lidData)
   switch (reg->state) {
     case STOP_STATE:
     {
-      msgSent = FALSE;
       *reg->pwmVal = 0;
       reg->hysteresisActiveFlag = 0;
       reg->state = CTRL_OPEN_LOOP_STATE;
@@ -276,38 +344,34 @@ void lid(lidData_t *lidData)
     break;
     case MANUAL_STATE:
     {
-      msgSent = FALSE;
+      return; // No action in manuel state
     } 
     break;
     case CTRL_OPEN_LOOP_STATE:
     {
-    	out = 32767;
+      out = 32767;
 
-    	if (*reg->adcVal > 3927) //95oC
-    		reg->state = CTRL_CLOSED_LOOP_STATE;
+      if (*reg->adcVal > 3927) //95oC
+        reg->state = CTRL_CLOSED_LOOP_STATE;
     }
     break;
     case CTRL_CLOSED_LOOP_STATE:
     {
-    	out = Kp*(reg->setPoint - *reg->adcVal);
+      out = Kp*(reg->setPoint - *reg->adcVal);
 
-    	if (*reg->adcVal < 3264) //93oC
-    		reg->state = CTRL_OPEN_LOOP_STATE;
+      if (*reg->adcVal < 3264) //93oC
+        reg->state = CTRL_OPEN_LOOP_STATE;
     }
     break;
     default:
     break;
   }
-	if (out > 20000)
-		out = 20000;
-	if (out < 0)
-		out = 0;
-	*reg->pwmVal = out;
+  if (out > 20000)
+    out = 20000;
+  if (out < 0)
+    out = 0;
+  *reg->pwmVal = out;
 }
-
-/* ---------------------------------------------------------------------------*/
-/* Fan handling */
-/* ---------------------------------------------------------------------------*/
 
 /* ---------------------------------------------------------------------------*/
 /* Log handling */
@@ -478,6 +542,28 @@ int getClLog(char *poutText )
 #endif //USE_CL_DATA_LOGGING
 
 /* ---------------------------------------------------------------------------*/
+/* Read out HW events                                                         */
+/* This function is called from gdi and thus is executed in gdi context.      */
+/* ---------------------------------------------------------------------------*/
+int getCoolandlidHWReport(char *poutText)
+{
+  uint16_t event;
+  char str[5];
+
+  event = getADSStatusReg();
+  event |= getCLStatusReg();
+  if(event)
+  {
+    strcat(poutText,"<coolandlid_event=");
+    Itoa(event, str);
+    strcat(poutText,str);
+    strcat(poutText,">");
+    return 1;
+  }
+  return 0;
+}
+
+/* ---------------------------------------------------------------------------*/
 /* Task main loop                                                             */
 /* ---------------------------------------------------------------------------*/
 void CoolAndLidTask( void * pvParameters )
@@ -510,7 +596,7 @@ void CoolAndLidTask( void * pvParameters )
     PRINTF("ADS1148 NOT OK\r\n");
     configASSERT(pdFALSE);
   }
-
+// use "setCLStatusReg(HW_DEFAULT_CAL_USED)" if default calib is used
 #ifdef STANDALONE
   standAlone();
 #endif
@@ -533,18 +619,23 @@ void CoolAndLidTask( void * pvParameters )
     /* The semaphore is given when the ADC is done */
     /* Read lastest ADC samples into buffer */
     adsGetLatest(&adcCh[0], &adcCh[1], &adcCh[2], &adcCh[3]);
+
+    /* adcCh[2], ADC CH2 -         J174 : RTD3         - TopHeaterSens2 (Ambient Air)*/
+    /* adcCh[3], ADC CH3 -         J178 : RTD4         - Peltier_sens2 (Hot side) */
+    adcDiff[0] =  adcCh[3] - adcCh[2]; // Fan controll is based on the temp diff
 #ifndef STANDALONE
     peltier(&peltierData[0]);
+    //peltier(&peltierData[1]);
     fan(&fanData[0]);
     lid(&lidData[0]);
     //lid(&lidData[1]);
 #endif
 
-    PWM_Set(pwmCh[0], PeltierCtrl1PWM);
-    PWM_Set(pwmCh[1], TopHeaterCtrl1PWM);
-    PWM_Set(pwmCh[2], TopHeaterCtrl2PWM);
-    PWM_Set(pwmCh[3], AuxCtrlPWM);
-    PWM_Set(pwmCh[4], FANctrlPWM);
+    PWM_Set(pwmCh[0], PWM0_TIM4CH3);
+    PWM_Set(pwmCh[1], PWM1_TIM4CH4);
+    PWM_Set(pwmCh[2], PWM2_TIM3CH1);
+    PWM_Set(pwmCh[3], PWM3_TIM3CH2);
+    PWM_Set(pwmCh[4], PWM4_TIM3CH3);
 
     /* Add to log */
     logUpdate(&adcCh[0], &adcCh[1], &adcCh[2], &adcCh[3]);
@@ -559,6 +650,7 @@ void CoolAndLidTask( void * pvParameters )
           long p;
           p = *((uint16_t *)(msg->ucData));
           *fanData[0].regulator.pwmVal = p * 32768/100;
+          fanData[0].regulator.state = CTRL_OPEN_LOOP_STATE;
         }
         break;
         case SET_COOL_TEMP:
@@ -566,6 +658,9 @@ void CoolAndLidTask( void * pvParameters )
           SetCooleAndLidReq *p;
           p=(SetCooleAndLidReq *)(msg->ucData);
           peltierData[0].regulator.setPoint = temp_2_dac(p->value);
+          peltierData[0].regulator.state = CTRL_CLOSED_LOOP_STATE;
+          //peltierData[1].regulator.setPoint = temp_2_dac(p->value);
+          //peltierData[1].regulator.state = CTRL_CLOSED_LOOP_STATE;
         }
         break;
         case SET_LID_TEMP:
@@ -574,27 +669,30 @@ void CoolAndLidTask( void * pvParameters )
           p=(SetCooleAndLidReq *)(msg->ucData);
           lidData[p->idx-1].regulator.setPoint = temp_2_dac(p->value);
           lidData[0].regulator.state = CTRL_CLOSED_LOOP_STATE;
-          lidData[1].regulator.state = CTRL_CLOSED_LOOP_STATE;
+          //lidData[1].regulator.state = CTRL_CLOSED_LOOP_STATE;
         }
         break;
         case SET_LID_PWM:
         {
-        SetCooleAndLidReq *p;
-        p=(SetCooleAndLidReq *)(msg->ucData);
-        *(lidData[p->idx-1].regulator.pwmVal) = (p->value);
-        lidData[p->idx-1].regulator.state = MANUAL_STATE;
+          SetCooleAndLidReq *p;
+          p=(SetCooleAndLidReq *)(msg->ucData);
+          if(p->idx-1 < 1)
+          {
+            *(lidData[p->idx-1].regulator.pwmVal) = (p->value);
+            lidData[p->idx-1].regulator.state = MANUAL_STATE;
+          }
         }
         break;
         case START_LID_HEATING:
         {
           lidData[0].regulator.state = CTRL_CLOSED_LOOP_STATE;
-          lidData[1].regulator.state = CTRL_CLOSED_LOOP_STATE;
+          //lidData[1].regulator.state = CTRL_CLOSED_LOOP_STATE;
         }
         break;
         case STOP_LID_HEATING:
         {
           lidData[0].regulator.state = STOP_STATE;
-          lidData[1].regulator.state = STOP_STATE;
+          //lidData[1].regulator.state = STOP_STATE;
         }
         break;
         case SET_LID_LOCK:
@@ -619,20 +717,55 @@ void CoolAndLidTask( void * pvParameters )
             case 2:
               //lidData[1].regulator.setPoint = temp_2_dac(p->value);
               break;
-            case 3: //Aux PWM connecter
-              pwmCh[3] = p->value * 32768/100;
-              PWM_Set(pwmCh[3], AuxCtrlPWM);
+            case 3: //Aux PWM connecter (Rev3 PCB peltier 2)
+              pwmCh[4] = p->value * 32768/100;
+              PWM_Set(pwmCh[4], PWM4_TIM3CH3);
               break;
             case 4: //Fan ctrl
-              pwmCh[4] = p->value * 32768/100;
-              PWM_Set(pwmCh[4], FANctrlPWM);
+              *fanData[0].regulator.pwmVal = p->value * 32768/100;
+              PWM_Set(*fanData[0].regulator.pwmVal, PWM1_TIM4CH4);
               break;
             case 5:
               if(1 == p->value) { GPIO_SetBits(GPIOA, LOCK_OUTPUT);   }
               if(0 == p->value) { GPIO_ResetBits(GPIOA, LOCK_OUTPUT); }
               break;
+            case 6:
+              PRINTF("ERROR - LogReq propagated to CL Task!");
+              break;
             default:
               break;
+          }
+        }
+        break;
+        case SET_PWM:
+        {
+          SetPWMReq *p;
+          p=(SetPWMReq *)(msg->ucData);
+          pwmCh[p->idx] = (p->value * 32768/100);
+          switch(p->idx)
+          {
+            case 0:
+              /* pwmCh[0], TIM4,CH3 - PB8 - J175 : PWM0_TIM4CH3 - TopHeater1Ctrl */
+              lidData[0].regulator.state = MANUAL_STATE;
+              break;
+            case 1:
+              /* pwmCh[1], TIM4,CH4 - PB9 - J26  : PWM1_TIM4CH4 - FAN control */
+              fanData[0].regulator.state = MANUAL_STATE;
+              break;
+            case 2:
+              /* pwmCh[2], TIM3,CH1 - PC6 - J33  : PWM2_TIM3CH1 - Peltier PWM 1 */
+              peltierData[0].regulator.state = MANUAL_STATE;
+              break;
+            case 3:
+              /* pwmCh[3], TIM3,CH2 - PC7 - J176 : PWM3_TIM3CH2 - TopHeater2Ctrl */
+              //lidData[1].regulator.state = MANUAL_STATE;
+              break;
+            case 4:
+              /* pwmCh[4], TIM3,CH3 - PC8 - J35  : PWM4_TIM3CH3 - Peltier PWM 2 */
+              // peltierData[1].regulator.state = MANUAL_STATE;
+              break;
+            default:
+            break;
           }
         }
         break;

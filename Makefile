@@ -80,6 +80,7 @@ DEPS = $(patsubst %,$(DEPENDS_DIR)/%,$(SOURCES:%.c=%.d))
 DEPENDS = $(DEPS:%.S=%.d)
 
 all: $(SOURCES) $(PROGRAM) $(PROGRAM).hex
+	@rm $(OBJECTS_DIR)/main.o
 
 $(PROGRAM): $(OBJECTS)
 	@echo -n "Linking $@... "

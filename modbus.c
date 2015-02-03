@@ -46,7 +46,7 @@
 
 #define  RS485_RX_LED GPIOB,GPIO_Pin_0
 
-#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
+//#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
 #ifdef DEBUG
 #define DEBUG_BUFFER_SIZE 600
 extern void gdi_send_msg_on_monitor(char * response);
@@ -314,6 +314,7 @@ static USART_ERROR ModbusBroadcast(u16 addr, u8 *data, u16 datasize)
   debug[debug_cnt].chars = 0xBB;
   UART_SendMsg(usedUart, telegram, 7+datasize*2+2);
   //ERR = waitForRespons(telegram, &telegramsize);
+  vTaskDelay(100); /* Wait for "UART2_TX_Handler(void)" to be called but how?? */
   return NO_ERROR;
 }
 

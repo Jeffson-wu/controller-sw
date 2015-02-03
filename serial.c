@@ -185,15 +185,16 @@ void UART2_Handler(void)
 {
   GPIO_SetBits(RS485_RX_LED);/*RX LED*/
 //  vTraceStoreISRBegin(2);
-
-   if (USART_GetITStatus(USART2, USART_IT_RXNE) && receiveDataCB)
-   {
-     receiveDataCB();
-   }
-   USART_ClearITPendingBit(USART2,USART_IT_RXNE);
+  if (USART_GetITStatus(USART2, USART_IT_RXNE) && receiveDataCB)
+  {
+    receiveDataCB();
+  }
+  USART_ClearITPendingBit(USART2,USART_IT_RXNE);
 //   vTraceStoreISREnd();
-   GPIO_ResetBits(RS485_RX_LED);/*RX LED*/
+  GPIO_ResetBits(RS485_RX_LED);/*RX LED*/
+  GPIO_ResetBits(RS485_TX_LED);/*TX LED*/
 }
+
 void UART1_Handler(void)
 {
 //  vTraceStoreISRBegin(1);

@@ -33,6 +33,7 @@
 #include "serial.h"
 #include <ctype.h>
 
+/* Private feature defines ---------------------------------------------------*/
 /* '\n'=0x0D=13, '\r'=0x0A=10 */
 #define CHAR_ENTER '\r'
 #define CHAR_BACKSPACE '\b'
@@ -43,11 +44,27 @@ int uid;
 #define INPUT_BUF_SIZE 500
 #define SIZE_OF_STR_RESULT 400
 
+/* Private debug define ------------------------------------------------------*/
+//#define DEBUG_USE_ECHO_AS_DEFAULT
+//#define DEBUG
+
+#ifdef DEBUG
+#define GDI_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
+#else
+#define GDI_PRINTF(fmt, args...)    /* Don't do anything in release builds */
+#endif
+
+/* Private variables ---------------------------------------------------------*/
+char buf[300]; /*buffer for debug printf*/
+
 static char inputCmdBuf = 0;
 static char input_buffer[2][INPUT_BUF_SIZE];
 
+#ifdef DEBUG_USE_ECHO_AS_DEFAULT
+static u8 gdiEcho = TRUE;
+#else
 static u8 gdiEcho = FALSE;
-// static u8 gdiEcho = TRUE;
+#endif
 
 xSemaphoreHandle GDI_RXSemaphore = NULL;
 
@@ -57,18 +74,8 @@ extern xQueueHandle CoolAndLidQueueHandle;
 USART_TypeDef *uart = USART1;
 u32 test_variable= 9876543;
 
-#if 0
-#define GDI_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
-#else
-#define GDI_PRINTF(fmt, args...)    /* Don't do anything in release builds */
-#endif
-
-char buf[300]; /*buffer for debug printf*/
-
-
 u8 DebugModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer);
 bool DebugModbusWriteRegs(u8 slave, u16 addr, u8 *data, u16 datasize);
-
 
 enum gdi_response_type
 {
@@ -94,6 +101,8 @@ enum gdi_func_type
   modbus_write_regs,
   modbus_Synchronize_LED,
   modbus_LED,
+  setpwm,
+  getadc,
   invalid_command
 };
 
@@ -111,26 +120,28 @@ typedef struct
   char *command_name; 
   char *func_info;
   char *func_format;
-  u8 command_index;	
+  u8 command_index;
 } gdi_func_table_type;
 
 gdi_func_table_type gdi_func_info_table[] =
 {    
-  {"help", " Help command", "at@gdi:help()",help},
-  {"reset", " Reset M3 command", "at@gdi:reset()",reset},
-  {"echo", " Echo command", "at@gdi:echo(<e>) e=1=> Echo on, e=0=> echo off",echo},    
-  {"print", " Print the debug variable values", "at@gdi:print()",print },
-  {"coolandlid", " Set temperatures and fan speed", "at@gdi:coolandlid(idx, setpoint)",coolandlid },
-  {"cool", " Set cooling temperature", "at@gdi:cool(idx, setpoint)",cool },
-  {"lid",   " Set lid temperature",    "at@gdi:lid(idx, setpoint)",lid },
-  {"lidpwm",   " Set lid pwm value",    "at@gdi:lid(idx, pwm)",lidpwm },
-  {"fan",   " Set fan speed % ",       "at@gdi:fan(idx, setpoint)",fan },
   {"seq_cmd", " Set seq start, stop, state, pause, continue, log, getlog", "at@gdi:seq_cmd(tube, cmd)",seq_cmd },
-  {"test_func", " Test function call", "at@gdi:test_func(parameter1,parameter2)",test_func},		
-  {"modbus_read_regs", " Read register values", "at@gdi:modbus_read_regs(slave,addr,datasize)",modbus_read_regs},
+  {"coolandlid",  " Set temperatures and fan speed", "at@gdi:coolandlid(idx, setpoint)",coolandlid },
+  {"led",     " Set tube LED function",   "at@gdi:led(tube,fn)",  modbus_LED},
+  {"help",    " Help command",            "at@gdi:help()",        help},
+  {"reset",   " Reset M3 command",        "at@gdi:reset()",       reset},
+  {"echo",    " Echo command",            "at@gdi:echo(<e>) e=1=> Echo on, e=0=> echo off",echo},    
+  {"print",   " Print the debug variable values", "at@gdi:print()",     print },
+  {"cool",    " Set cooling temperature", "at@gdi:cool(idx, setpoint)", cool },
+  {"lid",     " Set lid temperature",     "at@gdi:lid(idx, setpoint)",  lid },
+  {"lidpwm",  " Set lid pwm value",       "at@gdi:lidpwm(idx, pwm)",    lidpwm },
+  {"fan",     " Set fan speed % ",                "at@gdi:fan(idx, setpoint)",fan },
+  {"test_func",         " Test function call",    "at@gdi:test_func(parameter1,parameter2)",test_func},
+  {"modbus_read_regs",  " Read register values",  "at@gdi:modbus_read_regs(slave,addr,datasize)",modbus_read_regs},
   {"modbus_write_regs", " Write register values", "at@gdi:modbus_write_regs(slave,addr,[data1,data2,..],datasize)",modbus_write_regs},
-  {"synchronizeled", " Synchronize tube LEDs", "at@gdi:SynchronizeLED()",modbus_Synchronize_LED},
-  {"led", " Set tube LED function", "at@gdi:led(tube,fn)",modbus_LED},
+  {"synchronizeled",    " Synchronize tube LEDs", "at@gdi:SynchronizeLED()",modbus_Synchronize_LED},
+  {"setpwm",  " Set PWM value",                   "at@gdi:setpwm(idx, pwm)",setpwm },
+  {"getadc",  " Get latest ADC values",           "at@gdi:getadc()",        getadc },
   { NULL, NULL, NULL, 0 }
 }; 
 
@@ -525,8 +536,12 @@ void gdi_map_to_functions()
     break;
 
     case reset :
+      if(!gdiEcho) {
+        uid = (u16) atoi(*(gdi_req_func_info.parameters));
+      }
       ResetHeaters();
       //Reset_Handler();
+      *(int*)0=0; //JRJ #### DEBUG usage Hardfault
     break;
 
     case echo :
@@ -557,15 +572,30 @@ void gdi_map_to_functions()
       fn_idx   = (u8)  atoi(*(gdi_req_func_info.parameters + i));
 
       if(6 == fn_idx) {
+        int tubeNum;
+        int dataSent = 0;
         /* Get log */
         if(getClLog(str))
         { /* CL log data was retrieved */
-          GDI_PRINTF("Get CL Log");
+          dataSent = 1;
+        }
+        if (getCoolandlidHWReport(str))
+        { /* HW event was retrieved */
+          dataSent = 1;
+        }
+        for(tubeNum = 1; tubeNum < 17; tubeNum++)
+        {
+          if (getTubeHWReport(str, tubeNum))
+          { /* Tube HW report was retrieved */
+            dataSent = 1;
+          }
+        }
+        if(dataSent)
+        {
           gdi_send_data_response(str, newline_end);
         }
         else
-        { /* No CL log data */
-          GDI_PRINTF("No CL Log");
+        {
           gdi_send_data_response("OK", newline_end);
         }
       } 
@@ -722,11 +752,50 @@ void gdi_map_to_functions()
         if(result) { gdi_send_data_response("OK", newline_end); }
       }
       break;
+      
+    case setpwm:
+      {
+        s16 pwm;
+        s16 idx;
+        xMessage *msg;        
+
+        if(!gdiEcho) {
+          uid = (u16) atoi(*(gdi_req_func_info.parameters + i));
+          i++;
+        }
+        SetPWMReq *p;
+        msg = pvPortMalloc(sizeof(xMessage)+sizeof(SetPWMReq)+20);
+        if(msg)
+        {
+          idx = (s16) atoi(*(gdi_req_func_info.parameters + i++));
+          pwm = (s16) atoi(*(gdi_req_func_info.parameters + i));
+          if((pwm >= 0)&&(pwm <= 100)&&(idx >= 0)&&(idx <= 4)) {
+            msg->ucMessageID = SET_PWM;
+            p = (SetPWMReq *)msg->ucData;
+            p->value = pwm;
+            p->idx =   idx;
+            xQueueSend(CoolAndLidQueueHandle, &msg, portMAX_DELAY);
+            gdi_send_data_response("OK", newline_end);
+          } else {
+            gdi_send_data_response("NOK invalid parameter", newline_end);
+          }
+        }
+      }
+      break;
+      
+    case getadc:
+      {
+        if(!gdiEcho) {
+          uid = (u16) atoi(*(gdi_req_func_info.parameters));
+        }
+        getAdc(str);
+        gdi_send_data_response(str, newline_end);
+      }
+      break;
 
     case seq_cmd:
       {
         long TubeId = 0;
-        int i = 0;
         
         if(!gdiEcho) {
           uid = (u16) atoi(*(gdi_req_func_info.parameters + i));
@@ -777,7 +846,7 @@ void gdi_map_to_functions()
           // "at@gdi:seq_cmd(<uid>,<tube>,tubestatus)\r"
           else if(!strncmp((*(gdi_req_func_info.parameters + i + 1)),"tubestatus",strlen("tubestatus")))
           {
-            GDI_PRINTF("T%ld: Get tubestatus. State:%d", TubeId, Tubeloop[TubeId-1].state);
+            GDI_PRINTF("T%ld: Get tubestatus.", TubeId);
             if((1 > TubeId) || (16 < TubeId)) 
             {
               gdi_send_data_response("NOK invalid tube", newline_end);
@@ -821,6 +890,9 @@ void gdi_map_to_functions()
       break;
 
       case test_func :
+        if(!gdiEcho) {
+          uid = (u16) atoi(*(gdi_req_func_info.parameters));
+        }
         retvalue = test_function(p);
         gdi_send_data_response("Function return value is : ", newline_start);
         gdi_print_number(retvalue,newline_end);
@@ -830,13 +902,21 @@ void gdi_map_to_functions()
       case modbus_read_regs :
       {
         u8 result;
-        if (gdi_req_func_info.number_of_parameters < 3)
+        u8 paramcount;
+        if(!gdiEcho) {
+          uid = (u16) atoi(*(gdi_req_func_info.parameters + i));
+          i++;
+          paramcount = 4;
+        } else {
+          paramcount = 3;
+        }
+        if (gdi_req_func_info.number_of_parameters < paramcount)
           gdi_send_data_response("ERROR", newline_both);
         else
         {
-          slave = (u8) atoi(*(gdi_req_func_info.parameters + 0));
-          addr = (u16) atoi(*(gdi_req_func_info.parameters + 1));
-          datasize = (u16) atoi(*(gdi_req_func_info.parameters + 2)); 
+          slave = (u8) atoi(*(gdi_req_func_info.parameters + i + 0));
+          addr = (u16) atoi(*(gdi_req_func_info.parameters + i + 1));
+          datasize = (u16) atoi(*(gdi_req_func_info.parameters + i + 2)); 
 
           gdi_send_data_response("slave, addr and datasize are = ", newline_start);
           gdi_print_number(slave, space_end);
@@ -874,27 +954,35 @@ void gdi_map_to_functions()
       case modbus_write_regs :
       {
         u8 result;
-        if (gdi_req_func_info.number_of_parameters < 3)
+        u8 paramcount;
+        if(!gdiEcho) {
+          uid = (u16) atoi(*(gdi_req_func_info.parameters + i));
+          i++;
+          paramcount = 4;
+        } else { 
+          paramcount = 3; 
+        }
+        if (gdi_req_func_info.number_of_parameters < paramcount)
           gdi_send_data_response("ERROR", newline_both);
         else
         {
-          result = gdi_get_regwrite_values(buffer);	
+          result = gdi_get_regwrite_values(buffer);
           if (result == 0) {
             gdi_send_data_response("ERROR", newline_both);
           } else {
-            slave = (u8) atoi(*(gdi_req_func_info.parameters + 0));
-            addr = (u16) atoi(*(gdi_req_func_info.parameters + 1));
-            datasize = (u16) atoi(*(gdi_req_func_info.parameters + result)); 
+            slave = (u8) atoi(*(gdi_req_func_info.parameters + i + 0));
+            addr = (u16) atoi(*(gdi_req_func_info.parameters + i + 1));
+            datasize = (u16) atoi(*(gdi_req_func_info.parameters + i + result)); 
 
             gdi_send_data_response("slave, addr and datasize are : ", newline_start);
             gdi_print_number(slave, space_end);
             gdi_print_number(addr, space_end);
             gdi_print_number(datasize, newline_end);
             gdi_send_data_response("The register values to write are : ", no_newline);
-            for(i=0;i < datasize;i++) {
+            for(i=0; i < datasize; i++) {
               gdi_print_wrong_endian_number(buffer[i], space_end);
             }
-            result = DebugModbusWriteRegs(slave,addr, (u8 *)buffer, datasize);
+            result = DebugModbusWriteRegs(slave, addr, (u8 *)buffer, datasize);
 
             gdi_send_data_response("The return value is : ", newline_start);
             gdi_print_number(result, newline_end);
@@ -939,7 +1027,6 @@ void gdi_map_to_functions()
       //  {"led", " Set tube LED function", "at@gdi:led(fn)",modbus_LED},
       {
         long TubeId = 0;
-        int i = 0;
         int cmd;
         u16 fn;
         int result = 1;

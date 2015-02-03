@@ -36,6 +36,9 @@ enum
   START_LID_HEATING,
   STOP_LID_HEATING,
   SET_LID_PWM,
+  SET_PWM,
+  SET_PWM_RES,
+  nofSIG
 };
 
 typedef enum 
@@ -97,6 +100,12 @@ typedef struct
   USART_ERROR resultOk;
   u8 data[1];
 }ReadModbusRegsRes;
+
+typedef struct
+{
+  s16 value;
+  s16 idx;
+} SetPWMReq;
 
 void ResetHeaters();
 

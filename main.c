@@ -449,13 +449,9 @@ int main(void)
   HW_Init();
   UART_Init(USART3,noRecieve); /*Only for monitoring no RX*/
   PWM_Init(20000,20000); //20kHz PWM : (TIM3(Topheater2,Peltier, Aux), TIM4(Topheater1, Fan))
-  UART_SendMsg(USART3, (u8*)"Monitor Port UP\r\n" , 16);
+  UART_SendMsg(USART3, (u8*)"Monitor Port UP\r\n" , 17);
   init_os_trace(); /*GDB CMD:dump binary memory gdb_dump_23.txt 0x20000000 0x20010000  -- http://percepio.com/*/
-  PWM_Set(0,TopHeaterCtrl1PWM);
-  PWM_Set(0,TopHeaterCtrl2PWM);
-  PWM_Set(0,FANctrlPWM); 
-  PWM_Set(0,PeltierCtrl1PWM);
-  PWM_Set(0,AuxCtrlPWM);
+  PWM_Stop();
 
   ConfigOSTimer();
 
@@ -475,22 +471,6 @@ int main(void)
   xTaskCreate( CoolAndLidTask, (const char *) "Cool Lid task" /*max 16 chars*/, 300, NULL, ( (unsigned portBASE_TYPE) 4 ) | portPRIVILEGE_BIT, &pvCooleAndLidTask );
   xTaskCreate( TubeSequencerTask, ( const char * ) "TubeSeq task", ( unsigned short ) 1000, NULL, ( ( unsigned portBASE_TYPE ) 4 ) | portPRIVILEGE_BIT, &pvTubeSequencerTaskTask );
 
-  { // Synchronize M0 LEDs
-    xMessage *msg;
-    WriteModbusRegsReq *p;
-  
-    msg = pvPortMalloc(sizeof(xMessage)+sizeof(WriteModbusRegsReq));
-    if(msg)
-    {
-      msg->ucMessageID=BROADCAST_MODBUS;
-      p=(WriteModbusRegsReq *)msg->ucData;
-      p->slave    = 0;    //not used for broadcast
-      p->addr     = 0;
-      p->datasize = 0;    //datasize;
-      p->reply    = NULL; //No reply
-      xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);      
-    }
-  }
   vTaskStartScheduler();
   return 0;
 }
@@ -509,18 +489,33 @@ void assert_failed(unsigned char* file, unsigned int line)
   /* User can add his own implementation to report the file name and line number,
      ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
   char buf[100];
-  GPIO_SetBits(GPIOB,GPIO_Pin_11);  /* Turn on error LED */
-  GPIO_ResetBits(GPIOC,GPIO_Pin_9); /* Turn off hartbeat LED */  
+  u8 data;
+  GPIO_SetBits(GPIOB,GPIO_Pin_11);    /* Turn on error LED */
+  GPIO_ResetBits(GPIOC,GPIO_Pin_9);   /* Turn off hartbeat LED */  
   GPIO_ResetBits(GPIOB,GPIO_Pin_0);   /* Turn off RX LED */
   GPIO_ResetBits(GPIOB,GPIO_Pin_1);   /* Turn off TX LED */
+  PWM_Stop();
   sprintf(buf, "assert_failed: %s %d", file, line);
   gdi_send_msg_on_monitor(buf);
-  //vTraceConsoleMessage("assert_failed: %s %d", file, line);
+
   /* Infinite loop */
-  while (1)
-  {
-  }  
-  // Go to core dump mode instead of the infinite loop
+  /* cmd = "bu" -> "OK" to let Linux know that the M3 crashed */
+  while(USART_GetFlagStatus(USART1, USART_FLAG_RXNE)==RESET);
+  data = USART_ReceiveData(USART1);
+  if('B' == (data & 0x0DF) )
+  { 
+    while(USART_GetFlagStatus(USART1, USART_FLAG_RXNE)==RESET);
+    data = USART_ReceiveData(USART1);
+    if('U' == (data & 0x0DF) )
+    { 
+      while(USART_GetFlagStatus(USART1, USART_FLAG_RXNE)==RESET);
+      data = USART_ReceiveData(USART1);
+      if('\r' == data)
+      { 
+        gdi_send_msg_response("OK");
+      }
+    }
+  }
 }
 #endif
 
@@ -541,6 +536,7 @@ void HardFault_Handler(void)
 
 void prvGetRegistersFromStack( uint32_t *pulFaultStackAddress )
 {
+  u8 data;
   /* These are volatile to try and prevent the compiler/linker optimising them
   away as the variables never actually get used.  If the debugger won't show the
   values of the variables, make them global my moving their declaration outside
@@ -616,22 +612,30 @@ void prvGetRegistersFromStack( uint32_t *pulFaultStackAddress )
   
   //__asm("BKPT #0\n") ; // Break into the debugger
 
-  /* When the following line is hit, the variables contain the register values. */
-#if 1
-    GPIO_SetBits(GPIOB,GPIO_Pin_11);  /* Turn on error LED */
-    GPIO_ResetBits(GPIOC,GPIO_Pin_9); /* Turn off hartbeat LED */
-    
-    GPIO_SetBits(GPIOB,GPIO_Pin_0);   /* Turn on RX LED */
-    GPIO_SetBits(GPIOB,GPIO_Pin_1);   /* Turn on TX LED */
-    PWM_Set(0,TopHeaterCtrl1PWM);
-    PWM_Set(0,TopHeaterCtrl2PWM);
-    PWM_Set(0,FANctrlPWM); 
-    PWM_Set(0,PeltierCtrl1PWM);
-    PWM_Set(0,AuxCtrlPWM);
-    while (1) {}
-    // Go to core dump mode instead of the infinite loop
-#endif
-  //for( ;; );
+  GPIO_SetBits(GPIOB,GPIO_Pin_11);  /* Turn on error LED */
+  GPIO_ResetBits(GPIOC,GPIO_Pin_9); /* Turn off hartbeat LED */
+  GPIO_SetBits(GPIOB,GPIO_Pin_0);   /* Turn on RX LED */
+  GPIO_SetBits(GPIOB,GPIO_Pin_1);   /* Turn on TX LED */
+  PWM_Stop();
+  gdi_send_msg_on_monitor("\r\n!! HardFault !!"); //Print PC and SP for quick ref.
+
+  /* cmd = "bu" -> "OK" to let Linux know that the M3 crashed */
+  while(USART_GetFlagStatus(USART1, USART_FLAG_RXNE)==RESET);
+  data = USART_ReceiveData(USART1);
+  if('B' == (data & 0x0DF) )
+  { 
+    while(USART_GetFlagStatus(USART1, USART_FLAG_RXNE)==RESET);
+    data = USART_ReceiveData(USART1);
+    if('U' == (data & 0x0DF) )
+    { 
+      while(USART_GetFlagStatus(USART1, USART_FLAG_RXNE)==RESET);
+      data = USART_ReceiveData(USART1);
+      if('\r' == data)
+      { 
+        gdi_send_msg_response("OK");
+      }
+    }
+  }
   r0=r0;
   r1=r1;
   r2=r2;

@@ -23,6 +23,7 @@
 #include "task.h"
 #include "gdi.h"
 #include "ads1148.h"
+#include "../heater-sw/heater_reg.h" // Error codes
 #define DEBUG
 #ifdef DEBUG
 #include <stdio.h>
@@ -35,6 +36,7 @@ static const uint8_t muxLookup[4] = {0x01, 0x13, 0x25, 0x37};
 static const uint8_t idacMuxLookup[4] = {0x01, 0x23, 0x45, 0x67};
 static const uint8_t nopbuf [4] = {0xFF, 0xFF, 0xFF, 0xFF}; // For RO operations write NOPs
 __IO int16_t latestConv[4];
+static uint16_t ADSStatusReg = 0;
 
 #ifdef DEBUG
 char buf[20];
@@ -55,6 +57,11 @@ void adsCalib(int cal_cmd);
 void adsCalibrate(void);
 
 /* Private functions ---------------------------------------------------------*/
+/* ---------------------------------------------------------------------------*/
+void setADSStatusReg(uint16_t status)
+{
+  ADSStatusReg |= status;
+}
 
 /* ---------------------------------------------------------------------------*/
 void spiInit()
@@ -79,7 +86,7 @@ void spiInit()
   GPIO_Init(GPIOA, &GPIO_InitStructure);
 
   // Common args for the SPI init structure
-  SPI_StructInit (& SPI_InitStructure);	
+  SPI_StructInit (& SPI_InitStructure);
   SPI_InitStructure.SPI_Direction = SPI_Direction_2Lines_FullDuplex;
   SPI_InitStructure.SPI_DataSize = SPI_DataSize_8b;
   SPI_InitStructure.SPI_CPOL = SPI_CPOL_Low;
@@ -90,7 +97,7 @@ void spiInit()
   // @ 48 MHz the prescaler must be at least 64 to meet the 500ns clk cycle min. for ADS1148
   SPI_InitStructure.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_64;
   SPI_InitStructure.SPI_CRCPolynomial = 7;
-	
+
   // SPI1 Master initialization
   SPI_Cmd(SPI1, DISABLE);
   SPI_Init(SPI1, &SPI_InitStructure);
@@ -101,29 +108,29 @@ void spiInit()
 /* ---------------------------------------------------------------------------*/
 void spiReadWrite(uint8_t *rbuf , const uint8_t *tbuf , int cnt)
 {
-	int i;
-	
-	for (i = 0; i < cnt; i++)
-	{
-		if (tbuf) 
-		{
-			SPI_I2S_SendData(SPI1 , *tbuf ++);
-		} 
-		else 
-		{
-			SPI_I2S_SendData(SPI1 , 0xff);
-		}
-		
-		while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_RXNE) == RESET);
-		if (rbuf) 
-		{
-			*rbuf++ = SPI_I2S_ReceiveData(SPI1);
-		} 
-		else 
-		{
-			SPI_I2S_ReceiveData(SPI1);
-		}
-	}
+  int i;
+  
+  for (i = 0; i < cnt; i++)
+  {
+    if (tbuf) 
+    {
+      SPI_I2S_SendData(SPI1 , *tbuf ++);
+    } 
+    else 
+    {
+      SPI_I2S_SendData(SPI1 , 0xff);
+    }
+    
+    while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_RXNE) == RESET);
+    if (rbuf) 
+    {
+      *rbuf++ = SPI_I2S_ReceiveData(SPI1);
+    } 
+    else 
+    {
+      SPI_I2S_ReceiveData(SPI1);
+    }
+  }
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -306,8 +313,9 @@ int adsDetectHW(void)
   
   if (0xA5 != rx[0])
   {
-    /* ADS failure means failure on both tubes */
+    /* ADS failure means failure on all sensors */
     ret = FALSE;
+    setADSStatusReg(HW_ERR_ADS_FAILURE);
     DEBUG_PRINTF("ADS detect failure\r\n");
   }
 
@@ -361,23 +369,30 @@ int adsDetectSensor(void)
 
     DEBUG_PRINTF("ADS sensor #%d detect: ADC val: 0x%04X", i, value);
 
-    if( (FS < value)/* open circuit */ /*|| (-FS > value) short circuit */) {
-      if(2 > i) {
-        //setStatusReg(INIT_HW_ERROR_TUBE1);
-      } else {
-        //setStatusReg(INIT_HW_ERROR_TUBE2);
-      }
+    if(FS < value)  /* open circuit */ { 
+      if(0 == i) { setADSStatusReg(HW_ERR_SENSOR1_OPEN); }
+      if(1 == i) { setADSStatusReg(HW_ERR_SENSOR2_OPEN); }
+      if(2 == i) { setADSStatusReg(HW_ERR_SENSOR3_OPEN); }
+      if(3 == i) { setADSStatusReg(HW_ERR_SENSOR4_OPEN); }
+      ret = FALSE;
+    }
+    if(-FS > value) /* short circuit */ {
+      if(0 == i) { setADSStatusReg(HW_ERR_SENSOR1_SHORTED); }
+      if(1 == i) { setADSStatusReg(HW_ERR_SENSOR2_SHORTED); }
+      if(2 == i) { setADSStatusReg(HW_ERR_SENSOR3_SHORTED); }
+      if(3 == i) { setADSStatusReg(HW_ERR_SENSOR4_SHORTED); }
       ret = FALSE;
     }
   }
   return ret;
 }
+
 /* ---------------------------------------------------------------------------*/
 /* Public functions ----------------------------------------------------------*/
 /* ---------------------------------------------------------------------------*/
 int32_t dac_2_temp(signed short dac)
 {
-	int64_t res;
+ int64_t res;
   res = (((dac*29549)/10000)+77175)/100;
   return (int32_t)res;
 }
@@ -385,9 +400,20 @@ int32_t dac_2_temp(signed short dac)
 /* ---------------------------------------------------------------------------*/
 signed short temp_2_dac(int16_t temp)
 {
-	int64_t res;
+  int64_t res;
   res = (10000*(((int64_t)temp*100)-77175))/29549;
   return (signed short)res;
+}
+
+/* ---------------------------------------------------------------------------*/
+uint16_t getADSStatusReg(void)
+{
+  uint16_t ret;
+  taskENTER_CRITICAL();
+  ret = ADSStatusReg;
+  ADSStatusReg = 0;
+  taskEXIT_CRITICAL();
+  return ret;
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -738,7 +764,7 @@ void ADS_Handler(void)
 
   xHigherPriorityTaskWoken = pdFALSE;
 #if 1
-	typedef enum {
+  typedef enum {
     CHANNEL_0_SAMPLED,
     CHANNEL_1_SAMPLED,
     CHANNEL_2_SAMPLED,
@@ -763,7 +789,7 @@ void ADS_Handler(void)
       break;
     case CHANNEL_2_SAMPLED:
       //latestConv[2] = readAndPrepareChannel(0 /* 3 --> Conv only 3 channels */);
-    	latestConv[2] = readAndPrepareChannel(3);
+      latestConv[2] = readAndPrepareChannel(3);
       state++;
 #if 0
 //--> Conv only 3 channels

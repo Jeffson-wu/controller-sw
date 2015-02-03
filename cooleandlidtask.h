@@ -26,6 +26,8 @@
 
 void CoolAndLidTask( void * pvParameters );
 int getClLog(char *poutText );
+int getCoolandlidHWReport(char *poutText);
+int getAdc(char *poutText);
 
 #endif /* __COOLERANDLIDTASK_H */
 
