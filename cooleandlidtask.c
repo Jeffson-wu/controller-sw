@@ -44,8 +44,8 @@
 #include "../heater-sw/heater_reg.h"
 #include "cooleandlidtask.h"
 /* ---------------------------------------------------------------------------*/
-//#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
-//#define DEBUG_COOL
+#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
+#define DEBUG_COOL
 //#define STANDALONE /*Defines if the M3 Runs with or without Linux box*/
 
 char buf[20];
@@ -62,7 +62,6 @@ char buf[20];
   #define CL_LOG_ELEMENT_SIZE 4     //Log all four sensors
   #define CL_LOG_QUEUE_SIZE   4     //Queue length
 #endif
-
 #define Swap2Bytes(val) ( (((val) >> 8) & 0x00FF) | (((val) << 8) & 0xFF00) )
 
 /* Private typedef -----------------------------------------------------------*/
@@ -155,22 +154,25 @@ static int16_t adcCh[4] = {0, 0, 0, 0};
 static uint16_t pwmCh[5] = {0, 0, 0, 0, 0};
 
 static peltierData_t peltierData[1] = {
-  {PELTIER_1, {STOP_STATE, -26213, &pwmCh[0], &adcCh[0]}}
+//  {PELTIER_1, {STOP_STATE, -26213, &pwmCh[0], &adcCh[0]}}
+		{PELTIER_1, {STOP_STATE, -26213, &pwmCh[0], &adcCh[3]}}
 };
 
 static lidData_t lidData[1] = {
-  {LID_HEATER_1, {STOP_STATE, -26213, &pwmCh[3], &adcCh[1]}}
+	//{LID_HEATER_1, {STOP_STATE, -26213, &pwmCh[3], &adcCh[1]}}
+  {LID_HEATER_1, {STOP_STATE, -26213, &pwmCh[4], &adcCh[1]}}
 };
 
 static fanData_t fanData[1] = {
-  {FAN_1, {STOP_STATE, 0, &pwmCh[4], &adcCh[3]}}
+//  {FAN_1, {STOP_STATE, 0, &pwmCh[4], &adcCh[3]}}
+		{FAN_1, {STOP_STATE, 0, &pwmCh[3], &adcCh[0]}}
 };
 
 calib_data_t __attribute__ ((aligned (2))) calib_data[3] = {
   /* Default calibration data - use if no valid data found in NVS */
-    { 5597   },       /* Lid     100degC */ 
-    { -21705 },       /* Peltier  10degC */
-    { -10289 }        /* Fan      50degC */ 
+    { 15000   },       /* Lid     90degC */
+    { -26811 },       /* Peltier  4degC */
+    { -13528 }        /* Fan      40degC */
   };
 
 #ifdef USE_CL_DATA_LOGGING
@@ -189,7 +191,6 @@ cl_logDataElement_t * cl_dequeue(cl_logDataQueue_t * pQueue);
 /* ---------------------------------------------------------------------------*/
 void standAlone() //These settings should be made from the Linux Box
 {
-
   *peltierData[0].regulator.pwmVal = 8000;
   *fanData[0].regulator.pwmVal = 20000; //40% of 32767
 
@@ -205,7 +206,7 @@ void standAlone() //These settings should be made from the Linux Box
 void fan(fanData_t *fanData){
   regulatorData_t *reg;
   reg = &fanData->regulator;
-  reg->setPoint = -13528; //40oC
+  reg->setPoint = -10168; //40oC
   int64_t out = 0;
   int16_t Kp = -10;
 
@@ -228,8 +229,8 @@ void fan(fanData_t *fanData){
 
 	if (out > 32767)
 		out = 32767;
-	if (out < 15000)
-		out = 15000;
+	if (out < 12000)
+		out = 12000;
 	*reg->pwmVal = out;
 }
 
@@ -240,7 +241,7 @@ void fan(fanData_t *fanData){
 void peltier(peltierData_t *peltierData){
   regulatorData_t *reg;
   reg = &peltierData->regulator;
-  reg->setPoint = -26811; //4oC
+  //reg->setPoint = -26811; //4oC
   int64_t out = 0;
   int16_t Kp = -20;
 
@@ -273,10 +274,8 @@ void lid(lidData_t *lidData)
 {
   regulatorData_t *reg;
   reg = &lidData->regulator;
-  reg->setPoint = 14620; //145oC
   int64_t out = 0;
-  int16_t Kp = 120;
-
+  int16_t Kp = 0.5; //120;
 
   switch (reg->state) {
     case STOP_STATE:
@@ -297,8 +296,10 @@ void lid(lidData_t *lidData)
     {
     	out = 32767;
 
-    	if (*reg->adcVal > (reg->setPoint-2000)) //ca -10oC
-    		reg->state = CTRL_CLOSED_LOOP_STATE;
+    	reg->state = CTRL_CLOSED_LOOP_STATE;
+
+    	//if (*reg->adcVal > (reg->setPoint-2000)) //ca -10oC
+    	//	reg->state = CTRL_CLOSED_LOOP_STATE;
     }
     break;
     case CTRL_CLOSED_LOOP_STATE:
@@ -316,7 +317,20 @@ void lid(lidData_t *lidData)
 		out = 32767;
 	if (out < 0)
 		out = 0;
+	//out = 10000;
 	*reg->pwmVal = out;
+
+#ifdef DEBUG_COOL
+  static int8_t cnt = 0;
+#endif
+#ifdef DEBUG_COOL
+    if (cnt == 50)
+    {
+      DEBUG_PRINTF("LID_Err:%d", (reg->setPoint - *reg->adcVal));
+      cnt = 0;
+    }
+    cnt++;
+#endif
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -556,6 +570,7 @@ bool coolLidWriteRegs(u8 slave, u16 addr, u16 *data, u16 datasize)
           default:
             break;
         }
+        break;
       case TUBE_COMMAND_REG:
         /* Here the slave is irrelevant */
         if (WRITE_CAL_DATA == val) {

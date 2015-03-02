@@ -444,7 +444,7 @@ int main(void)
 {
   HW_Init();
   UART_Init(USART3,noRecieve); /*Only for monitoring no RX*/
-  PWM_Init(20000,20000); //20kHz PWM : (TIM3(Topheater2,Peltier, Aux), TIM4(Topheater1, Fan))
+  PWM_Init(20000,1000); //20kHz PWM : (TIM3(Topheater2,Peltier, Aux), TIM4(Topheater1, Fan))
   sprintf(buf, "Monitor Port UP\r\n");
   gdi_send_msg_on_monitor(buf);
   sprintf(buf, "Build on: " __DATE__ " " __TIME__);

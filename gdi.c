@@ -838,19 +838,19 @@ void gdi_map_to_functions()
           addr = (u16) atoi(*(gdi_req_func_info.parameters + 1));
           datasize = (u16) atoi(*(gdi_req_func_info.parameters + 2)); 
 
-          gdi_send_data_response("slave, addr and datasize are = ", newline_start);
-          gdi_print_number(slave, space_end);
-          gdi_print_number(addr, space_end);
-          gdi_print_number(datasize, newline_end);
+          //gdi_send_data_response("slave, addr and datasize are = ", newline_start);
+          //gdi_print_number(slave, space_end);
+          //gdi_print_number(addr, space_end);
+          //gdi_print_number(datasize, newline_end);
 
           if((0 == addr) || (0 == datasize)) {
             gdi_send_data_response("ERROR", newline_both);
           } else {
-            if(addr <= 16)
+            if(slave <= 16)
             { // Adresses 0 - 16 are actually on the MODBUS
               result = DebugModbusReadRegs(slave, addr, datasize, (u8 *)buffer);
             }
-            else if(addr <= 20)
+            else if(slave <= 20)
             { // Adresses 17 - 20 are mapped to cool and lid, addr is reg, datasize is reg count, buffer is wrong endian
               result = coolLidReadRegs(slave, addr, datasize, (u16 *)buffer);
             }
@@ -861,12 +861,12 @@ void gdi_map_to_functions()
 
             if(NO_ERROR == result)
             {
-              gdi_send_data_response("The register values read are : ", no_newline);
+              //gdi_send_data_response("The register values read are : ", no_newline);
               for (i=0; i<datasize;i++) { 
                 gdi_print_wrong_endian_number(buffer[i], space_end); 
               }
             }
-            gdi_send_data_response("The return value is : ", newline_start);
+            //gdi_send_data_response("The return value is : ", newline_start);
             gdi_print_number(result, newline_end);
             if(result == NO_ERROR)
             {
@@ -905,11 +905,11 @@ void gdi_map_to_functions()
             for(i=0;i < datasize;i++) {
               gdi_print_wrong_endian_number(buffer[i], space_end);
             }
-            if(addr <= 16)
+            if(slave <= 16)
             { // Adresses 0 - 16 are actually on the MODBUS
               result = DebugModbusWriteRegs(slave,addr, (u8 *)buffer, datasize);
             }
-            else if(addr <= 20)
+            else if(slave <= 20)
             { // Adresses 17 - 20 are mapped to cool and lid, addr is reg, datasize is reg count, buffer is wrong endian
               result = coolLidWriteRegs(slave, addr, (u16 *)buffer, datasize);
             }
