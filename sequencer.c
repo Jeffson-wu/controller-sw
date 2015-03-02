@@ -23,37 +23,43 @@
 #include "serial.h"
 #include "util.h"
 
-//#define SIMULATE_HEATER /*Disable communication to M0 CPU's return temperature reached when temp is requested*/
-//#define USE_DEVELOPMENT_LOGGING
-#define USE_SYNCHRONOUS_PROTOCOL /* All tubes are synced at temp hold timeout */
 
 extern xQueueHandle CoolAndLidQueueHandle;
 
+/* Private feature defines ---------------------------------------------------*/
+#define USE_SYNCHRONOUS_PROTOCOL /* All tubes are synced at temp hold timeout */
 #define USE_PAUSE_FEATURE
+#define USE_NEIGHBOUR_TUBE_TEMP_FEATURE
+#define USE_LOGGING_FEATURE
+
+/* Private debug define ------------------------------------------------------*/
+//#define SIMULATE_HEATER /*Disable communication to M0 CPU's return temperature reached when temp is requested*/
+//#define USE_DEVELOPMENT_LOGGING
+#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
+#define DEBUG_SEQ /*Debug of sequencer, to follow state of sequencer*/
+//#define DEBUG_IF /*Debug of external interfaces modbus, IRQ and serial */
+//#define DEBUG_QUEUE /*Debug of stage queue */
+
 #define DEBUG_BUFFER_SIZE 600
 
-#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
 #ifdef DEBUG
 #define DEBUG_PRINTF(fmt, args...)      snprintf(buf, DEBUG_BUFFER_SIZE, fmt, ## args);  gdi_send_msg_on_monitor(buf);
 #else
 #define DEBUG_PRINTF(fmt, args...)                          /* Don't do anything in release builds */
 #endif
 
-//#define DEBUG_SEQ /*Debug of sequencer, to follow state of sequencer*/
 #ifdef DEBUG_SEQ
 #define DEBUG_SEQ_PRINTF(fmt, args...)      snprintf(buf, DEBUG_BUFFER_SIZE, fmt, ## args);  gdi_send_msg_on_monitor(buf);
 #else
 #define DEBUG_SEQ_PRINTF(fmt, args...)                      /* Don't do anything in release builds */
 #endif
 
-//#define DEBUG_IF /*Debug of external interfaces modbus, IRQ and serial */
 #ifdef DEBUG_IF
 #define DEBUG_IF_PRINTF(fmt, args...)      snprintf(buf, DEBUG_BUFFER_SIZE, fmt, ## args);  gdi_send_msg_on_monitor(buf);
 #else
 #define DEBUG_IF_PRINTF(fmt, args...)                       /* Don't do anything in release builds */
 #endif
 
-//#define DEBUG_QUEUE /*Debug of stage queue */
 #ifdef DEBUG_QUEUE
 #define DEBUG_QUEUE_PRINTF(fmt, args...)      snprintf(buf, DEBUG_BUFFER_SIZE, fmt, ## args);  gdi_send_msg_on_monitor(buf);
 #else
@@ -74,6 +80,11 @@ extern xQueueHandle CoolAndLidQueueHandle;
 
 /* An array to hold handles to the created timers. */
 xTimerHandle xTimers[ NUM_TIMERS ];
+
+/* Destribution of neighbour tube temperatures */
+#ifdef USE_NEIGHBOUR_TUBE_TEMP_FEATURE
+xTimerHandle NeighbourTubeTempTimer[ 1 ];
+#endif
 
 /* An array to hold the tick count of times each timer started - used for progress. */
 long lStartTickCounters[ NUM_TIMERS ] = { 0 };
@@ -278,6 +289,7 @@ extern xQueueHandle LogQueueHandle;
 
 /* Private function prototypes -----------------------------------------------*/
 void vTimerCallback( xTimerHandle pxTimer );
+void NeighbourTubeTimerCallback( xTimerHandle pxTimer );
 void ExtIrqDisable(ExtiGpioTypeDef heater);
 void ExtIrqEnable(ExtiGpioTypeDef heater);
 bool getseq(u8 tubeId,stageCmd_t * data);
@@ -308,6 +320,21 @@ void InitTubeTimers()
       vTimerCallback
       );
   }
+
+#ifdef USE_NEIGHBOUR_TUBE_TEMP_FEATURE
+  {
+    NeighbourTubeTempTimer[0] = xTimerCreate("Timer", 1000, pdTRUE, (void*) 17, NeighbourTubeTimerCallback);
+    if( NeighbourTubeTempTimer[0] == NULL )
+    { // The timer was not created.
+    }
+    else
+    {
+        if( xTimerStart( NeighbourTubeTempTimer[0], 0 ) != pdPASS )
+        { // The timer could not be set into the Active state.
+        }
+    }
+  }
+#endif
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -441,7 +468,7 @@ void ExtIrqEnable(ExtiGpioTypeDef heater)
 }
 
 /* ---------------------------------------------------------------------------*/
-/*  data size is number of registers (2 bytes) */
+/*  data size is number of registers (quantities of 2 bytes)                  */
 /* ---------------------------------------------------------------------------*/
 void WriteTubeHeaterReg(u8 tube, u16 reg, u16 *data, u16 datasize)
 {
@@ -1102,20 +1129,44 @@ void HeaterEventHandler (ReadModbusRegsRes *preg, xMessage *msg)
 /* ---------------------------------------------------------------------------*/
 void TubeMessageHandler (long TubeId, xMessage *msg)
 {
-  #if 0
+#if defined(USE_NEIGHBOUR_TUBE_TEMP_FEATURE) | defined(ADDITIONAL_FEATURE)
   ReadModbusRegsRes *preg;
-  preg = ??
-    if(preg->addr == SETPOINT_REG)
+  preg = (ReadModbusRegsRes *)msg->ucData;
+#endif
+#ifdef USE_NEIGHBOUR_TUBE_TEMP_FEATURE
+  if((preg->addr >= TUBE1_TEMP_REG) && (preg->addr <= TUBE4_TEMP_REG))
   {
-    //DEBUG_PRINTF("Tube[%d]@%s TubeSeq[%s] SetPoint[%d]", TubeId, tube_states[Tubeloop[TubeId-1].state],
-    //              signals_txt[msg->ucMessageID], modbus_data[0]/10);
-  }
+    xMessage *msg;
+    u16 value;
+    WriteModbusRegsReq *p;
+    long DestinationTubeId = 0;
 
-  // DEBUG_SEQ_PRINTF("Tube[%d]@%s TubeSeq[%s]ADDR[%d]size[%d]data[%x]STATUS[%s]",
-  //   TubeId, tube_states[Tubeloop[TubeId-1].state], signals_txt[msg->ucMessageID],
-  //   preg->addr, preg->datasize,/*(((u16)(preg->data[0])<<8)|(preg->data[1]))*/modbus_data[0],
-  //   (preg->resultOk==NO_ERROR)?"PASS":"FAIL");
-  #endif
+    //DEBUG_PRINTF("Tube %ld temp: %d", TubeId, (((u16)(preg->data[0])<<8)|(preg->data[1])) );
+    value = (((u16)(preg->data[0])<<8)|(preg->data[1])); //temperature to forward
+
+    //forward to appropriate M0 NEIGHBOUR_TUBE_TEMP
+    if( (TubeId >= 1) && (TubeId <= 4) )        { DestinationTubeId = 5;  }
+    else if( (TubeId >= 5) && (TubeId <= 8) )   { DestinationTubeId = 1;  }
+    else if( (TubeId >= 9) && (TubeId <= 12) )  { DestinationTubeId = 13; }
+    else if( (TubeId >= 13) && (TubeId <= 16) ) { DestinationTubeId = 9;  }
+    msg = pvPortMalloc(sizeof(xMessage)+sizeof(WriteModbusRegsReq)+sizeof(u16));
+    if( (NULL != msg) && (0 != DestinationTubeId) )
+    {
+      value = ((value&0xFF)<<8)|(value>>8);
+      msg->ucMessageID = WRITE_MODBUS_REGS;
+      p = (WriteModbusRegsReq *)msg->ucData;
+      p->slave = DestinationTubeId;
+      p->addr = NEIGHBOUR_TUBE_TEMP_REG;
+      memcpy(p->data, &value, sizeof(u16));
+      p->datasize = 1; //datasize (nof regs)
+      p->reply = NULL; //No reply
+      xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);     
+    }
+  }
+#endif
+#ifdef ADDITIONAL_FEATURE
+  // Add any additional handlers here...
+#endif
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -1432,3 +1483,20 @@ void vTimerCallback( xTimerHandle pxTimer )
     xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
   }
 }
+
+/* ---------------------------------------------------------------------------*/
+/* Reads the temperature of all tubes neighbouring a tube on a diferent M0    */
+void NeighbourTubeTimerCallback( xTimerHandle pxTimer )
+{
+#ifdef USE_NEIGHBOUR_TUBE_TEMP_FEATURE
+  if(NULL != pxTimer)
+  {
+    ReadTubeHeaterReg(4,  TUBE4_TEMP_REG, 1, TubeSequencerQueueHandle, FALSE);
+    ReadTubeHeaterReg(5,  TUBE1_TEMP_REG, 1, TubeSequencerQueueHandle, FALSE);
+    ReadTubeHeaterReg(12, TUBE4_TEMP_REG, 1, TubeSequencerQueueHandle, FALSE);
+    ReadTubeHeaterReg(13, TUBE1_TEMP_REG, 1, TubeSequencerQueueHandle, FALSE);
+  }
+#endif
+}
+
+
