@@ -390,7 +390,7 @@ int adsDetectSensor(void)
 /* ---------------------------------------------------------------------------*/
 /* Public functions ----------------------------------------------------------*/
 /* ---------------------------------------------------------------------------*/
-int32_t dac_2_temp(signed short dac)
+int32_t adc_2_temp(signed short dac)
 {
  int64_t res;
   res = (((dac*29549)/10000)+77175)/100;
@@ -398,7 +398,7 @@ int32_t dac_2_temp(signed short dac)
 }
 
 /* ---------------------------------------------------------------------------*/
-signed short temp_2_dac(int16_t temp)
+signed short temp_2_adc(int16_t temp)
 {
   int64_t res;
   res = (10000*(((int64_t)temp*100)-77175))/29549;

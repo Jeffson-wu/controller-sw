@@ -46,10 +46,17 @@
 #include "serial.h"
 #include "../heater-sw/heater_reg.h"
 
-
+/* Private feature defines ---------------------------------------------------*/
 #define QUEUESIZE 10
 
+/* Private debug define ------------------------------------------------------*/
 //#define DEBUG_CLOCK_MSO /*Set mux to output sysclk or other clocks on PA8*/
+
+#ifdef DEBUG
+#define DEBUG_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
+#else
+#define DEBUG_PRINTF(fmt, args...)      /* Don't do anything in release builds */
+#endif
 
 /* ---------------------------------------------------------------------------*/
 /* Task Message Queues -------------------------------------------------------*/
@@ -87,11 +94,6 @@ void ErrorOff();
 void LogOn(int log_time);
 void LogOff();
 
-#ifdef DEBUG
-#define DEBUG_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
-#else
-#define DEBUG_PRINTF(fmt, args...)      /* Don't do anything in release builds */
-#endif
 /* ---------------------------------------------------------------------------*/
 /* Global variables                                                           */
 /* ---------------------------------------------------------------------------*/
@@ -228,7 +230,6 @@ void HW_Init(void)
     this is not the case (if some bits represent a sub-priority).
       configASSERT( ( portAIRCR_REG & portPRIORITY_GROUP_MASK ) <= ulMaxPRIGROUPValue );*/
 
-//#define DEBUG_CLOCK_MSO
 #ifdef DEBUG_CLOCK_MSO
     /*Debug output on PA8 to measure actual clock*/
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA, ENABLE);

@@ -1,0 +1,263 @@
+/**
+  ******************************************************************************
+  * @file    adc.c
+  * @author  Jari Rene Jensen
+  * @version V1.0.0
+  * @date    5 - Feb - 2015
+  * @brief   Control of M3 internal ADC
+  ******************************************************************************
+  * @attention
+  *
+  * <h2><center>&copy; COPYRIGHT 2013 Xtel </center></h2>
+  *
+  ******************************************************************************
+  */ 
+/* Includes ------------------------------------------------------------------*/
+#include <stdio.h>
+#include <stm32f10x_adc.h>
+#include <stm32f10x_gpio.h>
+#include <stm32f10x_tim.h>
+#include "FreeRTOS.h"
+#include "task.h"
+#include "gdi.h" //Debug printf
+#include "adc.h"
+#include <math.h>
+
+/* ---------------------------------------------------------------------------*/
+/* Private feature defines ---------------------------------------------------*/
+// Kill peltier in case of thermic runaway
+//#define USE_ANALOG_WATCH_DOG 
+#define AWD_HIGH_THRESHOLD 4096
+#define ADC1_DR_Address ((uint32_t)0x4001244C)
+
+#define BETA 3984
+#define COEF_A (-43.1879)
+#define COEF_B (-13.0872)
+
+/* Private debug define ------------------------------------------------------*/
+//#define DEBUG
+
+char buf[20];
+#define PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
+#ifdef DEBUG
+#define DEBUG_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
+#else
+#define DEBUG_PRINTF(fmt, args...)    /* Don't do anything in release builds */
+#endif
+
+static xSemaphoreHandle ADCSemaphore = NULL;
+
+/* Private typedef -----------------------------------------------------------*/
+
+/* ---------------------------------------------------------------------------*/
+/* Private prototypes                                                         */
+/* ---------------------------------------------------------------------------*/
+
+/* ---------------------------------------------------------------------------*/
+/* functions                                                                  */
+/* ---------------------------------------------------------------------------*/
+/* ---------------------------------------------------------------------------*/
+/* Public functions ----------------------------------------------------------*/
+/* ---------------------------------------------------------------------------*/
+int32_t adc_2_temp(signed short adc)
+{
+#if 0
+  int64_t res;
+  res = BETA / (1/adc);
+#else
+  float res;
+#if 0
+  res = BETA / ((1/adc) * COEF_A - COEF_B);
+#else
+#define HEART_BEAT_LED GPIOC,GPIO_Pin_9
+  GPIO_SetBits(HEART_BEAT_LED);/*RX LED*/
+  res = BETA / logf( ((1/adc) * COEF_A - COEF_B) );
+  GPIO_ResetBits(HEART_BEAT_LED);/*RX LED*/
+#endif
+#endif
+  return (int32_t)res;
+}
+
+/* ---------------------------------------------------------------------------*/
+signed short temp_2_adc(int16_t temp)
+{
+  int64_t res;
+  res = (10000*(((int64_t)temp*100)-77175))/29549;
+  return (signed short)res;
+}
+
+/* ---------------------------------------------------------------------------*/
+void adcInit()
+{
+  ADC_InitTypeDef   ADC_InitStructure;
+  GPIO_InitTypeDef  GPIO_InitStructure;
+  NVIC_InitTypeDef  NVIC_InitStructure;
+
+  // Init clk
+  /* SystemCoreClock is 72MHz. Prescale by min. 6 = 12MHz ADC clk */
+  /* We need to convert 4 channels 10 times a second. 12M/4/10 = 300000 cycles */
+  /* are available for each conversion */
+  RCC_ADCCLKConfig(RCC_PCLK2_Div6);
+  RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA1, ENABLE);
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC1, ENABLE);
+  
+  // Init GPIO
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_4 | GPIO_Pin_5 | GPIO_Pin_6 | GPIO_Pin_7; 
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AIN;
+  GPIO_Init(GPIOA, &GPIO_InitStructure);
+
+  //Init irq
+  NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0x0D   /*0x0B - 0x0F */;
+  NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0x00; /*dont care*/
+  NVIC_InitStructure.NVIC_IRQChannel = ADC1_2_IRQn;
+  NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+  NVIC_Init(&NVIC_InitStructure);
+
+  // Init ADC
+  ADC_StructInit(&ADC_InitStructure);
+  ADC_InitStructure.ADC_ScanConvMode = ENABLE;
+  ADC_InitStructure.ADC_ContinuousConvMode = DISABLE;
+  ADC_InitStructure.ADC_DataAlign = ADC_DataAlign_Right;
+  ADC_InitStructure.ADC_ExternalTrigConv = ADC_ExternalTrigConv_T1_CC1;
+  ADC_InitStructure.ADC_Mode = ADC_Mode_Independent;
+  ADC_InitStructure.ADC_NbrOfChannel = 1;
+
+#ifdef USE_ANALOG_WATCH_DOG
+  ADC_AnalogWatchdogCmd(ADC1, ADC_AnalogWatchdog_SingleInjecEnable);
+  ADC_AnalogWatchdogThresholdsConfig(ADC1, AWD_HIGH_THRESHOLD, 0); /*HighThreshold, LowThreshold */
+  ADC_AnalogWatchdogSingleChannelConfig(ADC1, ADC_Channel_7);
+#endif
+
+  ADC_InjectedSequencerLengthConfig(ADC1, 4);
+  ADC_InjectedChannelConfig(ADC1, ADC_Channel_4, 1, ADC_SampleTime_239Cycles5);
+  ADC_InjectedChannelConfig(ADC1, ADC_Channel_5, 2, ADC_SampleTime_239Cycles5);
+  ADC_InjectedChannelConfig(ADC1, ADC_Channel_6, 3, ADC_SampleTime_239Cycles5);
+  ADC_InjectedChannelConfig(ADC1, ADC_Channel_7, 4, ADC_SampleTime_239Cycles5);
+  ADC_InjectedDiscModeCmd(ADC1, DISABLE);
+
+  ADC_ExternalTrigInjectedConvConfig(ADC1, ADC_ExternalTrigInjecConv_None);
+  ADC_ExternalTrigInjectedConvCmd(ADC1, DISABLE);
+  
+  ADC_Init(ADC1, &ADC_InitStructure);
+
+  ADC_Cmd(ADC1, ENABLE); //Switch on ADC
+  
+  // Calibrate ADC
+  ADC_ResetCalibration(ADC1);
+  while(ADC_GetResetCalibrationStatus(ADC1));
+  ADC_StartCalibration(ADC1);
+  while(ADC_GetCalibrationStatus(ADC1));
+
+}
+
+/* ---------------------------------------------------------------------------*/
+void adcStartSeq(void)
+{
+  DEBUG_PRINTF("adcStartSeq\r\n");
+  adcIrqEnable();
+}
+
+/* ---------------------------------------------------------------------------*/
+/* Start a conversion burst (4 conversions) upon time out */
+/* The semaphore is given upon completion of the conversion see ADS_Handler() */
+void adcTimerCallback(xTimerHandle xTimer)
+{
+  ADC_SoftwareStartInjectedConvCmd(ADC1, ENABLE);
+}
+
+/* ---------------------------------------------------------------------------*/
+void adcGetLatest(int16_t * ch0value, int16_t * ch1value, int16_t * ch2value, int16_t * ch3value)
+{
+  taskENTER_CRITICAL(); //push irq state
+  *ch0value = ADC_GetInjectedConversionValue(ADC1, ADC_InjectedChannel_1);
+  *ch1value = ADC_GetInjectedConversionValue(ADC1, ADC_InjectedChannel_2);
+  *ch2value = ADC_GetInjectedConversionValue(ADC1, ADC_InjectedChannel_3);
+  *ch3value = ADC_GetInjectedConversionValue(ADC1, ADC_InjectedChannel_4);
+  taskEXIT_CRITICAL();
+}
+
+/* ---------------------------------------------------------------------------*/
+/* ADC_IT_JEOC: Injected channel, ADC_IT_EOC: regular  channel. */
+void adcIrqDisable(void)
+{
+  ADC_ITConfig(ADC1, ADC_IT_JEOC, DISABLE);
+}
+
+/* ---------------------------------------------------------------------------*/
+void adcIrqEnable(void)
+{
+  ADC_ITConfig(ADC1, ADC_IT_JEOC, ENABLE);
+}
+
+/* ---------------------------------------------------------------------------*/
+void adcConfigConversionTimer(tmrTIMER_CALLBACK convStartFn)
+{
+  xTimerHandle xTimer;
+  DEBUG_PRINTF("adcConfigConversionTimer\r\n");
+  xTimer= xTimerCreate((char *)"ADCTimer",      // Just a text name, not used by the kernel.
+                       ((configTICK_RATE_HZ)/SAMPLING_FREQUENCY),  // conversion frequency.
+                       pdTRUE,          // The timers will auto-reload themselves when they expire.
+                       (void *) 1,      // Assign each timer a unique id equal to its array index.
+                       convStartFn      // Each timer calls the same callback when it expires.
+                       );
+                           
+  if( xTimer == NULL )
+  {
+    // The timer was not created.
+  }
+  else
+  {
+    // Start the timer.  No block time is specified, and even if one was
+    // it would be ignored because the scheduler has not yet been
+    // started.
+    if( xTimerStart( xTimer, 0 ) != pdPASS )
+    {
+      // The timer could not be set into the Active state.
+    }
+  }
+}
+
+/* ---------------------------------------------------------------------------*/
+void adcSetIsrSemaphore(xSemaphoreHandle sem)
+{
+  ADCSemaphore = sem;
+}
+
+/* ---------------------------------------------------------------------------*/
+/* Sequential ADC is starte by calling adsStartSeq() which starts the first conversion on ch 0  */
+/*                                                                                                                                   */
+void ADC_Handler(void)
+{
+  static portBASE_TYPE xHigherPriorityTaskWoken;
+
+#ifdef USE_ANALOG_WATCH_DOG
+  if(SET == ADC_GetITStatus(ADC1, ADC_IT_AWD))
+  {
+    ADC_ClearITPendingBit(ADC1, ADC_IT_AWD);
+    // #### JRJ #### KILL Peltier - Reconfig pin to GPIO, set inactive.
+  }
+#endif
+  /* ADC_IT_JEOC: injected channels */
+  if(SET == ADC_GetITStatus(ADC1, ADC_IT_JEOC))
+  {
+    ADC_ClearITPendingBit(ADC1, ADC_IT_JEOC);
+    xHigherPriorityTaskWoken = pdFALSE;
+    /* Synchronize adcConfigConversionTimer. Do not require context switch in case
+       running task is lower prio adcConfigConversionTimer (pdTRUE to do so) */
+    xSemaphoreGiveFromISR(ADCSemaphore, &xHigherPriorityTaskWoken); 
+  }
+#if 0
+  /* ADC_IT_EOC: Regular channels */
+  if(SET == ADC_GetITStatus(ADC1, ADC_IT_EOC))
+  {
+    ADC_ClearITPendingBit(ADC1, ADC_IT_EOC);
+    xHigherPriorityTaskWoken = pdFALSE;
+    /* Synchronize adcConfigConversionTimer. Do not require context switch in case
+       running task is lower prio adcConfigConversionTimer (pdTRUE to do so) */
+    xSemaphoreGiveFromISR(ADCSemaphore, &xHigherPriorityTaskWoken); 
+  }
+#endif
+}
+
+
+

@@ -34,6 +34,7 @@
 #include "timers.h"
 #include "serial.h"
 
+/* ---------------------------------------------------------------------------*/
 #define CHARS_IN_FRAME 10 /*1 startbit, 8 data, 1 stopbit*/
 #define CHARS_TO_WAIT 3.5 /* Silence on modbus to detect end of telegram*/
 #define USECS_2_NUM 1000000
@@ -43,9 +44,10 @@
 
 #define READ_HOLDINGS_REGISTERS 3
 #define WRITE_MULTIPLE_REGISTERS 16
-
 #define  RS485_RX_LED GPIOB,GPIO_Pin_0
+/* Private feature defines ---------------------------------------------------*/
 
+/* Private debug define ------------------------------------------------------*/
 //#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
 #ifdef DEBUG
 #define DEBUG_BUFFER_SIZE 600

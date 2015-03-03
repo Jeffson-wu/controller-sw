@@ -16,7 +16,7 @@ INCLUDES = -I ./include -I ./board -I ./arch -I ./freertos/include -I ./ -I ./fr
 CFLAGS = -g -O0 -c -Wall -Werror -mcpu=cortex-m3 -mthumb -D__START=main -D__STARTUP_CLEAR_BSS -DSTM32F1XX -DUSE_STDPERIPH_DRIVER $(INCLUDES)
 
 LDFLAGS = -T arch/stm32f1x.ld -mcpu=cortex-m3 -mthumb -nostartfiles -Wl,--gc-section
-LIBS = -lc -lgcc -lnosys
+LIBS = -lc -lgcc -lnosys -lm
 OBJECTS_DIR = obj
 DEPENDS_DIR = dep
 PROGRAM = controller
@@ -28,7 +28,7 @@ SOURCES = \
     modbus.c \
     gdi.c \
     pwm.c \
-    ads1148.c \
+    adc.c \
     sequencer.c \
     cooleandlidtask.c \
     logtask.c \

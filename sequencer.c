@@ -1067,12 +1067,14 @@ int getTubeHWReport(char *poutText, long TubeId)
 /* ---------------------------------------------------------------------------*/
 void HW_EventHandler(ReadModbusRegsRes *preg, xMessage *msg){
   ExtiGpioTypeDef heater;
+  uint16_t status;
   long TubeId = preg->slave;
   Tubeloop[TubeId-1].hw_status_reg =(((u16)(preg->data[0])<<8)|(preg->data[1]));
 
   DEBUG_PRINTF("Tube[%2ld] HW Status:%04x", TubeId, Tubeloop[TubeId-1].hw_status_reg);
 
   heater = tube2heater[TubeId-1];
+  status = Tubeloop[TubeId-1].hw_status_reg;
   if(Tubeloop[TubeId-1].hw_status_reg & HW_ERR_ADS_FAILURE)
   { // ADC error all four wells are out of service
     switch(heater)
@@ -1238,9 +1240,10 @@ void HW_EventHandler(ReadModbusRegsRes *preg, xMessage *msg){
         break;
     }
   }
-  else if(Tubeloop[TubeId-1].hw_status_reg & (HW_BITTEN_BY_WATCH_DOG | HW_SW_RESET) )
-  { // Reset caused by watch dog
+  else if(Tubeloop[TubeId-1].hw_status_reg & HW_M0_ERRORS )
+  { // M0 errors
     //Dette skal fremgaa af loggen eller hvordan nu??
+    status = Tubeloop[TubeId-1].hw_status_reg & HW_M0_ERRORS;
     switch(heater)
     {
       case Heater1:
@@ -1248,40 +1251,40 @@ void HW_EventHandler(ReadModbusRegsRes *preg, xMessage *msg){
         restart_tube_error(2);
         restart_tube_error(3);
         restart_tube_error(4);
-        setTubeHWReport(HW_BITTEN_BY_WATCH_DOG, 1);
-        setTubeHWReport(HW_BITTEN_BY_WATCH_DOG, 2);
-        setTubeHWReport(HW_BITTEN_BY_WATCH_DOG, 3);
-        setTubeHWReport(HW_BITTEN_BY_WATCH_DOG, 4);
+        setTubeHWReport(status, 1);
+        setTubeHWReport(status, 2);
+        setTubeHWReport(status, 3);
+        setTubeHWReport(status, 4);
         break;
       case Heater2:
         restart_tube_error(5);
         restart_tube_error(6);
         restart_tube_error(7);
         restart_tube_error(8);
-        setTubeHWReport(HW_BITTEN_BY_WATCH_DOG, 5);
-        setTubeHWReport(HW_BITTEN_BY_WATCH_DOG, 6);
-        setTubeHWReport(HW_BITTEN_BY_WATCH_DOG, 7);
-        setTubeHWReport(HW_BITTEN_BY_WATCH_DOG, 8);
+        setTubeHWReport(status, 5);
+        setTubeHWReport(status, 6);
+        setTubeHWReport(status, 7);
+        setTubeHWReport(status, 8);
         break;
       case Heater3:
         restart_tube_error(9);
         restart_tube_error(10);
         restart_tube_error(11);
         restart_tube_error(12);
-        setTubeHWReport(HW_BITTEN_BY_WATCH_DOG, 9);
-        setTubeHWReport(HW_BITTEN_BY_WATCH_DOG, 10);
-        setTubeHWReport(HW_BITTEN_BY_WATCH_DOG, 11);
-        setTubeHWReport(HW_BITTEN_BY_WATCH_DOG, 12);
+        setTubeHWReport(status, 9);
+        setTubeHWReport(status, 10);
+        setTubeHWReport(status, 11);
+        setTubeHWReport(status, 12);
         break;
       case Heater4:
         restart_tube_error(13);
         restart_tube_error(14);
         restart_tube_error(15);
         restart_tube_error(16);
-        setTubeHWReport(HW_BITTEN_BY_WATCH_DOG, 13);
-        setTubeHWReport(HW_BITTEN_BY_WATCH_DOG, 14);
-        setTubeHWReport(HW_BITTEN_BY_WATCH_DOG, 15);
-        setTubeHWReport(HW_BITTEN_BY_WATCH_DOG, 16);
+        setTubeHWReport(status, 13);
+        setTubeHWReport(status, 14);
+        setTubeHWReport(status, 15);
+        setTubeHWReport(status, 16);
         break;
       default:
         break;
@@ -1500,7 +1503,7 @@ void TubeMessageHandler (long TubeId, xMessage *msg)
   preg = (ReadModbusRegsRes *)msg->ucData;
 #endif
 #ifdef USE_NEIGHBOUR_TUBE_TEMP_FEATURE
-  if((preg->addr >= TUBE1_TEMP_REG) && (preg->addr <= TUBE4_TEMP_REG))
+  if((preg->addr >= ADC_CODE1_REG) && (preg->addr <= ADC_CODE4_REG))
   {
     xMessage *msg;
     u16 value;
@@ -1865,10 +1868,10 @@ void NeighbourTubeTimerCallback( xTimerHandle pxTimer )
 #ifdef USE_NEIGHBOUR_TUBE_TEMP_FEATURE
   if(NULL != pxTimer)
   {
-    ReadTubeHeaterReg(4,  TUBE4_TEMP_REG, 1, TubeSequencerQueueHandle, FALSE);
-    ReadTubeHeaterReg(5,  TUBE1_TEMP_REG, 1, TubeSequencerQueueHandle, FALSE);
-    ReadTubeHeaterReg(12, TUBE4_TEMP_REG, 1, TubeSequencerQueueHandle, FALSE);
-    ReadTubeHeaterReg(13, TUBE1_TEMP_REG, 1, TubeSequencerQueueHandle, FALSE);
+    ReadTubeHeaterReg(4,  ADC_CODE4_REG, 1, TubeSequencerQueueHandle, FALSE);
+    ReadTubeHeaterReg(5,  ADC_CODE1_REG, 1, TubeSequencerQueueHandle, FALSE);
+    ReadTubeHeaterReg(12, ADC_CODE4_REG, 1, TubeSequencerQueueHandle, FALSE);
+    ReadTubeHeaterReg(13, ADC_CODE1_REG, 1, TubeSequencerQueueHandle, FALSE);
   }
 #endif
 }

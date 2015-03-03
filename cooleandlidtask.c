@@ -11,16 +11,19 @@
   * <h2><center>&copy; COPYRIGHT 2013 Xtel </center></h2>
   *
   ******************************************************************************
-  * pwmCh[0], TIM4,CH3 - PB8 -  J175 : PWM0_TIM4CH3 - TopHeater1Ctrl
-  * pwmCh[1], TIM4,CH4 - PB9 -  J26  : PWM1_TIM4CH4 - FAN control
-  * pwmCh[2], TIM3,CH1 - PC6 -  J33  : PWM2_TIM3CH1 - Peltier PWM 1
-  * pwmCh[3], TIM3,CH2 - PC7 -  J176 : PWM3_TIM3CH2 - TopHeater2Ctrl
-  * pwmCh[4], TIM3,CH3 - PC8 -  J35  : PWM4_TIM3CH3 - Peltier PWM 2
-  * adcCh[0], ADC CH0 -         J177 : RTD1         - Peltier_sens1  (Cold side)
-  * adcCh[1], ADC CH1 -         J173 : RTD2         - TopHeaterSens1
-  * adcCh[2], ADC CH2 -         J174 : RTD3         - TopHeaterSens2 (Ambient Air)
-  * adcCh[3], ADC CH3 -         J178 : RTD4         - Peltier_sens2  (Hot side)
-  */ 
+  **/
+
+/* Private feature defines ---------------------------------------------------*/
+#define USE_M3_ADC
+//#define USE_ADS1148
+#define USE_CL_DATA_LOGGING
+#define USE_ANALOG_WATCH_DOG
+
+/* Private debug define ------------------------------------------------------*/
+#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
+#define DEBUG_COOL
+//#define STANDALONE /*Defines if the M3 Runs with or without Linux box*/
+
 /* Includes ------------------------------------------------------------------*/
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,7 +37,11 @@
 #include "timers.h"
 #include "semphr.h"
 #include "signals.h"
+#ifdef USE_M3_ADC
+#include "adc.h"
+#else
 #include "ads1148.h"
+#endif
 #include "pid.h"
 #include "pwm.h"
 #include "gdi.h"
@@ -42,10 +49,6 @@
 #include "../heater-sw/heater_reg.h" // Error codes
 
 /* ---------------------------------------------------------------------------*/
-//#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
-//#define DEBUG_COOL
-//#define STANDALONE /*Defines if the M3 Runs with or without Linux box*/
-
 char buf[20];
 #define PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
 #ifdef DEBUG
@@ -54,7 +57,6 @@ char buf[20];
 #define DEBUG_PRINTF(fmt, args...)    /* Don't do anything in release builds */
 #endif
 #define LOCK_OUTPUT GPIO_Pin_8
-#define USE_CL_DATA_LOGGING
 #ifdef USE_CL_DATA_LOGGING
   #define CL_SAMPLES_PER_LOG  10    //Each log is the avarage over this number of samples
   #define CL_LOG_ELEMENT_SIZE 4     //Log all four sensors
@@ -148,12 +150,34 @@ static int16_t adcDiff[1] = {0};
 // Parameters for PWM
 static uint16_t pwmCh[5] = {0, 0, 0, 0, 0};
 
+/*                      GPIO                         On PCB Rev2      On PCB Rev3
+ * pwmCh[0], TIM4,CH3 - PB8 -  J175 : PWM0_TIM4CH3 - TopHeater1Ctrl   TopHeater1Ctrl
+ * pwmCh[1], TIM4,CH4 - PB9 -  J26  : PWM1_TIM4CH4 - FAN control      FAN control
+ * pwmCh[2], TIM3,CH1 - PC6 -  J33  : PWM2_TIM3CH1 - Peltier PWM 1    Peltier PWM 1
+ * pwmCh[3], TIM3,CH2 - PC7 -  J176 : PWM3_TIM3CH2 - TopHeater2Ctrl   TopHeater2Ctrl
+ * pwmCh[4], TIM3,CH3 - PC8 -  J35  : PWM4_TIM3CH3 - AUX PWM          Peltier PWM 2
+ * ADC PCB Rev2:                       
+ * adcCh[0], ADC CH0 -         J177 : RTD1         - Peltier_sens1  (Cold side)
+ * adcCh[1], ADC CH1 -         J173 : RTD2         - TopHeaterSens1
+ * adcCh[2], ADC CH2 -         J174 : RTD3         - TopHeaterSens2 (Ambient Air)
+ * adcCh[3], ADC CH3 -         J178 : RTD4         - Peltier_sens2  (Hot side)
+ * ADC PCB Rev3: 
+ * adcCh[0], ADC12_IN4 -       J??? :              - Peltier_sens1  (Cold side)
+ * adcCh[1], ADC12_IN5 -       J??? :              - TopHeaterSens1
+ * adcCh[2], ADC12_IN6 -       J??? :              - TopHeaterSens2 (Ambient Air)
+ * adcCh[3], ADC12_IN7 -       J??? :              - Peltier_sens2  (Hot side)
+ */ 
+// Fan controll is based on the temp diff: adcDiff[0] =  Fin temp - Ambient temp
+static int16_t *adcDiffSource[2] = {&adcCh[4], &adcCh[2]}; 
+
 static peltierData_t peltierData[1] = {
   {PELTIER_1, {STOP_STATE, -26213, &pwmCh[2], &adcCh[0]}}
+  /*{PELTIER_2, {STOP_STATE, -26213, &pwmCh[4], &adcCh[3]}}*/
 };
 
 static lidData_t lidData[1] = {
   {LID_HEATER_1, {STOP_STATE, -26213, &pwmCh[0], &adcCh[1]}}
+  /*{LID_HEATER_2, {STOP_STATE, -26213, &pwmCh[3], &adcCh[2]}}*/
 };
 
 static fanData_t fanData[1] = {
@@ -216,7 +240,11 @@ int getAdc(char *poutText)
   int16_t adcData[4];
 
   *poutText = 0;
+#ifdef USE_M3_ADC
+  adcGetLatest(&adcData[0], &adcData[1], &adcData[2], &adcData[3]);
+#else
   adsGetLatest(&adcData[0], &adcData[1], &adcData[2], &adcData[3]);
+#endif
   strcat(poutText,"<adc_values={");
   Itoa(adcData[0], str);
   strcat(poutText,str);
@@ -550,7 +578,11 @@ int getCoolandlidHWReport(char *poutText)
   uint16_t event;
   char str[5];
 
+#ifdef USE_M3_ADC
+  event = 0;  // Add similar fn for M3 ADC
+#else
   event = getADSStatusReg();
+#endif
   event |= getCLStatusReg();
   if(event)
   {
@@ -568,7 +600,7 @@ int getCoolandlidHWReport(char *poutText)
 /* ---------------------------------------------------------------------------*/
 void CoolAndLidTask( void * pvParameters )
 {
-  xSemaphoreHandle xADSSemaphore = NULL;
+  xSemaphoreHandle xADCSemaphore = NULL;
 
   xMessage *msg;
 
@@ -577,11 +609,18 @@ void CoolAndLidTask( void * pvParameters )
 #endif
 
   /* Create ADC synchrinization semaphore and let the ADC ISR know about it */
-  vSemaphoreCreateBinary(xADSSemaphore);
-  assert_param(NULL != xADSSemaphore);
-  xSemaphoreTake(xADSSemaphore, portMAX_DELAY); //Default is taken. ISR will give.
-  adsSetIsrSemaphore(xADSSemaphore);
+  vSemaphoreCreateBinary(xADCSemaphore);
+  assert_param(NULL != xADCSemaphore);
+  xSemaphoreTake(xADCSemaphore, portMAX_DELAY); //Default is taken. ISR will give.
   logInit();
+#ifdef USE_M3_ADC
+  adcSetIsrSemaphore(xADCSemaphore);
+  adcConfigConversionTimer(&adcTimerCallback);
+  adcInit();
+  adcStartSeq();
+  DEBUG_PRINTF("ADC Initialized\r\n");
+#else
+  adsSetIsrSemaphore(xADCSemaphore);
   vTaskDelay(1000); /* Wait for ADC to be ready */
   adsConfigConversionTimer(&adsTimerCallback);
   if(0 == ads1148Init())
@@ -596,9 +635,11 @@ void CoolAndLidTask( void * pvParameters )
     PRINTF("ADS1148 NOT OK\r\n");
     configASSERT(pdFALSE);
   }
+#endif
 // use "setCLStatusReg(HW_DEFAULT_CAL_USED)" if default calib is used
 #ifdef STANDALONE
   standAlone();
+  DEBUG_PRINTF("CL stand alone\r\n");
 #endif
 
   while(1)
@@ -606,7 +647,8 @@ void CoolAndLidTask( void * pvParameters )
   #ifdef DEBUG_COOL
       if (cnt == 50)
       {
-        DEBUG_PRINTF("PELC:%ld,%d,PELH:%ld,LID1:%ld,%d,ST:%d,LID2:%ld,%d,ST:%d", dac_2_temp(adcCh[0]), pwmCh[0], dac_2_temp(adcCh[3]), dac_2_temp(adcCh[1]), pwmCh[1],lidData[0].regulator.state, dac_2_temp(adcCh[2]), pwmCh[2],lidData[1].regulator.state);
+        //DEBUG_PRINTF("PELC:%ld,%d,PELH:%ld,LID1:%ld,%d,ST:%d,LID2:%ld,%d,ST:%d", adc_2_temp(adcCh[0]), pwmCh[0], adc_2_temp(adcCh[3]), adc_2_temp(adcCh[1]), pwmCh[1],lidData[0].regulator.state, adc_2_temp(adcCh[2]), pwmCh[2],lidData[1].regulator.state);
+        DEBUG_PRINTF("Adc:%4d, %4d, %4d, %4d", adcCh[0], adcCh[1], adcCh[2], adcCh[3]);
         cnt = 0;
       }
       cnt++;
@@ -615,14 +657,15 @@ void CoolAndLidTask( void * pvParameters )
     /* The ADC is startet by a timer that determines the sampling frequency      */
     /* wait indefinitely for the semaphore to become free i.e. the ISR frees it. */
     /* This also means the frequency is controlled by the ADC */
-    xSemaphoreTake(xADSSemaphore, portMAX_DELAY);
+    xSemaphoreTake(xADCSemaphore, portMAX_DELAY);
     /* The semaphore is given when the ADC is done */
     /* Read lastest ADC samples into buffer */
+#ifdef USE_M3_ADC
+    adcGetLatest(&adcCh[0], &adcCh[1], &adcCh[2], &adcCh[3]);
+#else
     adsGetLatest(&adcCh[0], &adcCh[1], &adcCh[2], &adcCh[3]);
-
-    /* adcCh[2], ADC CH2 -         J174 : RTD3         - TopHeaterSens2 (Ambient Air)*/
-    /* adcCh[3], ADC CH3 -         J178 : RTD4         - Peltier_sens2 (Hot side) */
-    adcDiff[0] =  adcCh[3] - adcCh[2]; // Fan controll is based on the temp diff
+#endif
+    adcDiff[0] =  adc_2_temp(*adcDiffSource[1]) - adc_2_temp(*adcDiffSource[0]); // Fan controll is based on the temp diff
 #ifndef STANDALONE
     peltier(&peltierData[0]);
     //peltier(&peltierData[1]);
@@ -657,9 +700,9 @@ void CoolAndLidTask( void * pvParameters )
         {
           SetCooleAndLidReq *p;
           p=(SetCooleAndLidReq *)(msg->ucData);
-          peltierData[0].regulator.setPoint = temp_2_dac(p->value);
+          peltierData[0].regulator.setPoint = temp_2_adc(p->value);
           peltierData[0].regulator.state = CTRL_CLOSED_LOOP_STATE;
-          //peltierData[1].regulator.setPoint = temp_2_dac(p->value);
+          //peltierData[1].regulator.setPoint = temp_2_adc(p->value);
           //peltierData[1].regulator.state = CTRL_CLOSED_LOOP_STATE;
         }
         break;
@@ -667,7 +710,7 @@ void CoolAndLidTask( void * pvParameters )
         {
           SetCooleAndLidReq *p;
           p=(SetCooleAndLidReq *)(msg->ucData);
-          lidData[p->idx-1].regulator.setPoint = temp_2_dac(p->value);
+          lidData[p->idx-1].regulator.setPoint = temp_2_adc(p->value);
           lidData[0].regulator.state = CTRL_CLOSED_LOOP_STATE;
           //lidData[1].regulator.state = CTRL_CLOSED_LOOP_STATE;
         }
@@ -709,13 +752,13 @@ void CoolAndLidTask( void * pvParameters )
           p=(SetCooleAndLidReq *)(msg->ucData);
           switch(p->idx) {
             case 0:
-              peltierData[0].regulator.setPoint = temp_2_dac(p->value);
+              peltierData[0].regulator.setPoint = temp_2_adc(p->value);
               break;
             case 1:
-              lidData[0].regulator.setPoint = temp_2_dac(p->value);
+              lidData[0].regulator.setPoint = temp_2_adc(p->value);
               break;
             case 2:
-              //lidData[1].regulator.setPoint = temp_2_dac(p->value);
+              //lidData[1].regulator.setPoint = temp_2_adc(p->value);
               break;
             case 3: //Aux PWM connecter (Rev3 PCB peltier 2)
               pwmCh[4] = p->value * 32768/100;

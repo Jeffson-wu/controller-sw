@@ -15,10 +15,10 @@
 
 #define STM32F051
 /* Private variables ---------------------------------------------------------*/
-TIM_TimeBaseInitTypeDef  TIM_TimeBaseStructure;
-TIM_OCInitTypeDef  TIM_OCInitStructure;
-uint16_t TimerPeriod_TIM3 = 0;
-uint16_t TimerPeriod_TIM4 = 0;
+static TIM_TimeBaseInitTypeDef TIM_TimeBaseStructure;
+static TIM_OCInitTypeDef  TIM_OCInitStructure;
+static uint16_t TimerPeriod_TIM3 = 0;
+static uint16_t TimerPeriod_TIM4 = 0;
 
 uint16_t Channel1Pulse = 0, Channel2Pulse = 0, Channel3Pulse = 0, Channel4Pulse = 0;
 
