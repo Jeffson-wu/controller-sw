@@ -20,8 +20,8 @@
 #define USE_ANALOG_WATCH_DOG
 
 /* Private debug define ------------------------------------------------------*/
-#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
-#define DEBUG_COOL
+//#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
+//#define DEBUG_COOL
 //#define STANDALONE /*Defines if the M3 Runs with or without Linux box*/
 
 /* Includes ------------------------------------------------------------------*/
@@ -614,9 +614,9 @@ void CoolAndLidTask( void * pvParameters )
   xSemaphoreTake(xADCSemaphore, portMAX_DELAY); //Default is taken. ISR will give.
   logInit();
 #ifdef USE_M3_ADC
+  // adcInit() is called from main() to obtain HW REV ID first thing. 
   adcSetIsrSemaphore(xADCSemaphore);
   adcConfigConversionTimer(&adcTimerCallback);
-  adcInit();
   adcStartSeq();
   DEBUG_PRINTF("ADC Initialized\r\n");
 #else
@@ -647,9 +647,17 @@ void CoolAndLidTask( void * pvParameters )
   #ifdef DEBUG_COOL
       if (cnt == 50)
       {
+        static int toggle = 0;
         //DEBUG_PRINTF("PELC:%ld,%d,PELH:%ld,LID1:%ld,%d,ST:%d,LID2:%ld,%d,ST:%d", adc_2_temp(adcCh[0]), pwmCh[0], adc_2_temp(adcCh[3]), adc_2_temp(adcCh[1]), pwmCh[1],lidData[0].regulator.state, adc_2_temp(adcCh[2]), pwmCh[2],lidData[1].regulator.state);
         DEBUG_PRINTF("Adc:%4d, %4d, %4d, %4d", adcCh[0], adcCh[1], adcCh[2], adcCh[3]);
         cnt = 0;
+        if(toggle) {
+          DEBUG_PRINTF("vmon: %d", readADC(ADC_VMON_MUX_CH));
+          toggle = 0;
+        } else {
+          DEBUG_PRINTF("hw_id: %d", readADC(ADC_HW_REV_ID_MUX_CH));
+          toggle = 1;
+        }
       }
       cnt++;
   #endif

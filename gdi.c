@@ -266,17 +266,20 @@ void gdi_send_msg_response(char * response)
 /* ---------------------------------------------------------------------------*/
 void gdi_send_msg_on_monitor(char * response)
 {
-  char i = 0;
-  int len = strlen(response)+3;
-  char message[strlen(response)+3];
-  strcpy(message, "\0");
-  strcat(message, response);
-  strcat(message, "\r\n");
-  while(i<len)
+  if(USART3_intitalized)
   {
-    while(USART_GetFlagStatus(USART3, USART_FLAG_TXE)==RESET);
-    USART_SendData(USART3,*(message+i));
-    i++;
+    char i = 0;
+    int len = strlen(response)+3;
+    char message[strlen(response)+3];
+    strcpy(message, "\0");
+    strcat(message, response);
+    strcat(message, "\r\n");
+    while(i<len)
+    {
+      while(USART_GetFlagStatus(USART3, USART_FLAG_TXE)==RESET);
+      USART_SendData(USART3,*(message+i));
+      i++;
+    }
   }
 }
 

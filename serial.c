@@ -48,7 +48,8 @@ static void (*receiveDataCB)()=0;
 static void (*receiveUART1CB)()=0;
 static void (*receiveUART3CB)()=0;
 
-
+// Global
+int USART3_intitalized = 0;
 
 void UART_SendMsg(USART_TypeDef *uart, u8 *buffer, int len)
 {
@@ -160,6 +161,7 @@ void UART_Init(USART_TypeDef *uart, void (*recvCallback)())
     NVIC_InitStructure.NVIC_IRQChannelSubPriority = 2;
     NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
     NVIC_Init(&NVIC_InitStructure);
+    USART3_intitalized = 1;
   }
   if(uart!=USART3)
     {

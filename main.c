@@ -44,6 +44,7 @@
 #include "trcHardwarePort.h"
 #include "util.h"
 #include "serial.h"
+#include "adc.h"
 #include "../heater-sw/heater_reg.h"
 
 /* Private feature defines ---------------------------------------------------*/
@@ -98,6 +99,7 @@ void LogOff();
 /* Global variables                                                           */
 /* ---------------------------------------------------------------------------*/
 char buf[300]; /*buffer for debug printf*/
+int HW_Rev_Id;
 
 /* ---------------------------------------------------------------------------*/
 /* Functions                                                                  */
@@ -224,12 +226,6 @@ void HW_Init(void)
   /* TIM Configuration */
   PWM_PinConfig();
 
-  NVIC_PriorityGroupConfig(NVIC_PriorityGroup_4);
-  /* FREERTOS CONFIG For simplicity all bits must be defined
-    to be pre-emption priority bits.  The following assertion will fail if
-    this is not the case (if some bits represent a sub-priority).
-      configASSERT( ( portAIRCR_REG & portPRIORITY_GROUP_MASK ) <= ulMaxPRIGROUPValue );*/
-
 #ifdef DEBUG_CLOCK_MSO
     /*Debug output on PA8 to measure actual clock*/
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA, ENABLE);
@@ -243,6 +239,16 @@ void HW_Init(void)
     //RCC_GetClocksFreq(&CLOCKS);
     //CLOCKS.SYSCLK_Frequency;
 #endif
+}
+
+/* ---------------------------------------------------------------------------*/
+void NVICInit(void)
+{
+  NVIC_PriorityGroupConfig(NVIC_PriorityGroup_4);
+  /* FREERTOS CONFIG For simplicity all bits must be defined
+    to be pre-emption priority bits.  The following assertion will fail if
+    this is not the case (if some bits represent a sub-priority).
+      configASSERT( ( portAIRCR_REG & portPRIORITY_GROUP_MASK ) <= ulMaxPRIGROUPValue );*/
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -447,10 +453,15 @@ void noRecieve(void)
   */
 int main(void)
 {
+  NVICInit(); // MUST be done prior to adcInit()
+  adcInit();
+  HW_Rev_Id = readHwRevId(); // Obtain HW Revision ID ASAP
   HW_Init();
   UART_Init(USART3,noRecieve); /*Only for monitoring no RX*/
   PWM_Init(20000,20000); //20kHz PWM : (TIM3(Topheater2,Peltier, Aux), TIM4(Topheater1, Fan))
   UART_SendMsg(USART3, (u8*)"Monitor Port UP\r\n" , 17);
+  sprintf(buf, "HW Rev ID = %d", HW_Rev_Id);
+  gdi_send_msg_on_monitor(buf);
   init_os_trace(); /*GDB CMD:dump binary memory gdb_dump_23.txt 0x20000000 0x20010000  -- http://percepio.com/*/
   PWM_Stop();
 
@@ -475,7 +486,6 @@ int main(void)
   vTaskStartScheduler();
   return 0;
 }
-
 
 #ifdef  USE_FULL_ASSERT
 /**

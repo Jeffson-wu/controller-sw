@@ -14,7 +14,6 @@
   */ 
 /* Includes ------------------------------------------------------------------*/
 #include <stdio.h>
-#include <stm32f10x_adc.h>
 #include <stm32f10x_gpio.h>
 #include <stm32f10x_tim.h>
 #include "FreeRTOS.h"
@@ -34,7 +33,7 @@
 #define COEF_A (-43.1879)
 #define COEF_B (-13.0872)
 
-/* Private debug define ------------------------------------------------------*/
+/* Private debug defines -----------------------------------------------------*/
 //#define DEBUG
 
 char buf[20];
@@ -102,9 +101,11 @@ void adcInit()
   RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC1, ENABLE);
   
   // Init GPIO
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_4 | GPIO_Pin_5 | GPIO_Pin_6 | GPIO_Pin_7; 
+  GPIO_InitStructure.GPIO_Pin = ADC_PIN_CH_0 | ADC_PIN_CH_1 | ADC_PIN_CH_2 | ADC_PIN_CH_3; 
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AIN;
-  GPIO_Init(GPIOA, &GPIO_InitStructure);
+  GPIO_Init(ADC_PORT_TEMP_SENSE, &GPIO_InitStructure);
+  GPIO_InitStructure.GPIO_Pin = ADC_AUX_PIN_CH_0 | ADC_AUX_PIN_CH_1; 
+  GPIO_Init(ADC_PORT_AUX_SENSE, &GPIO_InitStructure);
 
   //Init irq
   NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0x0D   /*0x0B - 0x0F */;
@@ -114,40 +115,67 @@ void adcInit()
   NVIC_Init(&NVIC_InitStructure);
 
   // Init ADC
+  ADC_DeInit(ADC1);
   ADC_StructInit(&ADC_InitStructure);
   ADC_InitStructure.ADC_ScanConvMode = ENABLE;
   ADC_InitStructure.ADC_ContinuousConvMode = DISABLE;
   ADC_InitStructure.ADC_DataAlign = ADC_DataAlign_Right;
-  ADC_InitStructure.ADC_ExternalTrigConv = ADC_ExternalTrigConv_T1_CC1;
+  ADC_InitStructure.ADC_ExternalTrigConv = ADC_ExternalTrigConv_None;
   ADC_InitStructure.ADC_Mode = ADC_Mode_Independent;
   ADC_InitStructure.ADC_NbrOfChannel = 1;
-
+  ADC_Init(ADC1, &ADC_InitStructure);
+  
 #ifdef USE_ANALOG_WATCH_DOG
   ADC_AnalogWatchdogCmd(ADC1, ADC_AnalogWatchdog_SingleInjecEnable);
   ADC_AnalogWatchdogThresholdsConfig(ADC1, AWD_HIGH_THRESHOLD, 0); /*HighThreshold, LowThreshold */
-  ADC_AnalogWatchdogSingleChannelConfig(ADC1, ADC_Channel_7);
+  ADC_AnalogWatchdogSingleChannelConfig(ADC1, ADC_MUX_AWD_CH);
 #endif
 
   ADC_InjectedSequencerLengthConfig(ADC1, 4);
-  ADC_InjectedChannelConfig(ADC1, ADC_Channel_4, 1, ADC_SampleTime_239Cycles5);
-  ADC_InjectedChannelConfig(ADC1, ADC_Channel_5, 2, ADC_SampleTime_239Cycles5);
-  ADC_InjectedChannelConfig(ADC1, ADC_Channel_6, 3, ADC_SampleTime_239Cycles5);
-  ADC_InjectedChannelConfig(ADC1, ADC_Channel_7, 4, ADC_SampleTime_239Cycles5);
+  ADC_InjectedChannelConfig(ADC1, ADC_MUX_CH_0, 1, ADC_SampleTime_239Cycles5);
+  ADC_InjectedChannelConfig(ADC1, ADC_MUX_CH_1, 2, ADC_SampleTime_239Cycles5);
+  ADC_InjectedChannelConfig(ADC1, ADC_MUX_CH_2, 3, ADC_SampleTime_239Cycles5);
+  ADC_InjectedChannelConfig(ADC1, ADC_MUX_CH_3, 4, ADC_SampleTime_239Cycles5);
   ADC_InjectedDiscModeCmd(ADC1, DISABLE);
-
   ADC_ExternalTrigInjectedConvConfig(ADC1, ADC_ExternalTrigInjecConv_None);
   ADC_ExternalTrigInjectedConvCmd(ADC1, DISABLE);
   
-  ADC_Init(ADC1, &ADC_InitStructure);
+  ADC_RegularChannelConfig(ADC1, ADC_AUX_MUX_CH_0, 1, ADC_SampleTime_239Cycles5);
+  ADC_RegularChannelConfig(ADC1, ADC_AUX_MUX_CH_1, 2, ADC_SampleTime_239Cycles5);
 
   ADC_Cmd(ADC1, ENABLE); //Switch on ADC
-  
+
   // Calibrate ADC
   ADC_ResetCalibration(ADC1);
   while(ADC_GetResetCalibrationStatus(ADC1));
   ADC_StartCalibration(ADC1);
   while(ADC_GetCalibrationStatus(ADC1));
 
+}
+
+/* ---------------------------------------------------------------------------*/
+uint16_t readADC(u8 channel)
+{
+  uint16_t value;
+  ADC_RegularChannelConfig(ADC1, channel, 1, ADC_SampleTime_1Cycles5);
+  ADC_SoftwareStartConvCmd(ADC1, ENABLE);
+  while(ADC_GetFlagStatus(ADC1, ADC_FLAG_EOC) == RESET);
+  ADC_ClearFlag(ADC1, ADC_FLAG_EOC);
+  value = ADC_GetConversionValue(ADC1);
+  DEBUG_PRINTF("adc %d = %d", channel, value);
+  return value;
+}
+
+/* ---------------------------------------------------------------------------*/
+/* Read WH ID pin. Convert measured voltage to HW Revision                    */
+int readHwRevId(void)
+{
+  uint16_t hw_id_value;
+  hw_id_value = readADC(ADC_HW_REV_ID_MUX_CH);
+  if      (hw_id_value < HW_ID_REV0_LEVEL) return 1 /*HW_REV_0*/;
+  else if (hw_id_value < HW_ID_REV1_LEVEL) return 2 /*HW_REV_1*/;
+  else if (hw_id_value < HW_ID_REV0_LEVEL) return 3 /*HW_REV_2*/;
+  else return 0;
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -224,7 +252,7 @@ void adcSetIsrSemaphore(xSemaphoreHandle sem)
 }
 
 /* ---------------------------------------------------------------------------*/
-/* Sequential ADC is starte by calling adsStartSeq() which starts the first conversion on ch 0  */
+/* Sequential ADC is started by calling adsStartSeq() which starts the first conversion on ch 0  */
 /*                                                                                                                                   */
 void ADC_Handler(void)
 {
@@ -246,17 +274,17 @@ void ADC_Handler(void)
        running task is lower prio adcConfigConversionTimer (pdTRUE to do so) */
     xSemaphoreGiveFromISR(ADCSemaphore, &xHigherPriorityTaskWoken); 
   }
-#if 0
   /* ADC_IT_EOC: Regular channels */
   if(SET == ADC_GetITStatus(ADC1, ADC_IT_EOC))
   {
     ADC_ClearITPendingBit(ADC1, ADC_IT_EOC);
+#if 0
     xHigherPriorityTaskWoken = pdFALSE;
     /* Synchronize adcConfigConversionTimer. Do not require context switch in case
        running task is lower prio adcConfigConversionTimer (pdTRUE to do so) */
     xSemaphoreGiveFromISR(ADCSemaphore, &xHigherPriorityTaskWoken); 
-  }
 #endif
+  }
 }
 
 
