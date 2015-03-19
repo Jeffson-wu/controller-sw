@@ -13,7 +13,7 @@ TARGET = arm-none-eabi-
 CC = $(TARGET)gcc
 OBJCOPY = $(TARGET)objcopy
 INCLUDES = -I ./include -I ./board -I ./arch -I ./freertos/include -I ./ -I ./freertos/portable/GCC/ARM_CM3 -I ./GenericRecorderLibSrc/Include -I./GenericRecorderLibSrc/ConfigurationTemplate
-CFLAGS = -g -O0 -c -Wall -Werror -mcpu=cortex-m3 -mthumb -D__START=main -D__STARTUP_CLEAR_BSS -DSTM32F1XX -DUSE_STDPERIPH_DRIVER $(INCLUDES)
+CFLAGS = -g -O0 -c -Wall -Werror -mcpu=cortex-m3 -mthumb -D__BUILD_DATE=$$(date +'"%Y%m%d%T"') -D__START=main -D__STARTUP_CLEAR_BSS -DSTM32F1XX -DUSE_STDPERIPH_DRIVER $(INCLUDES)
 
 LDFLAGS = -T arch/stm32f1x.ld -mcpu=cortex-m3 -mthumb -nostartfiles -Wl,--gc-section
 LIBS = -lc -lgcc -lnosys -lm
