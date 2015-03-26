@@ -562,6 +562,7 @@ void HardFault_Handler(void)
 
 void prvGetRegistersFromStack( uint32_t *pulFaultStackAddress )
 {
+  static uint32_t hardFaultSP;
   /* These are volatile to try and prevent the compiler/linker optimising them
   away as the variables never actually get used.  If the debugger won't show the
   values of the variables, make them global my moving their declaration outside
@@ -579,6 +580,7 @@ void prvGetRegistersFromStack( uint32_t *pulFaultStackAddress )
   volatile uint32_t r10;
   volatile uint32_t r11;
   volatile uint32_t r12;
+  /*                sp is held in pulFaultStackAddress */
   volatile uint32_t lr; /* Link register. */
   volatile uint32_t pc; /* Program counter. */
   volatile uint32_t psr;/* Program status register. */
@@ -597,6 +599,8 @@ void prvGetRegistersFromStack( uint32_t *pulFaultStackAddress )
   register unsigned int _r9  __asm("r9");
   register unsigned int _r10 __asm("r10");
   register unsigned int _r11 __asm("r11");
+  register unsigned int _r13 __asm("r13");
+  hardFaultSP = _r13; // Save current SP to find variables below in a RAM dump.
 
   r0 = pulFaultStackAddress[ 0 ];
   r1 = pulFaultStackAddress[ 1 ];
@@ -634,25 +638,21 @@ void prvGetRegistersFromStack( uint32_t *pulFaultStackAddress )
   _MMAR = (*((volatile unsigned long *)(0xE000ED34))) ;
   // Bus Fault Address Register
   _BFAR = (*((volatile unsigned long *)(0xE000ED38))) ;
-  
+
+  GPIO_SetBits(GPIOB,GPIO_Pin_11);  /* Turn on error LED */
+  GPIO_ResetBits(GPIOC,GPIO_Pin_9); /* Turn off hartbeat LED */
+
+  GPIO_SetBits(GPIOB,GPIO_Pin_0);   /* Turn on RX LED */
+  GPIO_SetBits(GPIOB,GPIO_Pin_1);   /* Turn on TX LED */
+  PWM_Set(0,TopHeaterCtrl1PWM);
+  PWM_Set(0,TopHeaterCtrl2PWM);
+  PWM_Set(0,FANctrlPWM); 
+  PWM_Set(0,PeltierCtrl1PWM);
+  PWM_Set(0,AuxCtrlPWM);
+
   //__asm("BKPT #0\n") ; // Break into the debugger
 
-  /* When the following line is hit, the variables contain the register values. */
-#if 1
-    GPIO_SetBits(GPIOB,GPIO_Pin_11);  /* Turn on error LED */
-    GPIO_ResetBits(GPIOC,GPIO_Pin_9); /* Turn off hartbeat LED */
-    
-    GPIO_SetBits(GPIOB,GPIO_Pin_0);   /* Turn on RX LED */
-    GPIO_SetBits(GPIOB,GPIO_Pin_1);   /* Turn on TX LED */
-    PWM_Set(0,TopHeaterCtrl1PWM);
-    PWM_Set(0,TopHeaterCtrl2PWM);
-    PWM_Set(0,FANctrlPWM); 
-    PWM_Set(0,PeltierCtrl1PWM);
-    PWM_Set(0,AuxCtrlPWM);
-    while (1) {}
-    // Go to core dump mode instead of the infinite loop
-#endif
-  //for( ;; );
+  while (1) {} // Go to core dump mode instead of the infinite loop
   r0=r0;
   r1=r1;
   r2=r2;
@@ -669,6 +669,7 @@ void prvGetRegistersFromStack( uint32_t *pulFaultStackAddress )
   lr=lr;
   pc=pc;
   psr=psr;
+  hardFaultSP=hardFaultSP;
   
   _CFSR=_CFSR;
   _HFSR=_HFSR;
