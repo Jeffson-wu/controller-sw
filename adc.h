@@ -61,10 +61,12 @@
 uint16_t getADSStatusReg(void);
 // Set up ADC as we use it
 void adcInit(void);
+// Initialise analog watch dog
+void awdInit(uint8_t chToWatch);
 // Read a single channel
 uint16_t readADC(u8 channel);
 // Get HW REV ID
-int readHwRevId(void);
+uint16_t readHwRevId(void);
 // Retrieve latest value from all ADC channels.
 void adcGetLatest(int16_t * ch0value, int16_t * ch1value, int16_t * ch2value, int16_t * ch3value);
 // Setup timer to start conversions each 1/10 s

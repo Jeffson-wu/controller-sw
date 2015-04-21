@@ -13,7 +13,7 @@ TARGET = arm-none-eabi-
 CC = $(TARGET)gcc
 OBJCOPY = $(TARGET)objcopy
 INCLUDES = -I ./include -I ./board -I ./arch -I ./freertos/include -I ./ -I ./freertos/portable/GCC/ARM_CM3 -I ./GenericRecorderLibSrc/Include -I./GenericRecorderLibSrc/ConfigurationTemplate
-CFLAGS = -g -O0 -c -Wall -Werror -mcpu=cortex-m3 -mthumb -D__BUILD_DATE=$$(date +'"%Y%m%d%T"') -D__START=main -D__STARTUP_CLEAR_BSS -DSTM32F1XX -DUSE_STDPERIPH_DRIVER $(INCLUDES)
+CFLAGS = -g -O0 -c -Wall -Werror -mcpu=cortex-m3 -mthumb -ffunction-sections -D__START=main -D__STARTUP_CLEAR_BSS -DSTM32F1XX -DUSE_STDPERIPH_DRIVER $(INCLUDES)
 
 LDFLAGS = -T arch/stm32f1x.ld -mcpu=cortex-m3 -mthumb -nostartfiles -Wl,--gc-section
 LIBS = -lc -lgcc -lnosys -lm
@@ -23,6 +23,7 @@ PROGRAM = controller
 
 SOURCES = \
     main.c \
+    version.c \
     util.c \
     serial.c \
     modbus.c \
@@ -32,7 +33,7 @@ SOURCES = \
     sequencer.c \
     cooleandlidtask.c \
     logtask.c \
-	pid.c \
+    pid.c \
     arch/startup.S \
     arch/system_stm32f10x.c \
     arch/core_cm3.c \
@@ -78,9 +79,19 @@ OBJS = $(patsubst %,$(OBJECTS_DIR)/%,$(SOURCES:%.c=%.o))
 OBJECTS = $(OBJS:%.S=%.o)
 DEPS = $(patsubst %,$(DEPENDS_DIR)/%,$(SOURCES:%.c=%.d))
 DEPENDS = $(DEPS:%.S=%.d)
+GITO = $(shell git status --porcelain)
 
 all: $(SOURCES) $(PROGRAM) $(PROGRAM).hex
-	@rm $(OBJECTS_DIR)/main.o
+
+.PHONY: version.c
+
+version.c:
+	echo '#include "version.h"' > $@ 
+	echo '/* This file is AUTO GENERATED - Do NOT Check in!!! */' >> $@
+	echo 'char buildRevStr[] = SW_VERSION ;' >> $@ 
+	echo -n 'char buildDateStr[] = ' >> $@ 
+	date +'"%Y.%m.%d-%T";' >> $@ 
+	echo -n "char gitCommitIdStr[] = \"$(shell git describe --always --dirty)\";" >> $@
 
 $(PROGRAM): $(OBJECTS)
 	@echo -n "Linking $@... "
@@ -111,7 +122,7 @@ $(OBJECTS_DIR)/%.o: %.S
 -include $(DEPENDS)
 
 clean:
-	@rm -rf $(OBJECTS) $(PROGRAM) $(UPDATEIMAGE)
+	@rm -rf $(OBJECTS) $(PROGRAM) $(UPDATEIMAGE) version.c
 
 clean-all: clean
 	@rm -rf $(DEPENDS)

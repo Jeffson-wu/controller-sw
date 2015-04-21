@@ -14,13 +14,14 @@
   */ 
 /* Includes ------------------------------------------------------------------*/
 #include <stdio.h>
+#include <math.h>
 #include <stm32f10x_gpio.h>
 #include <stm32f10x_tim.h>
 #include "FreeRTOS.h"
 #include "task.h"
-#include "gdi.h" //Debug printf
 #include "adc.h"
-#include <math.h>
+#include "gdi.h" //Debug printf
+#include "pwm.h" //PWM_Stop()
 
 /* ---------------------------------------------------------------------------*/
 /* Private feature defines ---------------------------------------------------*/
@@ -29,7 +30,7 @@
 #define AWD_HIGH_THRESHOLD 4096
 #define ADC1_DR_Address ((uint32_t)0x4001244C)
 
-#define BETA 3984
+#define BETA 3984.0
 #define COEF_A (-43.1879)
 #define COEF_B (-13.0872)
 
@@ -58,6 +59,7 @@ static xSemaphoreHandle ADCSemaphore = NULL;
 /* ---------------------------------------------------------------------------*/
 /* Public functions ----------------------------------------------------------*/
 /* ---------------------------------------------------------------------------*/
+#define HEART_BEAT_LED GPIOC,GPIO_Pin_9
 int32_t adc_2_temp(signed short adc)
 {
 #if 0
@@ -68,7 +70,6 @@ int32_t adc_2_temp(signed short adc)
 #if 0
   res = BETA / ((1/adc) * COEF_A - COEF_B);
 #else
-#define HEART_BEAT_LED GPIOC,GPIO_Pin_9
   GPIO_SetBits(HEART_BEAT_LED);/*RX LED*/
   res = BETA / logf( ((1/adc) * COEF_A - COEF_B) );
   GPIO_ResetBits(HEART_BEAT_LED);/*RX LED*/
@@ -124,12 +125,6 @@ void adcInit()
   ADC_InitStructure.ADC_Mode = ADC_Mode_Independent;
   ADC_InitStructure.ADC_NbrOfChannel = 1;
   ADC_Init(ADC1, &ADC_InitStructure);
-  
-#ifdef USE_ANALOG_WATCH_DOG
-  ADC_AnalogWatchdogCmd(ADC1, ADC_AnalogWatchdog_SingleInjecEnable);
-  ADC_AnalogWatchdogThresholdsConfig(ADC1, AWD_HIGH_THRESHOLD, 0); /*HighThreshold, LowThreshold */
-  ADC_AnalogWatchdogSingleChannelConfig(ADC1, ADC_MUX_AWD_CH);
-#endif
 
   ADC_InjectedSequencerLengthConfig(ADC1, 4);
   ADC_InjectedChannelConfig(ADC1, ADC_MUX_CH_0, 1, ADC_SampleTime_239Cycles5);
@@ -154,6 +149,16 @@ void adcInit()
 }
 
 /* ---------------------------------------------------------------------------*/
+void awdInit(uint8_t chToWatch) /* Initialise analog watch dog */
+{
+#ifdef USE_ANALOG_WATCH_DOG
+  ADC_AnalogWatchdogCmd(ADC1, ADC_AnalogWatchdog_SingleInjecEnable);
+  ADC_AnalogWatchdogThresholdsConfig(ADC1, AWD_HIGH_THRESHOLD, 0); /*HighThreshold, LowThreshold */
+  ADC_AnalogWatchdogSingleChannelConfig(ADC1, chToWatch);
+#endif
+}
+
+/* ---------------------------------------------------------------------------*/
 uint16_t readADC(u8 channel)
 {
   uint16_t value;
@@ -168,7 +173,7 @@ uint16_t readADC(u8 channel)
 
 /* ---------------------------------------------------------------------------*/
 /* Read WH ID pin. Convert measured voltage to HW Revision                    */
-int readHwRevId(void)
+uint16_t readHwRevId(void)
 {
   uint16_t hw_id_value;
   hw_id_value = readADC(ADC_HW_REV_ID_MUX_CH);
@@ -256,35 +261,48 @@ void adcSetIsrSemaphore(xSemaphoreHandle sem)
 /*                                                                                                                                   */
 void ADC_Handler(void)
 {
+  //  vTraceStoreISRBegin(??);
   static portBASE_TYPE xHigherPriorityTaskWoken;
 
 #ifdef USE_ANALOG_WATCH_DOG
   if(SET == ADC_GetITStatus(ADC1, ADC_IT_AWD))
   {
     ADC_ClearITPendingBit(ADC1, ADC_IT_AWD);
-    // #### JRJ #### KILL Peltier - Reconfig pin to GPIO, set inactive.
+    stopPeltier();// #### JRJ #### KILL Peltier.
+    //xTimerPendFunctionCallFromISR( fn, NULL, (uint32_t) 0, &xHigherPriorityTaskWoken );
+    //  vTraceStoreISREnd();
+    if(SET == ADC_GetITStatus(ADC1, ADC_IT_JEOC)) { ADC_ClearITPendingBit(ADC1, ADC_IT_JEOC); }
+    if(SET == ADC_GetITStatus(ADC1, ADC_IT_EOC))  { ADC_ClearITPendingBit(ADC1, ADC_IT_EOC); }
+    portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
+    return;
   }
+  else
+  {
 #endif
-  /* ADC_IT_JEOC: injected channels */
-  if(SET == ADC_GetITStatus(ADC1, ADC_IT_JEOC))
-  {
-    ADC_ClearITPendingBit(ADC1, ADC_IT_JEOC);
-    xHigherPriorityTaskWoken = pdFALSE;
-    /* Synchronize adcConfigConversionTimer. Do not require context switch in case
-       running task is lower prio adcConfigConversionTimer (pdTRUE to do so) */
-    xSemaphoreGiveFromISR(ADCSemaphore, &xHigherPriorityTaskWoken); 
-  }
-  /* ADC_IT_EOC: Regular channels */
-  if(SET == ADC_GetITStatus(ADC1, ADC_IT_EOC))
-  {
-    ADC_ClearITPendingBit(ADC1, ADC_IT_EOC);
+    /* ADC_IT_JEOC: injected channels */
+    if(SET == ADC_GetITStatus(ADC1, ADC_IT_JEOC))
+    {
+      ADC_ClearITPendingBit(ADC1, ADC_IT_JEOC);
+      xHigherPriorityTaskWoken = pdFALSE;
+      /* Synchronize adcConfigConversionTimer. Do not require context switch in case
+         running task is lower prio adcConfigConversionTimer (pdTRUE to do so) */
+      xSemaphoreGiveFromISR(ADCSemaphore, &xHigherPriorityTaskWoken); 
+    }
+    /* ADC_IT_EOC: Regular channels */
+    if(SET == ADC_GetITStatus(ADC1, ADC_IT_EOC))
+    {
+      ADC_ClearITPendingBit(ADC1, ADC_IT_EOC);
 #if 0
-    xHigherPriorityTaskWoken = pdFALSE;
-    /* Synchronize adcConfigConversionTimer. Do not require context switch in case
-       running task is lower prio adcConfigConversionTimer (pdTRUE to do so) */
-    xSemaphoreGiveFromISR(ADCSemaphore, &xHigherPriorityTaskWoken); 
+      xHigherPriorityTaskWoken = pdFALSE;
+      /* Synchronize adcConfigConversionTimer. Do not require context switch in case
+         running task is lower prio adcConfigConversionTimer (pdTRUE to do so) */
+      xSemaphoreGiveFromISR(ADCSemaphore, &xHigherPriorityTaskWoken); 
 #endif
+    }
+#ifdef USE_ANALOG_WATCH_DOG
   }
+#endif
+  //  vTraceStoreISREnd();
 }
 
 

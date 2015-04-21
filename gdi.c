@@ -34,6 +34,7 @@
 #include <ctype.h>
 
 /* Private feature defines ---------------------------------------------------*/
+#define USE_FLOAT_REG_FEATURE
 /* '\n'=0x0D=13, '\r'=0x0A=10 */
 #define CHAR_ENTER '\r'
 #define CHAR_BACKSPACE '\b'
@@ -43,6 +44,7 @@ int uid;
 // wich is 25 + 36 * 35 (for 35 cycles of 3 stages) 
 #define INPUT_BUF_SIZE 500
 #define SIZE_OF_STR_RESULT 400
+#define CRASH_KEY 666
 
 /* Private debug define ------------------------------------------------------*/
 //#define DEBUG_USE_ECHO_AS_DEFAULT
@@ -74,8 +76,8 @@ extern xQueueHandle CoolAndLidQueueHandle;
 USART_TypeDef *uart = USART1;
 u32 test_variable= 9876543;
 
-u8 DebugModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer);
-bool DebugModbusWriteRegs(u8 slave, u16 addr, u8 *data, u16 datasize);
+u8 DebugModbusReadRegs(u8 slave, u16 addr, u16 register_count, u8 *buffer);
+bool DebugModbusWriteRegs(u8 slave, u16 addr, u8 *data, u16 register_count);
 
 enum gdi_response_type
 {
@@ -97,12 +99,17 @@ enum gdi_func_type
   fan,
   seq_cmd,
   test_func,
+#ifdef USE_FLOAT_REG_FEATURE
+  modbus_read_regs_float,
+  modbus_write_regs_float,
+#endif
   modbus_read_regs,
   modbus_write_regs,
   modbus_Synchronize_LED,
   modbus_LED,
   setpwm,
   getadc,
+  crash_cmd,
   invalid_command
 };
 
@@ -137,13 +144,24 @@ gdi_func_table_type gdi_func_info_table[] =
   {"lidpwm",  " Set lid pwm value",       "at@gdi:lidpwm(idx, pwm)",    lidpwm },
   {"fan",     " Set fan speed % ",                "at@gdi:fan(idx, setpoint)",fan },
   {"test_func",         " Test function call",    "at@gdi:test_func(parameter1,parameter2)",test_func},
+#ifdef USE_FLOAT_REG_FEATURE
+  {"modbus_read_regs_float",  " Read register values as float",  "at@gdi:modbus_read_regs_float(slave,addr,datasize)",modbus_read_regs_float},
+  {"modbus_write_regs_float", " Write register values as float", "at@gdi:modbus_write_regs_float(slave,addr,[data1,data2,..],datasize)",modbus_write_regs_float},
+#endif
   {"modbus_read_regs",  " Read register values",  "at@gdi:modbus_read_regs(slave,addr,datasize)",modbus_read_regs},
   {"modbus_write_regs", " Write register values", "at@gdi:modbus_write_regs(slave,addr,[data1,data2,..],datasize)",modbus_write_regs},
   {"synchronizeled",    " Synchronize tube LEDs", "at@gdi:SynchronizeLED()",modbus_Synchronize_LED},
   {"setpwm",  " Set PWM value",                   "at@gdi:setpwm(idx, pwm)",setpwm },
   {"getadc",  " Get latest ADC values",           "at@gdi:getadc()",        getadc },
+  {"crash",  " Force crash",                      "at@gdi:crash(key)",      crash_cmd },
   { NULL, NULL, NULL, 0 }
 }; 
+
+#ifdef USE_FLOAT_PRECICION_DOUBLE
+  typedef double gdi_float;
+#else
+  typedef float gdi_float;
+#endif
 
 typedef struct 
 {
@@ -157,6 +175,9 @@ typedef struct
 struct_gdi_req_func_info gdi_req_func_info;
 
 /* Functions -----------------------------------------------------------------*/
+void (*forceHardFault)(void);
+
+/* ---------------------------------------------------------------------------*/
 int send_led_cmd(u16 fn, long TubeId) 
 {
   xMessage *msg;
@@ -475,6 +496,165 @@ void gdi_print_wrong_endian_number(int number, u8 status)
 }
 
 /* ---------------------------------------------------------------------------*/
+#ifdef USE_FLOAT_REG_FEATURE
+#if 1 //sprintf(str, "%f", number); causes a Hardfault print hex instead
+void gdi_print_wrong_endian_gdi_float(gdi_float number, u8 status)
+{
+  gdi_float in = number;
+  unsigned int *pval = (unsigned int *)&in;
+  u16 * swap_p = (u16*)&in;
+  u16 swap_tmp;
+
+  if(status == newline_start || status == newline_both)
+  {
+    USART_SendData(uart, '\r');
+    while (USART_GetFlagStatus(uart, USART_FLAG_TXE) == RESET);
+    USART_SendData(uart, '\n');
+    while (USART_GetFlagStatus(uart, USART_FLAG_TXE) == RESET);
+  }
+
+  if (number == 0)
+  {
+    USART_SendData(uart, '0');
+    while (USART_GetFlagStatus(uart, USART_FLAG_TXE) == RESET);
+  }
+  else {
+    char str[20];
+    int i;
+    
+    //ByteSwap for Modbus
+    for(i = 0; i < (sizeof(gdi_float)/2); i++)
+    {
+      swap_tmp = *swap_p;
+      *swap_p = ( (swap_tmp>>8 & 0x00FF) + (swap_tmp<<8 &0xFF00) );
+      swap_p++;
+    }
+#ifdef USE_FLOAT_PRECICION_DOUBLE
+    sprintf(str, "0x%08x%08x", *(pval+1), *pval);
+#else
+    sprintf(str, "0x%08x", *pval);
+#endif
+    for(i=0;i<strlen(str);i++)
+    {
+      USART_SendData(uart, str[i]);
+      while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
+    }
+  }
+
+  if(status == space_end)
+  {
+    USART_SendData(uart, ' ');
+    while (USART_GetFlagStatus(uart, USART_FLAG_TXE) == RESET);
+  }
+
+  if(status == newline_end || status == newline_both)
+  {
+    USART_SendData(uart, '\r');
+    while (USART_GetFlagStatus(uart, USART_FLAG_TXE) == RESET);
+    USART_SendData(uart, '\n');
+    while (USART_GetFlagStatus(uart, USART_FLAG_TXE) == RESET);
+  }
+}
+#else
+void gdi_print_wrong_endian_gdi_float(gdi_float number, u8 status)
+{
+  gdi_float in = number;
+  u16 * swap_p = (u16*)&in;
+  u16 swap_tmp;
+
+  if(status == newline_start || status == newline_both)
+  {
+    USART_SendData(uart, '\r');
+    while (USART_GetFlagStatus(uart, USART_FLAG_TXE) == RESET);
+    USART_SendData(uart, '\n');
+    while (USART_GetFlagStatus(uart, USART_FLAG_TXE) == RESET);
+  }
+
+  if (number == 0)
+  {
+    USART_SendData(uart, '0');
+    while (USART_GetFlagStatus(uart, USART_FLAG_TXE) == RESET);
+  }
+  else {
+    char str[20];
+    int i;
+    //ByteSwap for Modbus
+    for(i = 0; i < (sizeof(gdi_float)/2); i++)
+    {
+      swap_tmp = *swap_p;
+      *swap_p = ( (swap_tmp>>8 & 0x00FF) + (swap_tmp<<8 &0xFF00) );
+      swap_p++;
+    }
+    sprintf(str, "%f", number); // This causes a Hardfault
+    for(i=0;i<strlen(str);i++)
+    {
+      USART_SendData(uart, str[i]);
+      while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
+    }
+  }
+
+  if(status == space_end)
+  {
+    USART_SendData(uart, ' ');
+    while (USART_GetFlagStatus(uart, USART_FLAG_TXE) == RESET);
+  }
+
+  if(status == newline_end || status == newline_both)
+  {
+    USART_SendData(uart, '\r');
+    while (USART_GetFlagStatus(uart, USART_FLAG_TXE) == RESET);
+    USART_SendData(uart, '\n');
+    while (USART_GetFlagStatus(uart, USART_FLAG_TXE) == RESET);
+  }
+}
+#endif //1 //sprintf(str, "%f", number); causes a Hardfault print hex instead
+
+/* ---------------------------------------------------------------------------*/
+int gdi_get_regwrite_float_values(gdi_float * fbuffer)
+{
+  int i = 0, j = 0, start_pos = 0, end_pos = 0;
+  char *token;
+  u16 swap_tmp;
+  u16 * swap_p = (u16*)&fbuffer[0];
+  while(gdi_req_func_info.parameters[i])
+  {
+    if (strchr(gdi_req_func_info.parameters[i], '[') != NULL)
+      start_pos= i;
+    if ((strchr(gdi_req_func_info.parameters[i], ']') != NULL) && (0 != start_pos))
+      end_pos=i;
+      i++;
+  }
+  if((end_pos != 0) && (start_pos <= end_pos))
+  {
+    gdi_float tmp;
+    tmp =  (gdi_float) atof((*(gdi_req_func_info.parameters + start_pos))+1); // +1 to point past the initial '['
+    fbuffer[j++] = tmp;
+    for(i = start_pos + 1; i < end_pos; i++)
+    {
+      tmp = (gdi_float) atof(*(gdi_req_func_info.parameters + i));
+      fbuffer[j++] = tmp;
+    }
+    if(end_pos > start_pos + 1)
+    {
+      token = *(gdi_req_func_info.parameters + end_pos);
+      token[strlen(token) - 1] = '\0'; // Remove trailing ']'
+      tmp = (gdi_float) atof(token);
+      fbuffer[j] = tmp;
+    }
+    //ByteSwap for Modbus
+    for(i = 0; i < (end_pos-start_pos+1)*(sizeof(gdi_float)/2); i++)
+    {
+      swap_tmp = *swap_p;
+      *swap_p = ( (swap_tmp>>8 & 0x00FF) + (swap_tmp<<8 &0xFF00) );
+      swap_p++;
+    }
+    return end_pos + 1;
+  }
+  return 0;
+}
+#endif // USE_FLOAT_REG_FEATURE
+
+/* ---------------------------------------------------------------------------*/
 int gdi_get_regwrite_values(u16 * buffer)
 {
   int i = 0, j = 0, start_pos = 0, end_pos = 0;
@@ -514,7 +694,16 @@ void gdi_map_to_functions()
   u16 p = 9876;
   u8 slave;
   u16 addr, datasize;
-  u16 buffer[50];
+#ifdef USE_FLOAT_REG_FEATURE
+  union /*DBG__attribute__ ((aligned (16)))*/ {
+    gdi_float gdi_float[50/(sizeof(gdi_float)/sizeof(uint16_t))];
+    uint16_t  uint16[50];
+  } buffer;
+#else
+  union {
+    u16 uint16[50];
+  } buffer;
+#endif
   char str[SIZE_OF_STR_RESULT];
   u16 seq_num;
   char state;
@@ -902,7 +1091,8 @@ void gdi_map_to_functions()
         gdi_send_data_response("OK", newline_end);
       break;
 
-      case modbus_read_regs :
+#ifdef USE_FLOAT_REG_FEATURE
+      case modbus_read_regs_float :
       {
         u8 result;
         u8 paramcount;
@@ -920,22 +1110,125 @@ void gdi_map_to_functions()
           slave = (u8) atoi(*(gdi_req_func_info.parameters + i + 0));
           addr = (u16) atoi(*(gdi_req_func_info.parameters + i + 1));
           datasize = (u16) atoi(*(gdi_req_func_info.parameters + i + 2)); 
+          if(gdiEcho) {
+            gdi_send_data_response("slave, addr and datasize are = ", newline_start);
+            gdi_print_number(slave, space_end);
+            gdi_print_number(addr, space_end);
+            gdi_print_number(datasize, newline_end);
+          }
+          if((0 == addr) || (0 == datasize)) {
+            gdi_send_data_response("ERROR", newline_both);
+          } else {
+            //gdi_float - adj datasize to float size
+            result = DebugModbusReadRegs(slave, addr, ((datasize * sizeof(gdi_float)) / 2), (u8 *)buffer.gdi_float);
+            if(NO_ERROR == result)
+            {
+              gdi_send_data_response("The register values read are : ", no_newline);
+              for (i=0; i<datasize;i++) { 
+                gdi_print_wrong_endian_gdi_float(buffer.gdi_float[i], space_end); 
+              }
+            }
+            gdi_send_data_response("The return value is : ", newline_start);
+            gdi_print_number(result, newline_end);
+            if(result == NO_ERROR)
+            {
+              gdi_send_data_response("OK", newline_end);
+            }
+            else
+            {
+              gdi_send_data_response("ERROR", newline_end);
+            }
 
-          gdi_send_data_response("slave, addr and datasize are = ", newline_start);
-          gdi_print_number(slave, space_end);
-          gdi_print_number(addr, space_end);
-          gdi_print_number(datasize, newline_end);
+          }
+        }
+      }
+      break;
+
+      case modbus_write_regs_float :
+      {
+        u8 result;
+        u8 paramcount;
+        if(!gdiEcho) {
+          uid = (u16) atoi(*(gdi_req_func_info.parameters + i));
+          i++;
+          paramcount = 4;
+        } else { 
+          paramcount = 3; 
+        }
+        if (gdi_req_func_info.number_of_parameters < paramcount)
+          gdi_send_data_response("ERROR", newline_both);
+        else
+        {
+          result = gdi_get_regwrite_float_values(buffer.gdi_float);
+          if (result == 0) {
+            gdi_send_data_response("ERROR", newline_both);
+          } else {
+            slave = (u8) atoi(*(gdi_req_func_info.parameters + i + 0));
+            addr = (u16) atoi(*(gdi_req_func_info.parameters + i + 1));
+            datasize = (u16) atoi(*(gdi_req_func_info.parameters + result)); //Do not add i as result already points to the parameter after values to write
+
+            if(gdiEcho) {
+              gdi_send_data_response("slave, addr and datasize are : ", newline_start);
+              gdi_print_number(slave, space_end);
+              gdi_print_number(addr, space_end);
+              gdi_print_number(datasize, newline_end);
+              gdi_send_data_response("The register values to write are : ", no_newline);
+              for(i=0; i < datasize; i++) {
+                gdi_print_wrong_endian_gdi_float(buffer.gdi_float[i], space_end);
+              }
+            }
+            result = DebugModbusWriteRegs(slave, addr, (u8 *)buffer.gdi_float, (datasize * sizeof(gdi_float) / 2));
+
+            gdi_send_data_response("The return value is : ", newline_start);
+            gdi_print_number(result, newline_end);
+
+            if (result != NO_ERROR) {
+              gdi_send_data_response("Register Write Failed!", newline_end);
+            } else {
+              gdi_send_data_response("OK", newline_end);
+            }
+          }
+        }
+      }
+      break;
+#endif
+
+      case modbus_read_regs :
+      {
+        u8 result;
+        u8 paramcount;
+        if(!gdiEcho) {
+          uid = (u16) atoi(*(gdi_req_func_info.parameters + i));
+          i++;
+          paramcount = 4;
+        } else {
+          paramcount = 3;
+        }
+        if (gdi_req_func_info.number_of_parameters < paramcount)
+          gdi_send_data_response("ERROR", newline_both);
+        else
+        {
+          slave = (u8) atoi(*(gdi_req_func_info.parameters + i + 0));
+          addr = (u16) atoi(*(gdi_req_func_info.parameters + i + 1));
+          datasize = (u16) atoi(*(gdi_req_func_info.parameters + i + 2));
+
+          if(gdiEcho) {
+            gdi_send_data_response("slave, addr and datasize are = ", newline_start);
+            gdi_print_number(slave, space_end);
+            gdi_print_number(addr, space_end);
+            gdi_print_number(datasize, newline_end);
+          }
 
           if((0 == addr) || (0 == datasize)) {
             gdi_send_data_response("ERROR", newline_both);
           } else {
-            result = DebugModbusReadRegs(slave, addr, datasize, (u8 *)buffer);
+            result = DebugModbusReadRegs(slave, addr, datasize, (u8 *)buffer.uint16);
 
             if(NO_ERROR == result)
             {
               gdi_send_data_response("The register values read are : ", no_newline);
               for (i=0; i<datasize;i++) { 
-                gdi_print_wrong_endian_number(buffer[i], space_end); 
+                gdi_print_wrong_endian_number(buffer.uint16[i], space_end); 
               }
             }
             gdi_send_data_response("The return value is : ", newline_start);
@@ -969,23 +1262,25 @@ void gdi_map_to_functions()
           gdi_send_data_response("ERROR", newline_both);
         else
         {
-          result = gdi_get_regwrite_values(buffer);
+          result = gdi_get_regwrite_values(buffer.uint16);
           if (result == 0) {
             gdi_send_data_response("ERROR", newline_both);
           } else {
             slave = (u8) atoi(*(gdi_req_func_info.parameters + i + 0));
             addr = (u16) atoi(*(gdi_req_func_info.parameters + i + 1));
-            datasize = (u16) atoi(*(gdi_req_func_info.parameters + i + result)); 
+            datasize = (u16) atoi(*(gdi_req_func_info.parameters + i + result)); //####JRJ Do not add i, add1?? - test this
 
-            gdi_send_data_response("slave, addr and datasize are : ", newline_start);
-            gdi_print_number(slave, space_end);
-            gdi_print_number(addr, space_end);
-            gdi_print_number(datasize, newline_end);
-            gdi_send_data_response("The register values to write are : ", no_newline);
-            for(i=0; i < datasize; i++) {
-              gdi_print_wrong_endian_number(buffer[i], space_end);
+            if(gdiEcho) {
+              gdi_send_data_response("slave, addr and datasize are : ", newline_start);
+              gdi_print_number(slave, space_end);
+              gdi_print_number(addr, space_end);
+              gdi_print_number(datasize, newline_end);
+              gdi_send_data_response("The register values to write are : ", no_newline);
+              for(i=0; i < datasize; i++) {
+                gdi_print_wrong_endian_number(buffer.uint16[i], space_end);
+              }
             }
-            result = DebugModbusWriteRegs(slave, addr, (u8 *)buffer, datasize);
+            result = DebugModbusWriteRegs(slave, addr, (u8 *)buffer.uint16, datasize);
 
             gdi_send_data_response("The return value is : ", newline_start);
             gdi_print_number(result, newline_end);
@@ -1084,6 +1379,18 @@ void gdi_map_to_functions()
         }
       }
       break;
+
+    case crash_cmd:
+    {
+      if(!gdiEcho) {
+        uid = (u16) atoi(*(gdi_req_func_info.parameters + i));
+        i++;
+      }
+      if(CRASH_KEY == (u16) atoi(*(gdi_req_func_info.parameters + i)))
+      {
+        forceHardFault();
+      }
+    }
 
     case invalid_command :
     {

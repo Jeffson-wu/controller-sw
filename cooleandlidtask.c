@@ -200,6 +200,15 @@ cl_logDataElement_t * cl_dequeue(cl_logDataQueue_t * pQueue);
 /* ---------------------------------------------------------------------------*/
 
 /* ---------------------------------------------------------------------------*/
+void stopPeltier()
+{
+  *peltierData[0].regulator.pwmVal = 0;
+  //*peltierData[1].regulator.pwmVal = 0;
+  peltierData[0].regulator.state = STOP_STATE;
+  //peltierData[1].regulator.state = STOP_STATE;
+}
+
+/* ---------------------------------------------------------------------------*/
 void standAlone() //These settings should be made from the Linux Box
 {
 
@@ -615,6 +624,7 @@ void CoolAndLidTask( void * pvParameters )
   logInit();
 #ifdef USE_M3_ADC
   // adcInit() is called from main() to obtain HW REV ID first thing. 
+  awdInit(7 /*chToWatch*/);
   adcSetIsrSemaphore(xADCSemaphore);
   adcConfigConversionTimer(&adcTimerCallback);
   adcStartSeq();

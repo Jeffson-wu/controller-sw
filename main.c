@@ -46,6 +46,7 @@
 #include "serial.h"
 #include "adc.h"
 #include "../heater-sw/heater_reg.h"
+#include "version.h"
 
 /* Private feature defines ---------------------------------------------------*/
 #define QUEUESIZE 10
@@ -99,8 +100,7 @@ void LogOff();
 /* Global variables                                                           */
 /* ---------------------------------------------------------------------------*/
 char buf[300]; /*buffer for debug printf*/
-int HW_Rev_Id;
-const char const* BUILD_DATE = __BUILD_DATE;
+
 /* ---------------------------------------------------------------------------*/
 /* Functions                                                                  */
 /* ---------------------------------------------------------------------------*/
@@ -446,11 +446,10 @@ void noRecieve(void)
 }
 
 /* ---------------------------------------------------------------------------*/
-/**
-  * @brief  Main program.
-  * @param  None
-  * @retval None
-  */
+/*  Main program.                                                             */
+
+uint16_t HW_Rev_Id __attribute__ ((section (".buildId_data")));
+
 int main(void)
 {
   NVICInit(); // MUST be done prior to adcInit()
@@ -460,9 +459,11 @@ int main(void)
   UART_Init(USART3,noRecieve); /*Only for monitoring no RX*/
   PWM_Init(20000,20000); //20kHz PWM : (TIM3(Topheater2,Peltier, Aux), TIM4(Topheater1, Fan))
   UART_SendMsg(USART3, (u8*)"Monitor Port UP\r\n" , 17);
-  sprintf(buf, __BUILD_DATE);
-  gdi_send_msg_on_monitor(buf);
   sprintf(buf, "HW Rev ID = %d", HW_Rev_Id);
+  gdi_send_msg_on_monitor(buf);
+  sprintf(buf, "SW build = %s", buildDateStr);
+  gdi_send_msg_on_monitor(buf);
+  sprintf(buf, "Git Id = %s", gitCommitIdStr);
   gdi_send_msg_on_monitor(buf);
   init_os_trace(); /*GDB CMD:dump binary memory gdb_dump_23.txt 0x20000000 0x20010000  -- http://percepio.com/*/
   PWM_Stop();
@@ -549,7 +550,7 @@ void HardFault_Handler(void)
 
 void prvGetRegistersFromStack( uint32_t *pulFaultStackAddress )
 {
-  static uint32_t hardFaultSP;
+  static uint32_t hardFaultSP __attribute__ ((section (".regPointer")));
   u8 data;
   /* These are volatile to try and prevent the compiler/linker optimising them
   away as the variables never actually get used.  If the debugger won't show the
@@ -568,8 +569,9 @@ void prvGetRegistersFromStack( uint32_t *pulFaultStackAddress )
   volatile uint32_t r10;
   volatile uint32_t r11;
   volatile uint32_t r12;
-  volatile uint32_t lr; /* Link register. */
-  volatile uint32_t pc; /* Program counter. */
+  /*                sp is held in pulFaultStackAddress */
+  volatile uint32_t lr; /* Link register. r14 */
+  volatile uint32_t pc; /* Program counter. r15 */
   volatile uint32_t psr;/* Program status register. */
   volatile uint32_t _CFSR;
   volatile uint32_t _HFSR;
@@ -589,7 +591,7 @@ void prvGetRegistersFromStack( uint32_t *pulFaultStackAddress )
 
   register unsigned int _r13 __asm("r13");
 
-  hardFaultSP = _r13; // Save current SP to find variabled below in a RAM dump.
+  hardFaultSP = _r13; // Save current SP to find variables below in a RAM dump.
   r0 = pulFaultStackAddress[ 0 ];
   r1 = pulFaultStackAddress[ 1 ];
   r2 = pulFaultStackAddress[ 2 ];
@@ -610,7 +612,7 @@ void prvGetRegistersFromStack( uint32_t *pulFaultStackAddress )
   // Configurable Fault Status Register
   // Consists of MMSR, BFSR and UFSR
   _CFSR = (*((volatile unsigned long *)(0xE000ED28))) ;   
-                                                                                  
+  
   // Hard Fault Status Register
   _HFSR = (*((volatile unsigned long *)(0xE000ED2C))) ;
   
@@ -626,8 +628,6 @@ void prvGetRegistersFromStack( uint32_t *pulFaultStackAddress )
   _MMAR = (*((volatile unsigned long *)(0xE000ED34))) ;
   // Bus Fault Address Register
   _BFAR = (*((volatile unsigned long *)(0xE000ED38))) ;
-  
-  //__asm("BKPT #0\n") ; // Break into the debugger
 
   GPIO_SetBits(GPIOB,GPIO_Pin_11);  /* Turn on error LED */
   GPIO_ResetBits(GPIOC,GPIO_Pin_9); /* Turn off hartbeat LED */
@@ -635,6 +635,8 @@ void prvGetRegistersFromStack( uint32_t *pulFaultStackAddress )
   GPIO_SetBits(GPIOB,GPIO_Pin_1);   /* Turn on TX LED */
   PWM_Stop();
   gdi_send_msg_on_monitor("\r\n!! HardFault !!"); //Print PC and SP for quick ref.
+  
+  __asm("BKPT #0\n") ; // Break into the debugger
 
   /* cmd = "bu" -> "OK" to let Linux know that the M3 crashed */
   while(1)

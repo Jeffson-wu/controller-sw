@@ -415,14 +415,14 @@ void Modbus_init(USART_TypeDef *uart)
   configTimerModbusTimeout();
 }
 
-u8 DebugModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer)
+u8 DebugModbusReadRegs(u8 slave, u16 addr, u16 register_count, u8 *buffer)
 {
-  return ModbusReadRegs(slave, addr, datasize, buffer);
+  return ModbusReadRegs(slave, addr, register_count, buffer);
 }
 
-bool DebugModbusWriteRegs(u8 slave, u16 addr, u8 *data, u16 datasize)
+bool DebugModbusWriteRegs(u8 slave, u16 addr, u8 *data, u16 register_count)
 {
-  return ModbusWriteRegs(slave, addr, data, datasize);
+  return ModbusWriteRegs(slave, addr, data, register_count);
 }
 
 
