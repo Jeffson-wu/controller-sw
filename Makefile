@@ -11,9 +11,15 @@
 
 TARGET = arm-none-eabi-
 CC = $(TARGET)gcc
+CXX = $(TARGET)g++
 OBJCOPY = $(TARGET)objcopy
 INCLUDES = -I ./include -I ./board -I ./arch -I ./freertos/include -I ./ -I ./freertos/portable/GCC/ARM_CM3 -I ./GenericRecorderLibSrc/Include -I./GenericRecorderLibSrc/ConfigurationTemplate
-CFLAGS = -g -O0 -c -Wall -Werror -mcpu=cortex-m3 -mthumb -D__START=main -D__STARTUP_CLEAR_BSS -DSTM32F1XX -DUSE_STDPERIPH_DRIVER $(INCLUDES)
+ifeq ($(TARGET),arm-none-eabi-)
+  CFLAGS = -g -O0 -c -Wall -Werror -mcpu=cortex-m3 -mthumb -D__START=main -D__STARTUP_CLEAR_BSS -DSTM32F1XX -DUSE_STDPERIPH_DRIVER $(INCLUDES)
+else
+  CFLAGS = -g -O0 -c -Wall -Werror -D__START=main -D__STARTUP_CLEAR_BSS -DSTM32F1XX -DUSE_STDPERIPH_DRIVER $(INCLUDES) --coverage
+  CXXFLAGS = -g -O0 -c -Wall -Werror `pkg-config cpputest --cflags` --coverage
+endif
 
 LDFLAGS = -T arch/stm32f1x.ld -mcpu=cortex-m3 -mthumb -nostartfiles -Wl,--gc-section
 LIBS = -lc -lgcc -lnosys
@@ -99,6 +105,15 @@ $(OBJECTS_DIR)/%.o: %.c
 	@rm $(DEPENDS_DIR)/$*.d
 	@mv $(DEPENDS_DIR)/$*.P $(DEPENDS_DIR)/$*.d
 
+$(OBJECTS_DIR)/%.o: %.cpp
+	@echo "Compiling $<"
+	@mkdir -p $(OBJECTS_DIR)/$(*D)
+	@mkdir -p $(DEPENDS_DIR)/$(*D)
+	@$(CXX) $(CXXFLAGS) -Wp,-MD,$(DEPENDS_DIR)/$*.d -o $@ $<
+	@sed -e 's,^$*\.o,$@,' < $(DEPENDS_DIR)/$*.d > $(DEPENDS_DIR)/$*.P
+	@rm $(DEPENDS_DIR)/$*.d
+	@mv $(DEPENDS_DIR)/$*.P $(DEPENDS_DIR)/$*.d
+
 $(OBJECTS_DIR)/%.o: %.S
 	@echo "Assembling $<"
 	@mkdir -p $(OBJECTS_DIR)/$(*D)
@@ -108,10 +123,52 @@ $(OBJECTS_DIR)/%.o: %.S
 	@rm $(DEPENDS_DIR)/$*.d
 	@mv $(DEPENDS_DIR)/$*.P $(DEPENDS_DIR)/$*.d
 
+
+TESTS = util_tests
+
+tests_LIBS = -lCppUTest -lCppUTestExt -lgcov --coverage
+tests_LDFLAGS = -Wl,--gc-section `pkg-config cpputest --libs` --coverage
+
+util_tests_SOURCES = \
+	util.c \
+	tests/util_tests.cpp
+
+util_tests_OBJS_temp = $(patsubst %,$(OBJECTS_DIR)/%,$(util_tests_SOURCES:%.c=%.o))
+util_tests_OBJS = $(util_tests_OBJS_temp:%.cpp=%.o)
+util_tests_OBJECTS = $(util_tests_OBJS:%.S=%.o)
+util_tests_DEPS_temp = $(patsubst %,$(DEPENDS_DIR)/%,$(util_tests_SOURCES:%.c=%.d))
+util_tests_DEPS = $(util_tests_DEPS_temp:%.cpp=%.d)
+util_tests_DEPENDS = $(util_tests_DEPS:%.S=%.d)
+
+util_tests: $(util_tests_OBJECTS)
+	@echo -n "Linking $@... "
+	@$(CXX) $(tests_LDFLAGS) $(util_tests_OBJECTS) $(tests_LIBS) -o $@
+	@echo "done"
+
 -include $(DEPENDS)
+-include $(util_tests_DEPENDS)
+
+check: $(TESTS)
+	@echo -n "Running CppUTest test cases... "
+	./util_tests
+	@echo "done"
+
+check_coverage:
+	make check
+	@echo -n "Generating gcov files... "
+	@for file in `find obj -name *.gcno`; do \
+		gcov $(util_tests_SOURCES) -p -l -o $$file 1>>gcov_output.txt 2>>gcov_error.txt; \
+	done
+	@echo "done"
+	@rm -rf test_output.txt gcov_output.txt gcov_error.txt
 
 clean:
 	@rm -rf $(OBJECTS) $(PROGRAM) $(UPDATEIMAGE)
+	@rm -rf $(util_tests_OBJECTS)
+	@rm -rf util_tests
+	@rm -rf cpputest_*.xml
+	@rm -rf *.gcno *.gcda *.gcov
 
 clean-all: clean
 	@rm -rf $(DEPENDS)
+	@rm -rf $(util_tests_DEPENDS)
