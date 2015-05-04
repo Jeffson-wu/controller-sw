@@ -426,6 +426,7 @@ void logInit()
 }
 
 /* ---------------------------------------------------------------------------*/
+/* Linux Box interpretation = Ambient, top heater, could side, warm side      */
 void logUpdate(int16_t * ch0value, int16_t * ch1value, int16_t * ch2value, int16_t * ch3value)
 {
   cl_dataLog.avgCnt += 1;
@@ -612,7 +613,6 @@ void CoolAndLidTask( void * pvParameters )
   logInit();
 
   vTaskDelay(1000); /* Wait for ADC to be ready */
-  adsConfigConversionTimer(&adsTimerCallback);
   if(0 == ads1148Init())
   {
     PRINTF("ADS1148 OK\r\n");
@@ -625,7 +625,6 @@ void CoolAndLidTask( void * pvParameters )
     PRINTF("ADS1148 NOT OK\r\n");
     configASSERT(pdFALSE);
   }
-
 
   adsConfigConversionTimer(&adsTimerCallback);
 
@@ -673,8 +672,8 @@ void CoolAndLidTask( void * pvParameters )
     PWM_Set(pwmCh[3], AuxCtrlPWM);
     PWM_Set(pwmCh[4], FANctrlPWM);
 
-    /* Add to log */
-    logUpdate(&adcCh[0], &adcCh[1], &adcCh[2], &adcCh[3]);
+    /* Add to log: Ambient, top heater, could side, warm side */
+    logUpdate(&adcCh[2], &adcCh[1], &adcCh[3], &adcCh[0]);
 
     /* Handle incomming messages if any */
     if( xQueueReceive( CoolAndLidQueueHandle, &msg, /*Do not block*/ 0) == pdPASS )
