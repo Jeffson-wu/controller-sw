@@ -65,6 +65,18 @@ char buf[20];
 #define Swap2Bytes(val) ( (((val) >> 8) & 0x00FF) | (((val) << 8) & 0xFF00) )
 
 /* Private typedef -----------------------------------------------------------*/
+const char *cl_states[] =
+{
+  "clnok",    /* CL temperatures not reached - Not OK to start PCR            */
+  "clok",     /* CL temperatures reached     - OK to start PCR                */
+};
+
+typedef enum CL_STATES_T {
+  CL_STATE_CLNOK,
+  CL_STATE_CLOK,
+  nCL_STATES
+} cl_states_t;
+
 typedef enum {
   STOP_STATE,
   MANUAL_STATE,
@@ -146,6 +158,9 @@ typedef struct CL_DATA_LOG_T {
 xQueueHandle CoolAndLidQueueHandle;
 extern xQueueHandle TubeSequencerQueueHandle;
 bool msgSent = FALSE;
+static uint8_t clState = 0;
+static bool coolTempOK = FALSE;
+static bool lidTempOK = FALSE;
 
 // Parameters for ADC
 static int16_t adcCh[4] = {0, 0, 0, 0};
@@ -197,8 +212,9 @@ void standAlone() //These settings should be made from the Linux Box
   *lidData[0].regulator.pwmVal = 25000;
   *lidData[1].regulator.pwmVal = 0;
   pwmCh[3] = 12000; ///###JRJ DEBUG 10% on Aux
+  coolTempOK = TRUE;
+  lidTempOK  = TRUE;
 }
-
 
 /* ---------------------------------------------------------------------------*/
 /* Fan handling */
@@ -226,7 +242,6 @@ void fan(fanData_t *fanData){
     break;
 
   }
-
 	if (out > 32767)
 		out = 32767;
 	if (out < 12000)
@@ -260,6 +275,7 @@ void peltier(peltierData_t *peltierData){
     default:
     break;
   }
+  if( abs(reg->setPoint - *reg->adcVal) < 100 ) { coolTempOK = TRUE; }
 	if (out > 25000)
 		out = 25000;
 	if (out < 0)
@@ -313,6 +329,7 @@ void lid(lidData_t *lidData)
     default:
     break;
   }
+  if( abs(reg->setPoint - *reg->adcVal) < 100 ) { lidTempOK = TRUE; }
 	if (out > 32767)
 		out = 32767;
 	if (out < 0)
@@ -457,8 +474,8 @@ void logUpdate(int16_t * ch0value, int16_t * ch1value, int16_t * ch2value, int16
 /* ---------------------------------------------------------------------------*/
 
 /* Write log data to Linux box (Called from gdi, thus running in gdi context) */
-/* <uid>,<seq_number=s;log={t1,t2,t3,t4[,t1,t2,t3,t4 [,t1,t2,t3,t4[,t1,t2,t3,t4]]]}> */
-/* or <uid>,OK\r  */
+/* <uid>,<state=<state>>,seq_number=s;log={t1,t2,t3,t4[,t1,t2,t3,t4 [,t1,t2,t3,t4[,t1,t2,t3,t4]]]} */
+/* or <uid>,<state=<state>>,OK\r  */
 
 int getClLog(char *poutText )
 {
@@ -469,6 +486,12 @@ int getClLog(char *poutText )
   int dataAdded = 0;
   
   *poutText = 0;
+
+  if( coolTempOK && lidTempOK ) { clState = CL_STATE_CLOK; } else { clState = CL_STATE_CLNOK; }
+  strcat(poutText,"<state=");
+  strcat(poutText,cl_states[clState]);
+  strcat(poutText,",");
+
   // Send all available log elements for each tube
   while(NULL != (pinData = cl_dequeue(&cl_logDataQueue)) )
   {
@@ -561,9 +584,11 @@ bool coolLidWriteRegs(u8 slave, u16 addr, u16 *data, u16 datasize)
         {
           case LID_ADDR:
             lidData[0].regulator.setPoint = val;
+            lidTempOK = FALSE;
             break;
           case PELTIER_ADDR:
             peltierData[0].regulator.setPoint = val;
+            coolTempOK = FALSE;
             break;
           case FAN_ADDR:
             fanData[0].regulator.setPoint = val;
@@ -692,6 +717,7 @@ void CoolAndLidTask( void * pvParameters )
           SetCooleAndLidReq *p;
           p=(SetCooleAndLidReq *)(msg->ucData);
           peltierData[0].regulator.setPoint = temp_2_dac(p->value);
+          coolTempOK = FALSE;
         }
         break;
         case SET_LID_TEMP:
@@ -701,6 +727,7 @@ void CoolAndLidTask( void * pvParameters )
           lidData[p->idx-1].regulator.setPoint = temp_2_dac(p->value);
           lidData[0].regulator.state = CTRL_CLOSED_LOOP_STATE;
           lidData[1].regulator.state = CTRL_CLOSED_LOOP_STATE;
+          lidTempOK = FALSE;
         }
         break;
         case SET_LID_PWM:
@@ -715,6 +742,8 @@ void CoolAndLidTask( void * pvParameters )
         {
           lidData[0].regulator.state = CTRL_CLOSED_LOOP_STATE;
           lidData[1].regulator.state = CTRL_CLOSED_LOOP_STATE;
+          coolTempOK = FALSE;
+          lidTempOK = FALSE;
         }
         break;
         case STOP_LID_HEATING:
@@ -738,9 +767,11 @@ void CoolAndLidTask( void * pvParameters )
           switch(p->idx) {
             case 0:
               peltierData[0].regulator.setPoint = temp_2_dac(p->value);
+              coolTempOK = FALSE;
               break;
             case 1:
               lidData[0].regulator.setPoint = temp_2_dac(p->value);
+              lidTempOK = FALSE;
               break;
             case 2:
               //lidData[1].regulator.setPoint = temp_2_dac(p->value);
