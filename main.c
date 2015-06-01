@@ -47,6 +47,7 @@
 #include "adc.h"
 #include "../heater-sw/heater_reg.h"
 #include "version.h"
+#include "debug.h"
 
 /* Private feature defines ---------------------------------------------------*/
 #define QUEUESIZE 10
@@ -112,6 +113,12 @@ void fn(void)
   taskYIELD();
   fn();
   nesting--;
+}
+
+void printHeap(void) {
+  extern size_t xFreeBytesRemaining;
+  sprintf(buf, "Heap free bytes: %d", xFreeBytesRemaining);
+  gdi_send_msg_on_monitor(buf);
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -457,7 +464,7 @@ int main(void)
   HW_Rev_Id = readHwRevId(); // Obtain HW Revision ID ASAP
   HW_Init();
   UART_Init(USART3,noRecieve); /*Only for monitoring no RX*/
-  PWM_Init(20000,20000); //20kHz PWM : (TIM3(Topheater2,Peltier, Aux), TIM4(Topheater1, Fan))
+  PWM_Init(20000,1000); // 20kHz/1kHz PWM : (TIM3(Fan, Aux), TIM4(Topheater1, Topheater2))
   UART_SendMsg(USART3, (u8*)"Monitor Port UP\r\n" , 17);
   sprintf(buf, "HW Rev ID = %d", HW_Rev_Id);
   gdi_send_msg_on_monitor(buf);
@@ -499,7 +506,7 @@ int main(void)
   * @retval None
   */
 void assert_failed(unsigned char* file, unsigned int line)
-{ 
+{ extern size_t xFreeBytesRemaining;
   /* User can add his own implementation to report the file name and line number,
      ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
   char buf[100];
@@ -511,6 +518,14 @@ void assert_failed(unsigned char* file, unsigned int line)
   PWM_Stop();
   sprintf(buf, "assert_failed: %s %d", file, line);
   gdi_send_msg_on_monitor(buf);
+  sprintf(buf, "Heap free bytes: %d", xFreeBytesRemaining);
+  gdi_send_msg_on_monitor(buf);
+  
+  sprintf(buf, "Task: %s", pcTaskGetTaskName( xTaskGetCurrentTaskHandle()) );
+  gdi_send_msg_on_monitor(buf);
+  gdi_send_msg_on_monitor(dbgPrintIsr(buf));
+
+  //__asm("BKPT #0\n") ; // Break into the debugger
 
   /* Infinite loop */
   /* cmd = "bu" -> "OK" to let Linux know that the M3 crashed */
@@ -635,8 +650,34 @@ void prvGetRegistersFromStack( uint32_t *pulFaultStackAddress )
   GPIO_SetBits(GPIOB,GPIO_Pin_1);   /* Turn on TX LED */
   PWM_Stop();
   gdi_send_msg_on_monitor("\r\n!! HardFault !!"); //Print PC and SP for quick ref.
+  //Bus Fault Status Register
+  if(_CFSR & 0x00000100) { gdi_send_msg_on_monitor("IBUSRR"); }
+  if(_CFSR & 0x00000200) { gdi_send_msg_on_monitor("PRECISERR"); }
+  if(_CFSR & 0x00000400) { gdi_send_msg_on_monitor("IMPRECISERR"); }
+  if(_CFSR & 0x00000800) { gdi_send_msg_on_monitor("UNSTKERR"); }
+  if(_CFSR & 0x00001000) { gdi_send_msg_on_monitor("STKERR"); }
+  if(_CFSR & 0x00008000) { 
+      sprintf(buf, "BFARVALID  - BFAR: %08X", (unsigned int)_BFAR);
+      gdi_send_msg_on_monitor(buf);
+    }
+  //Usage Fault Status Register
+  if(_CFSR & 0x00010000) { gdi_send_msg_on_monitor("UNDEFINSTR"); }
+  if(_CFSR & 0x00020000) { gdi_send_msg_on_monitor("INVSTATE"); }
+  if(_CFSR & 0x00040000) { gdi_send_msg_on_monitor("INVPC"); }
+  if(_CFSR & 0x00080000) { gdi_send_msg_on_monitor("NOCP"); }
+  if(_CFSR & 0x00200000) { gdi_send_msg_on_monitor("DIVBYZERO"); }
+  if(_CFSR & 0x00100000) { gdi_send_msg_on_monitor("UNALIGNED"); }
+  //Memory Manage Fault Status Register
+  if(_CFSR & 0x00000080) { gdi_send_msg_on_monitor("MMARVALID"); }
+  if(_CFSR & 0x00000010) { gdi_send_msg_on_monitor("MSTKERR"); }
+  if(_CFSR & 0x00000008) { gdi_send_msg_on_monitor("MUNSTKERR"); }
+  if(_CFSR & 0x00000002) { gdi_send_msg_on_monitor("DACCVIOL"); }
+  if(_CFSR & 0x00000001) { gdi_send_msg_on_monitor("IACCVIOL"); }
+  sprintf(buf, "Task: %s", pcTaskGetTaskName( xTaskGetCurrentTaskHandle()) );
+  gdi_send_msg_on_monitor(buf);
+  gdi_send_msg_on_monitor(dbgPrintIsr(buf));
   
-  __asm("BKPT #0\n") ; // Break into the debugger
+  //__asm("BKPT #0\n") ; // Break into the debugger
 
   /* cmd = "bu" -> "OK" to let Linux know that the M3 crashed */
   while(1)

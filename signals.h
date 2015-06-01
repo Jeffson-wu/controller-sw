@@ -38,6 +38,8 @@ enum
   SET_LID_PWM,
   SET_PWM,
   SET_PWM_RES,
+  SET_DAC,
+  SET_DAC_RES,
   nofSIG
 };
 
@@ -51,7 +53,7 @@ typedef enum
 
 typedef struct 
 {
-   portCHAR ucMessageID;
+   portCHAR ucMessageID; //insert padding to allign ucData - or make ucData a long 
    portCHAR ucData[1];
 }xMessage;
 
@@ -61,7 +63,7 @@ typedef struct
   u16 addr;
   u16 datasize;
   xQueueHandle reply; 
-  u8 data[1];
+  u8 data[1]; // Data is always minimum u16 - make this one u16 for alignment
 }WriteModbusRegsReq;
 
 typedef struct
@@ -69,7 +71,7 @@ typedef struct
   u8 slave;
   u16 addr;
   u16 datasize;
-  USART_ERROR resultOk;
+  USART_ERROR resultOk; // move to after slave - check an allocated signal to see that it is 8 bits wide
 }WriteModbusRegsRes;
 
 typedef struct
@@ -82,6 +84,15 @@ typedef struct
 
 typedef struct
 {
+  u8 slave;
+  u16 addr;
+  u16 datasize;
+  USART_ERROR resultOk; // move to after slave - check an allocated signal to see that it is 8 bits wide
+  u8 data[1]; // Data is always minimum u16 - make this one u16 for alignment
+}ReadModbusRegsRes;
+
+typedef struct
+{
   s16 value;
   s16 idx;
 } SetCooleAndLidReq;
@@ -91,21 +102,17 @@ typedef struct
   s16 value;
 } SetSSUpdateReq;
 
-
-typedef struct
-{
-  u8 slave;
-  u16 addr;
-  u16 datasize;
-  USART_ERROR resultOk;
-  u8 data[1];
-}ReadModbusRegsRes;
-
 typedef struct
 {
   s16 value;
   s16 idx;
 } SetPWMReq;
+
+typedef struct
+{
+  s16 value;
+  s16 idx;
+} SetDACReq;
 
 void ResetHeaters();
 

@@ -72,6 +72,7 @@
  * memory management pages of http://www.FreeRTOS.org for more information.
  */
 #include <stdlib.h>
+#include <stdio.h>  //JRJ Debug
 
 /* Defining MPU_WRAPPERS_INCLUDED_FROM_API_FILE prevents task.h from redefining
 all the API functions to use the MPU wrappers.  That should only be done when
@@ -82,6 +83,7 @@ task.h is included from an application file. */
 #include "task.h"
 
 #undef MPU_WRAPPERS_INCLUDED_FROM_API_FILE
+extern void printHeap(void);
 
 /* Block sizes must not get too small. */
 #define heapMINIMUM_BLOCK_SIZE	( ( size_t ) ( xHeapStructSize * 2 ) )
@@ -91,6 +93,15 @@ task.h is included from an application file. */
 
 /* Allocate the memory for the heap. */
 static uint8_t ucHeap[ configTOTAL_HEAP_SIZE ];
+#define DEBUG_BUFFER_SIZE 100
+char buf[DEBUG_BUFFER_SIZE]; /*buffer for debug printf*/
+extern void gdi_send_msg_on_monitor(char * response);
+#define PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
+#ifdef DEBUG
+#define DEBUG_HEAP_PRINTF(fmt, args...)      snprintf(buf, DEBUG_BUFFER_SIZE, fmt, ## args);  gdi_send_msg_on_monitor(buf);
+#else
+#define DEBUG_HEAP_PRINTF(fmt, args...)          /* Don't do anything in release builds */
+#endif
 
 /* Define the linked list structure.  This is used to link free blocks in order
 of their memory address. */
@@ -127,7 +138,7 @@ static BlockLink_t xStart, *pxEnd = NULL;
 
 /* Keeps track of the number of free bytes remaining, but says nothing about
 fragmentation. */
-static size_t xFreeBytesRemaining = 0U;
+/*static*/ size_t xFreeBytesRemaining = 0U;
 static size_t xMinimumEverFreeBytesRemaining = 0U;
 
 /* Gets set to the top bit of an size_t type.  When this bit in the xBlockSize
@@ -137,7 +148,16 @@ space. */
 static size_t xBlockAllocatedBit = 0;
 
 /*-----------------------------------------------------------*/
+#if 0
+void *_pvPortMalloc( size_t xWantedSize );
 
+void *pvPortMallocDebug(size_t arg, const char *fn, const int ln){
+  DEBUG_HEAP_PRINTF("%s %d %d", fn, ln, arg); // print out pxCurrentTCB.taskname
+  return _pvPortMalloc( arg );
+}
+
+void *_pvPortMalloc( size_t xWantedSize )
+#endif
 void *pvPortMalloc( size_t xWantedSize )
 {
 BlockLink_t *pxBlock, *pxPreviousBlock, *pxNewBlockLink;
@@ -283,7 +303,8 @@ void *pvReturn = NULL;
 	}
 	#endif
 
-	configASSERT( ( ( ( uint32_t ) pvReturn ) & portBYTE_ALIGNMENT_MASK ) == 0 );
+  DEBUG_HEAP_PRINTF("Alloc@ %08X %04X", (unsigned int)pvReturn, (unsigned int)xWantedSize);
+  //printHeap(); //JRJ DBG
 	return pvReturn;
 }
 /*-----------------------------------------------------------*/
@@ -292,6 +313,9 @@ void vPortFree( void *pv )
 {
 uint8_t *puc = ( uint8_t * ) pv;
 BlockLink_t *pxLink;
+
+  DEBUG_HEAP_PRINTF("Free@  %08X", (unsigned int)pv);
+  //printHeap(); //JRJ DBG
 
 	if( pv != NULL )
 	{

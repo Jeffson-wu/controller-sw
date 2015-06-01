@@ -22,6 +22,7 @@
 #include "adc.h"
 #include "gdi.h" //Debug printf
 #include "pwm.h" //PWM_Stop()
+#include "debug.h"
 
 /* ---------------------------------------------------------------------------*/
 /* Private feature defines ---------------------------------------------------*/
@@ -70,9 +71,9 @@ int32_t adc_2_temp(signed short adc)
 #if 0
   res = BETA / ((1/adc) * COEF_A - COEF_B);
 #else
-  GPIO_SetBits(HEART_BEAT_LED);/*RX LED*/
+  //GPIO_SetBits(HEART_BEAT_LED);/*RX LED*/
   res = BETA / logf( ((1/adc) * COEF_A - COEF_B) );
-  GPIO_ResetBits(HEART_BEAT_LED);/*RX LED*/
+  //GPIO_ResetBits(HEART_BEAT_LED);/*RX LED*/
 #endif
 #endif
   return (int32_t)res;
@@ -258,21 +259,21 @@ void adcSetIsrSemaphore(xSemaphoreHandle sem)
 
 /* ---------------------------------------------------------------------------*/
 /* Sequential ADC is started by calling adsStartSeq() which starts the first conversion on ch 0  */
-/*                                                                                                                                   */
+/*                                                                                               */
 void ADC_Handler(void)
 {
-  //  vTraceStoreISRBegin(??);
   static portBASE_TYPE xHigherPriorityTaskWoken;
 
+  dbgTraceStoreISRBegin(TRACE_ISR_ID_ADC);
 #ifdef USE_ANALOG_WATCH_DOG
   if(SET == ADC_GetITStatus(ADC1, ADC_IT_AWD))
   {
     ADC_ClearITPendingBit(ADC1, ADC_IT_AWD);
     stopPeltier();// #### JRJ #### KILL Peltier.
     //xTimerPendFunctionCallFromISR( fn, NULL, (uint32_t) 0, &xHigherPriorityTaskWoken );
-    //  vTraceStoreISREnd();
     if(SET == ADC_GetITStatus(ADC1, ADC_IT_JEOC)) { ADC_ClearITPendingBit(ADC1, ADC_IT_JEOC); }
     if(SET == ADC_GetITStatus(ADC1, ADC_IT_EOC))  { ADC_ClearITPendingBit(ADC1, ADC_IT_EOC); }
+    dbgTraceStoreISREnd();
     portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
     return;
   }
@@ -302,7 +303,7 @@ void ADC_Handler(void)
 #ifdef USE_ANALOG_WATCH_DOG
   }
 #endif
-  //  vTraceStoreISREnd();
+  dbgTraceStoreISREnd();
 }
 
 

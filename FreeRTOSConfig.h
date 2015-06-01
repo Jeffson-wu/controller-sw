@@ -109,6 +109,9 @@
 void assert_failed(unsigned char* file, unsigned int line); //Implemented in main.c
 #define configASSERT(expr) ((expr) ? (void)0 : assert_failed((unsigned char *)__FILE__, __LINE__))
 
+/* Enhance debug */
+#define INCLUDE_pcTaskGetTaskName 1
+#define INCLUDE_xTaskGetCurrentTaskHandle 1
 
 /*Use timers*/
 #define configUSE_TIMERS                1
@@ -170,7 +173,7 @@ extern unsigned long vGetCounter();
 
 
 #define configUSE_TRACE_FACILITY 0
-			  #include "trcKernelPort.h"
+#include "trcKernelPort.h"
 
 
 #endif /* FREERTOS_CONFIG_H */

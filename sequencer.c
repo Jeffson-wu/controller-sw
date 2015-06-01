@@ -22,7 +22,7 @@
 #include "gdi.h"
 #include "serial.h"
 #include "util.h"
-
+#include "debug.h"
 
 extern xQueueHandle CoolAndLidQueueHandle;
 
@@ -565,7 +565,7 @@ void ReadTubeHeaterReg(u8 tube, u16 reg, u16 datasize, xQueueHandle xQueue, bool
   }
 
   DEBUG_IF_PRINTF("Tube[%d]MODBUS READ_REG ID[%d] ADR[%d] SIZE[%d] CALLER:%s",tube, preg->slave,preg->addr, preg->datasize, (from_isr == TRUE) ?"ISR":"NORM");
-  #else
+  #else // SIMULATE_HEATER
   xMessage *msg;
   ReadModbusRegsReq *p;
   portBASE_TYPE taskWoken = pdTRUE;
@@ -592,7 +592,7 @@ void ReadTubeHeaterReg(u8 tube, u16 reg, u16 datasize, xQueueHandle xQueue, bool
     }
     DEBUG_IF_PRINTF("Tube[%d]MODBUS READ_REG ID[%d] ADR[%d] SIZE[%d] CALLER:%s",tube, p->slave,p->addr, p->datasize, (from_isr == TRUE) ?"ISR":"NORM");
   }
-  #endif
+  #endif // SIMULATE_HEATER
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -639,7 +639,7 @@ void ReadTubeHeaterRegFromISR( void *pvParameter1, uint32_t ulParameter2 )
 /* ---------------------------------------------------------------------------*/
 void EXTI_Handler(void)
 {
-//  vTraceStoreISRBegin(3);
+  dbgTraceStoreISRBegin(TRACE_ISR_ID_EXTI);
   BaseType_t xHigherPriorityTaskWoken = pdFALSE;
   ExtiGpioTypeDef ExtiGpio = Heater1;
   while(ExtiGpio < nExtiGpio)                               /*Alwlays starts at Heater1 */
@@ -655,7 +655,7 @@ void EXTI_Handler(void)
     }
     ExtiGpio++;
   }
-//  vTraceStoreISREnd();
+  dbgTraceStoreISREnd();
   //portEND_SWITCHING_ISR( pdTRUE);
   portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
 }
@@ -1048,13 +1048,13 @@ int getTubeHWReport(char *poutText, long TubeId)
   taskEXIT_CRITICAL();
   if(event)
   {
-    strcat(poutText,"<tube_event=");
+    strcat(poutText,",tube_event=");
     Itoa(TubeId, str);
     strcat(poutText,str);
     strcat(poutText,",");
     Itoa(event, str);
     strcat(poutText,str);
-    strcat(poutText,">");
+    //strcat(poutText,",");
     return 1;
   }
   return 0;

@@ -387,6 +387,9 @@ void vPortDefineHeapRegions( const HeapRegion_t * const pxHeapRegions );
 /*
  * Map to the memory management routines required for the port.
  */
+//#define pvPortMalloc(param) pvPortMallocDebug(param, __FUNCTION__, __LINE__) 
+void *pvPortMallocDebug( size_t xSize, const char *fn, const int ln);
+
 void *pvPortMalloc( size_t xSize ) PRIVILEGED_FUNCTION;
 void vPortFree( void *pv ) PRIVILEGED_FUNCTION;
 void vPortInitialiseBlocks( void ) PRIVILEGED_FUNCTION;

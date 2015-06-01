@@ -26,7 +26,7 @@
 /* Private define ------------------------------------------------------------*/
 // Port A channels
 #define ADC_PORT_TEMP_SENSE GPIOA
-#define ADC_PIN_CH_0 GPIO_Pin_4
+#define ADC_PIN_CH_0 GPIO_Pin_0
 #define ADC_PIN_CH_1 GPIO_Pin_5 
 #define ADC_PIN_CH_2 GPIO_Pin_6 
 #define ADC_PIN_CH_3 GPIO_Pin_7

@@ -48,7 +48,7 @@ int uid;
 
 /* Private debug define ------------------------------------------------------*/
 //#define DEBUG_USE_ECHO_AS_DEFAULT
-//#define DEBUG
+#define DEBUG
 
 #ifdef DEBUG
 #define GDI_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
@@ -95,7 +95,6 @@ enum gdi_func_type
   coolandlid,
   cool,
   lid,
-  lidpwm,
   fan,
   seq_cmd,
   test_func,
@@ -108,6 +107,7 @@ enum gdi_func_type
   modbus_Synchronize_LED,
   modbus_LED,
   setpwm,
+  setdac,
   getadc,
   crash_cmd,
   invalid_command
@@ -132,28 +132,28 @@ typedef struct
 
 gdi_func_table_type gdi_func_info_table[] =
 {    
-  {"seq_cmd", " Set seq start, stop, state, pause, continue, log, getlog", "at@gdi:seq_cmd(tube, cmd)",seq_cmd },
-  {"coolandlid",  " Set temperatures and fan speed", "at@gdi:coolandlid(idx, setpoint)",coolandlid },
-  {"led",     " Set tube LED function",   "at@gdi:led(tube,fn)",  modbus_LED},
-  {"help",    " Help command",            "at@gdi:help()",        help},
-  {"reset",   " Reset M3 command",        "at@gdi:reset()",       reset},
-  {"echo",    " Echo command",            "at@gdi:echo(<e>) e=1=> Echo on, e=0=> echo off",echo},    
-  {"print",   " Print the debug variable values", "at@gdi:print()",     print },
-  {"cool",    " Set cooling temperature", "at@gdi:cool(idx, setpoint)", cool },
-  {"lid",     " Set lid temperature",     "at@gdi:lid(idx, setpoint)",  lid },
-  {"lidpwm",  " Set lid pwm value",       "at@gdi:lidpwm(idx, pwm)",    lidpwm },
-  {"fan",     " Set fan speed % ",                "at@gdi:fan(idx, setpoint)",fan },
-  {"test_func",         " Test function call",    "at@gdi:test_func(parameter1,parameter2)",test_func},
+  {"seq_cmd",     " Set seq start, stop, state, pause, continue, log, getlog", "at@gdi:seq_cmd(tube, cmd)",seq_cmd },
+  {"coolandlid",  " Set temperatures and fan speed",  "at@gdi:coolandlid(idx, setpoint)",   coolandlid },
+  {"led",         " Set tube LED function",           "at@gdi:led(tube,fn)",        modbus_LED},
+  {"synchronizeled",    " Synchronize tube LEDs",     "at@gdi:SynchronizeLED()",    modbus_Synchronize_LED},
+  {"help",    " Help command",                        "at@gdi:help()",              help},
+  {"reset",   " Reset M3 command",                    "at@gdi:reset()",             reset},
+  {"echo",    " Echo command",                        "at@gdi:echo(<e>) e=1=> Echo on, e=0=> echo off", echo},    
+  {"print",   " Print the debug variable values",     "at@gdi:print()",             print },
+  {"cool",    " Set cooling temperature & start",     "at@gdi:cool(setpoint)",      cool },
+  {"lid",     " Set lid temperature & start",         "at@gdi:lid(setpoint)",       lid },
+  {"fan",     " Set fan speed %  & start",            "at@gdi:fan(setpoint)",       fan },
+  {"test_func",         " Test function call",        "at@gdi:test_func(parameter1,parameter2)",test_func},
 #ifdef USE_FLOAT_REG_FEATURE
   {"modbus_read_regs_float",  " Read register values as float",  "at@gdi:modbus_read_regs_float(slave,addr,datasize)",modbus_read_regs_float},
   {"modbus_write_regs_float", " Write register values as float", "at@gdi:modbus_write_regs_float(slave,addr,[data1,data2,..],datasize)",modbus_write_regs_float},
 #endif
-  {"modbus_read_regs",  " Read register values",  "at@gdi:modbus_read_regs(slave,addr,datasize)",modbus_read_regs},
-  {"modbus_write_regs", " Write register values", "at@gdi:modbus_write_regs(slave,addr,[data1,data2,..],datasize)",modbus_write_regs},
-  {"synchronizeled",    " Synchronize tube LEDs", "at@gdi:SynchronizeLED()",modbus_Synchronize_LED},
-  {"setpwm",  " Set PWM value",                   "at@gdi:setpwm(idx, pwm)",setpwm },
-  {"getadc",  " Get latest ADC values",           "at@gdi:getadc()",        getadc },
-  {"crash",  " Force crash",                      "at@gdi:crash(key)",      crash_cmd },
+  {"modbus_read_regs",  " Read register values",      "at@gdi:modbus_read_regs(slave,addr,datasize)",modbus_read_regs},
+  {"modbus_write_regs", " Write register values",     "at@gdi:modbus_write_regs(slave,addr,[data1,data2,..],datasize)",modbus_write_regs},
+  {"setpwm",            " Set PWM value",             "at@gdi:setpwm(idx, pwm)",    setpwm },
+  {"setdac",            " Set DAC value",             "at@gdi:setdac(idx, pwm)",    setdac },
+  {"getadc",            " Get latest ADC values",     "at@gdi:getadc()",            getadc },
+  {"crash",             " Force crash",               "at@gdi:crash(key)",          crash_cmd },
   { NULL, NULL, NULL, 0 }
 }; 
 
@@ -175,6 +175,7 @@ typedef struct
 struct_gdi_req_func_info gdi_req_func_info;
 
 /* Functions -----------------------------------------------------------------*/
+/* ---------------------------------------------------------------------------*/
 void (*forceHardFault)(void);
 
 /* ---------------------------------------------------------------------------*/
@@ -226,7 +227,7 @@ void gdi_send_response_seq(void)
 {
   char str[10];
   int i;
-  sprintf(str, "<%d>,", uid);
+  sprintf(str, "%d,", uid);
   
   for(i=0;i<strlen(str);i++)
   {
@@ -355,7 +356,7 @@ void gdi_get_func_parameters(char *param_list)
       {
         *(gdi_req_func_info.parameters + idx) = pvPortMalloc(strlen(token)+1);
         if(NULL == *(gdi_req_func_info.parameters + idx)) { configASSERT(pdFALSE); } // This is a fatal error
-        //GDI_PRINTF("T:%s-%d--%x/r/n",token,strlen(token)+1,*(gdi_req_func_info.parameters + idx));
+        //GDI_PRINTF("T:%s-%d--%x", token, strlen(token)+1,(unsigned int)*(gdi_req_func_info.parameters + idx));
         strcpy(*(gdi_req_func_info.parameters + idx++), token);
         token = strtok(0, ",");
         //GDI_PRINTF("%s",token);
@@ -670,16 +671,16 @@ int gdi_get_regwrite_values(u16 * buffer)
   if((end_pos != 0) && (start_pos <= end_pos))
   {
     u16 tmp;
-    tmp =  (u16) atoi((*(gdi_req_func_info.parameters + start_pos))+1);
+    tmp =  (u16) strtol((*(gdi_req_func_info.parameters + start_pos))+1, (char **)NULL, 10);
     buffer[j++] = ( (tmp>>8 & 0x00FF) + (tmp<<8 &0xFF00) );
     for(i=start_pos + 1;i<end_pos;i++)
     {
-      tmp = (u16) atoi(*(gdi_req_func_info.parameters + i));
+      tmp = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
       buffer[j++] = ( (tmp>>8 & 0x00FF) + (tmp<<8 &0xFF00) );
     }
     token = *(gdi_req_func_info.parameters + end_pos);
     token[strlen(token) - 1] = '\0';
-    tmp = (u16) atoi(token);
+    tmp = (u16) strtol(token, (char **)NULL, 10);
     buffer[j] =  ( (tmp>>8 & 0x00FF) + (tmp<<8 &0xFF00) );
     return end_pos + 1;
   }
@@ -729,17 +730,16 @@ void gdi_map_to_functions()
 
     case reset :
       if(!gdiEcho) {
-        uid = (u16) atoi(*(gdi_req_func_info.parameters));
+        uid = (u16) strtol(*(gdi_req_func_info.parameters), (char **)NULL, 10);
       }
       ResetHeaters();
-      //Reset_Handler();
       *(int*)0=0; //JRJ #### DEBUG usage Hardfault
     break;
 
     case echo :
     {
       u8 echoSwitch;
-      echoSwitch = (u8)  atoi(*(gdi_req_func_info.parameters + 0));
+      echoSwitch = (u8)  strtol(*(gdi_req_func_info.parameters + 0), (char **)NULL, 10);
       gdiEcho = echoSwitch;
       gdi_send_data_response("OK", newline_end);
     }
@@ -750,6 +750,9 @@ void gdi_map_to_functions()
       gdi_send_data_response("OK", newline_end);
     break;
       
+    /***************************************************************/
+    /* Commands for cool and lid                                   */
+    /***************************************************************/
     case coolandlid:
     {
       s16 setpoint;
@@ -758,10 +761,10 @@ void gdi_map_to_functions()
       int result = TRUE;
 
       if(!gdiEcho) {
-        uid = (u16) atoi(*(gdi_req_func_info.parameters + i));
+        uid = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
         i++;
       }
-      fn_idx   = (u8)  atoi(*(gdi_req_func_info.parameters + i));
+      fn_idx   = (u8)  strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
 
       if(6 == fn_idx) {
         int tubeNum;
@@ -794,12 +797,14 @@ void gdi_map_to_functions()
       else
       {
         SetCooleAndLidReq *p;
+        USART_SendData(uart, 'c');
+        while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
         msg = pvPortMalloc(sizeof(xMessage)+sizeof(SetCooleAndLidReq)+20);
         if(NULL == msg) { configASSERT(pdFALSE); } // This is a fatal error
         if(msg)
         {
           i++;
-          setpoint = (s16) atoi(*(gdi_req_func_info.parameters + i));
+          setpoint = (s16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
           if(6 > fn_idx) {
             msg->ucMessageID = SET_COOL_AND_LID;
           } else {
@@ -823,14 +828,14 @@ void gdi_map_to_functions()
         int result = TRUE;
 
         if(!gdiEcho) {
-          uid = (u16) atoi(*(gdi_req_func_info.parameters + i));
+          uid = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
           i++;
         }
         SetCooleAndLidReq *p;
         msg = pvPortMalloc(sizeof(xMessage)+sizeof(SetCooleAndLidReq)+20);
         if(msg)
         {
-          setpoint = (s16) atoi(*(gdi_req_func_info.parameters + i));
+          setpoint = (s16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
           if((setpoint >= -100)&&(setpoint <= 300)) {     // <= 100
             msg->ucMessageID = SET_COOL_TEMP;
           } else {
@@ -848,23 +853,19 @@ void gdi_map_to_functions()
     case lid:
       {
         s16 setpoint;
-        u8 fn_idx;
         xMessage *msg;        
         int result = TRUE;
 
         if(!gdiEcho) {
-          uid = (u16) atoi(*(gdi_req_func_info.parameters + i));
+          uid = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
           i++;
         }
         SetCooleAndLidReq *p;
         msg = pvPortMalloc(sizeof(xMessage)+sizeof(SetCooleAndLidReq)+20);
         if(msg)
         {
-
-          fn_idx   = (u8)atoi(*(gdi_req_func_info.parameters + i));
-          i++;
-          setpoint = (s16)atoi(*(gdi_req_func_info.parameters + i));
-          if((3>fn_idx) && (setpoint >= 0) && (setpoint <= 1200))
+          setpoint = (s16)strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
+          if((setpoint >= 0) && (setpoint <= 1200))
           {
             msg->ucMessageID = SET_LID_TEMP;
           } else {
@@ -873,48 +874,12 @@ void gdi_map_to_functions()
           }
           p = (SetCooleAndLidReq *)msg->ucData;
           p->value = setpoint;
-          p->idx   = fn_idx;
+          p->idx   = 0;
           xQueueSend(CoolAndLidQueueHandle, &msg, portMAX_DELAY);
         }
         if(result) { gdi_send_data_response("OK", newline_end); }
       }
       break;
-
-    case lidpwm:
-      {
-        s16 pwm;
-        u8 fn_idx;
-        xMessage *msg;        
-        int result = TRUE;
-
-        if(!gdiEcho) {
-          uid = (u16) atoi(*(gdi_req_func_info.parameters + i));
-          i++;
-        }
-        SetCooleAndLidReq *p;
-        msg = pvPortMalloc(sizeof(xMessage)+sizeof(SetCooleAndLidReq)+20);
-        if(msg)
-        {
-
-          fn_idx   = (u8)atoi(*(gdi_req_func_info.parameters + i));
-          i++;
-          pwm = (s16)atoi(*(gdi_req_func_info.parameters + i));
-          if((3>fn_idx) && (pwm >= 0) && (pwm <= 65535))
-          {
-            msg->ucMessageID = SET_LID_PWM;
-          } else {
-            result = FALSE;
-            gdi_send_data_response("NOK invalid fn", newline_end);
-          }
-          p = (SetCooleAndLidReq *)msg->ucData;
-          p->value = pwm;
-          p->idx   = fn_idx;
-          xQueueSend(CoolAndLidQueueHandle, &msg, portMAX_DELAY);
-        }
-        if(result) { gdi_send_data_response("OK", newline_end); }
-      }
-      break;
-
 
     case fan:
       {
@@ -923,14 +888,14 @@ void gdi_map_to_functions()
         int result = TRUE;
 
         if(!gdiEcho) {
-          uid = (u16) atoi(*(gdi_req_func_info.parameters + i));
+          uid = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
           i++;
         }
         SetCooleAndLidReq *p;
         msg = pvPortMalloc(sizeof(xMessage)+sizeof(SetCooleAndLidReq)+20);
         if(msg)
         {
-          setpoint = (s16) atoi(*(gdi_req_func_info.parameters + i));
+          setpoint = (s16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
           if((setpoint >= 0)&&(setpoint <= 100)) {
             msg->ucMessageID = SET_FAN_SPEED;
           } else {
@@ -952,15 +917,15 @@ void gdi_map_to_functions()
         xMessage *msg;        
 
         if(!gdiEcho) {
-          uid = (u16) atoi(*(gdi_req_func_info.parameters + i));
+          uid = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
           i++;
         }
         SetPWMReq *p;
         msg = pvPortMalloc(sizeof(xMessage)+sizeof(SetPWMReq)+20);
         if(msg)
         {
-          idx = (s16) atoi(*(gdi_req_func_info.parameters + i++));
-          pwm = (s16) atoi(*(gdi_req_func_info.parameters + i));
+          idx = (s16) strtol(*(gdi_req_func_info.parameters + i++), (char **)NULL, 10);
+          pwm = (s16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
           if((pwm >= 0)&&(pwm <= 100)&&(idx >= 0)&&(idx <= 4)) {
             msg->ucMessageID = SET_PWM;
             p = (SetPWMReq *)msg->ucData;
@@ -975,25 +940,58 @@ void gdi_map_to_functions()
       }
       break;
       
+    case setdac:
+      {
+        s16 dac;
+        s16 idx;
+        xMessage *msg;        
+    
+        if(!gdiEcho) {
+          uid = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
+          i++;
+        }
+        SetDACReq *p;
+        msg = pvPortMalloc(sizeof(xMessage)+sizeof(SetDACReq)+20);
+        if(msg)
+        {
+          idx = (s16) strtol(*(gdi_req_func_info.parameters + i++), (char **)NULL, 10);
+          dac = (s16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
+          if((dac >= 0)&&(dac <= 100)&&(idx >= 0)&&(idx <= 1)) {
+            msg->ucMessageID = SET_DAC;
+            p = (SetDACReq *)msg->ucData;
+            p->value = dac;
+            p->idx =   idx;
+            xQueueSend(CoolAndLidQueueHandle, &msg, portMAX_DELAY);
+            gdi_send_data_response("OK", newline_end);
+          } else {
+            gdi_send_data_response("NOK invalid parameter", newline_end);
+          }
+        }
+      }
+      break;
+        
     case getadc:
       {
         if(!gdiEcho) {
-          uid = (u16) atoi(*(gdi_req_func_info.parameters));
+          uid = (u16) strtol(*(gdi_req_func_info.parameters), (char **)NULL, 10);
         }
         getAdc(str);
         gdi_send_data_response(str, newline_end);
       }
       break;
 
+    /***************************************************************/
+    /* Commands for sequence control                               */
+    /***************************************************************/
     case seq_cmd:
       {
         long TubeId = 0;
         
         if(!gdiEcho) {
-          uid = (u16) atoi(*(gdi_req_func_info.parameters + i));
+          uid = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
           i++;
         }
-        TubeId = (u16) atoi(*(gdi_req_func_info.parameters + i));
+        TubeId = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
         if((TubeId < 17)||(TubeId > 0))
         {
           // "at@gdi:seq_cmd(<uid>,<tube>,tubestart)\r"
@@ -1051,9 +1049,9 @@ void gdi_map_to_functions()
           // "at@gdi:seq_cmd(<uid>,<tube>,<stage number>,<temp>,<time>,<stage>,tubestage)\r"
           else if(!strncmp((*(gdi_req_func_info.parameters + gdi_req_func_info.number_of_parameters-1)),"tubestage",strlen("tubestage")))
           {
-            seq_num = (u16) atoi(*(gdi_req_func_info.parameters + i + 1));
-            data.temp = (u16) atoi(*(gdi_req_func_info.parameters + 2 + i));
-            data.time = (u32) atoi(*(gdi_req_func_info.parameters + 3 + i));
+            seq_num = (u16) strtol(*(gdi_req_func_info.parameters + i + 1), (char **)NULL, 10);
+            data.temp = (u16) strtol(*(gdi_req_func_info.parameters + 2 + i), (char **)NULL, 10);
+            data.time = (u32) strtol(*(gdi_req_func_info.parameters + 3 + i), (char **)NULL, 10);
             state =  (**(gdi_req_func_info.parameters + 4 + i));
             if(tubedataQueueAdd(TubeId, seq_num, state, &data)== TRUE) //Insert next state into sequence
             {
@@ -1083,7 +1081,7 @@ void gdi_map_to_functions()
 
       case test_func :
         if(!gdiEcho) {
-          uid = (u16) atoi(*(gdi_req_func_info.parameters));
+          uid = (u16) strtol(*(gdi_req_func_info.parameters), (char **)NULL, 10);
         }
         retvalue = test_function(p);
         gdi_send_data_response("Function return value is : ", newline_start);
@@ -1091,13 +1089,16 @@ void gdi_map_to_functions()
         gdi_send_data_response("OK", newline_end);
       break;
 
+      /***************************************************************/
+      /* Commands for modbus access                                  */
+      /***************************************************************/
 #ifdef USE_FLOAT_REG_FEATURE
       case modbus_read_regs_float :
       {
         u8 result;
         u8 paramcount;
         if(!gdiEcho) {
-          uid = (u16) atoi(*(gdi_req_func_info.parameters + i));
+          uid = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
           i++;
           paramcount = 4;
         } else {
@@ -1107,9 +1108,9 @@ void gdi_map_to_functions()
           gdi_send_data_response("ERROR", newline_both);
         else
         {
-          slave = (u8) atoi(*(gdi_req_func_info.parameters + i + 0));
-          addr = (u16) atoi(*(gdi_req_func_info.parameters + i + 1));
-          datasize = (u16) atoi(*(gdi_req_func_info.parameters + i + 2)); 
+          slave = (u8) strtol(*(gdi_req_func_info.parameters + i + 0), (char **)NULL, 10);
+          addr = (u16) strtol(*(gdi_req_func_info.parameters + i + 1), (char **)NULL, 10);
+          datasize = (u16) strtol(*(gdi_req_func_info.parameters + i + 2), (char **)NULL, 10);
           if(gdiEcho) {
             gdi_send_data_response("slave, addr and datasize are = ", newline_start);
             gdi_print_number(slave, space_end);
@@ -1149,7 +1150,7 @@ void gdi_map_to_functions()
         u8 result;
         u8 paramcount;
         if(!gdiEcho) {
-          uid = (u16) atoi(*(gdi_req_func_info.parameters + i));
+          uid = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
           i++;
           paramcount = 4;
         } else { 
@@ -1163,9 +1164,9 @@ void gdi_map_to_functions()
           if (result == 0) {
             gdi_send_data_response("ERROR", newline_both);
           } else {
-            slave = (u8) atoi(*(gdi_req_func_info.parameters + i + 0));
-            addr = (u16) atoi(*(gdi_req_func_info.parameters + i + 1));
-            datasize = (u16) atoi(*(gdi_req_func_info.parameters + result)); //Do not add i as result already points to the parameter after values to write
+            slave = (u8) strtol(*(gdi_req_func_info.parameters + i + 0), (char **)NULL, 10);
+            addr = (u16) strtol(*(gdi_req_func_info.parameters + i + 1), (char **)NULL, 10);
+            datasize = (u16) strtol(*(gdi_req_func_info.parameters + result), (char **)NULL, 10); //Do not add i as result already points to the parameter after values to write
 
             if(gdiEcho) {
               gdi_send_data_response("slave, addr and datasize are : ", newline_start);
@@ -1198,7 +1199,7 @@ void gdi_map_to_functions()
         u8 result;
         u8 paramcount;
         if(!gdiEcho) {
-          uid = (u16) atoi(*(gdi_req_func_info.parameters + i));
+          uid = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
           i++;
           paramcount = 4;
         } else {
@@ -1208,9 +1209,9 @@ void gdi_map_to_functions()
           gdi_send_data_response("ERROR", newline_both);
         else
         {
-          slave = (u8) atoi(*(gdi_req_func_info.parameters + i + 0));
-          addr = (u16) atoi(*(gdi_req_func_info.parameters + i + 1));
-          datasize = (u16) atoi(*(gdi_req_func_info.parameters + i + 2));
+          slave = (u8) strtol(*(gdi_req_func_info.parameters + i + 0), (char **)NULL, 10);
+          addr = (u16) strtol(*(gdi_req_func_info.parameters + i + 1), (char **)NULL, 10);
+          datasize = (u16) strtol(*(gdi_req_func_info.parameters + i + 2), (char **)NULL, 10);
 
           if(gdiEcho) {
             gdi_send_data_response("slave, addr and datasize are = ", newline_start);
@@ -1252,7 +1253,7 @@ void gdi_map_to_functions()
         u8 result;
         u8 paramcount;
         if(!gdiEcho) {
-          uid = (u16) atoi(*(gdi_req_func_info.parameters + i));
+          uid = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
           i++;
           paramcount = 4;
         } else { 
@@ -1266,9 +1267,9 @@ void gdi_map_to_functions()
           if (result == 0) {
             gdi_send_data_response("ERROR", newline_both);
           } else {
-            slave = (u8) atoi(*(gdi_req_func_info.parameters + i + 0));
-            addr = (u16) atoi(*(gdi_req_func_info.parameters + i + 1));
-            datasize = (u16) atoi(*(gdi_req_func_info.parameters + i + result)); //####JRJ Do not add i, add1?? - test this
+            slave = (u8) strtol(*(gdi_req_func_info.parameters + i + 0), (char **)NULL, 10);
+            addr = (u16) strtol(*(gdi_req_func_info.parameters + i + 1), (char **)NULL, 10);
+            datasize = (u16) strtol(*(gdi_req_func_info.parameters + i + result), (char **)NULL, 10); //####JRJ Do not add i, add1?? - test this
 
             if(gdiEcho) {
               gdi_send_data_response("slave, addr and datasize are : ", newline_start);
@@ -1302,7 +1303,7 @@ void gdi_map_to_functions()
         WriteModbusRegsReq *p;
 
         if(!gdiEcho) {
-          uid = (u16) atoi(*(gdi_req_func_info.parameters));
+          uid = (u16) strtol(*(gdi_req_func_info.parameters), (char **)NULL, 10);
         }
         msg=pvPortMalloc(sizeof(xMessage)+sizeof(WriteModbusRegsReq)/*+datasize*sizeof(u16)*/);
         if(msg)
@@ -1330,12 +1331,12 @@ void gdi_map_to_functions()
         int result = 1;
         
         if(!gdiEcho) {
-          uid = (u16) atoi(*(gdi_req_func_info.parameters + i));
+          uid = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
           i++;
         }
-        TubeId = (u16) atoi(*(gdi_req_func_info.parameters + i));
+        TubeId = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
         i++;
-        cmd = (u16) atoi(*(gdi_req_func_info.parameters + i));
+        cmd = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
         i++;
         if( (0<=TubeId) && (16>=TubeId) )
         {
@@ -1380,13 +1381,16 @@ void gdi_map_to_functions()
       }
       break;
 
+    /***************************************************************/
+    /* Misc commands                                               */
+    /***************************************************************/
     case crash_cmd:
     {
       if(!gdiEcho) {
-        uid = (u16) atoi(*(gdi_req_func_info.parameters + i));
+        uid = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
         i++;
       }
-      if(CRASH_KEY == (u16) atoi(*(gdi_req_func_info.parameters + i)))
+      if(CRASH_KEY == (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10) )
       {
         forceHardFault();
       }
@@ -1498,7 +1502,9 @@ void gdi_task(void *pvParameters)
   GDI_RXSemaphore = xSemaphoreCreateMutex();
   xSemaphoreTake( GDI_RXSemaphore, portMAX_DELAY );
   gdi_init(); /*Setup debug uart, This must be after the GDI_RXSemaphore is instantiated */
-
+#ifdef DEBUG_USE_ECHO_AS_DEFAULT
+  gdi_send_msg_on_monitor("!! Echo=1 Not for use with Linux box !!");
+#endif
   while(1)
   {
     /*wait for mutex*/
