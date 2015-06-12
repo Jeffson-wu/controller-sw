@@ -1451,6 +1451,20 @@ void TubeSequencerTask( void * pvParameter)
             }
           }
           break;
+#ifdef USE_NEIGHBOUR_TUBE_TEMP_FEATURE
+        case DISABLE_NEIGHBOUR_TUBE_TEMP:
+          if( xTimerStop( NeighbourTubeTempTimer[0], 0 ) != pdPASS )
+          { // The timer could not be set into the Inactive state.
+            DEBUG_PRINTF("NeighbourTubeTempTimer could not be stopped!");
+          }
+          break;
+        case ENABLE_NEIGHBOUR_TUBE_TEMP:
+          if( xTimerStart( NeighbourTubeTempTimer[0], 0 ) != pdPASS )
+          { // The timer could not be set into the Active state.
+            DEBUG_PRINTF("NeighbourTubeTempTimer could not be started!");
+          }
+          break;
+#endif // USE_NEIGHBOUR_TUBE_TEMP_FEATURE
         default:
           DEBUG_SEQ_PRINTF("***UNHANDLED MESSAGE*** %s",
             signals_txt[(unsigned char)msg->ucMessageID]);

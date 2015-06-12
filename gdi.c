@@ -216,7 +216,7 @@ void gdi_send_response_seq(void)
 {
   char str[10];
   int i;
-  sprintf(str, "<%d>,", uid);
+  sprintf(str, "%d,", uid);
   
   for(i=0;i<strlen(str);i++)
   {
@@ -491,6 +491,8 @@ void gdi_print_wrong_endian_gdi_float(gdi_float number, u8 status)
   unsigned int *pval = (unsigned int *)&in;
   u16 * swap_p = (u16*)&in;
   u16 swap_tmp;
+  char str[20];
+  int i;
 
   if(status == newline_start || status == newline_both)
   {
@@ -500,32 +502,22 @@ void gdi_print_wrong_endian_gdi_float(gdi_float number, u8 status)
     while (USART_GetFlagStatus(uart, USART_FLAG_TXE) == RESET);
   }
 
-  if (number == 0)
+  //ByteSwap for Modbus
+  for(i = 0; i < (sizeof(gdi_float)/sizeof(u16)); i++)
   {
-    USART_SendData(uart, '0');
-    while (USART_GetFlagStatus(uart, USART_FLAG_TXE) == RESET);
+    swap_tmp = *swap_p;
+    *swap_p = ( (swap_tmp>>8 & 0x00FF) + (swap_tmp<<8 &0xFF00) );
+    swap_p++;
   }
-  else {
-    char str[20];
-    int i;
-    
-    //ByteSwap for Modbus
-    for(i = 0; i < (sizeof(gdi_float)/2); i++)
-    {
-      swap_tmp = *swap_p;
-      *swap_p = ( (swap_tmp>>8 & 0x00FF) + (swap_tmp<<8 &0xFF00) );
-      swap_p++;
-    }
 #ifdef USE_FLOAT_PRECICION_DOUBLE
-    sprintf(str, "0x%08x%08x", *(pval+1), *pval);
+  sprintf(str, "0x%08x%08x", *(pval+1), *pval);
 #else
-    sprintf(str, "0x%08x", *pval);
+  sprintf(str, "0x%08x", *pval);
 #endif
-    for(i=0;i<strlen(str);i++)
-    {
-      USART_SendData(uart, str[i]);
-      while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
-    }
+  for(i=0;i<strlen(str);i++)
+  {
+    USART_SendData(uart, str[i]);
+    while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
   }
 
   if(status == space_end)
@@ -1046,7 +1038,7 @@ void gdi_map_to_functions()
             gdi_send_data_response("ERROR", newline_both);
           } else {
             //gdi_float - adj datasize to float size
-            result = DebugModbusReadRegs(slave, addr, ((datasize * sizeof(gdi_float)) / 2), (u8 *)buffer.gdi_float);
+            result = DebugModbusReadRegs(slave, addr, ((datasize * sizeof(gdi_float)) / sizeof(u16)), (u8 *)buffer.gdi_float);
             if(NO_ERROR == result)
             {
               gdi_send_data_response("The register values read are : ", no_newline);
@@ -1054,11 +1046,16 @@ void gdi_map_to_functions()
                 gdi_print_wrong_endian_gdi_float(buffer.gdi_float[i], space_end); 
               }
             }
-            gdi_send_data_response("The return value is : ", newline_start);
-            gdi_print_number(result, newline_end);
+            
+            if(gdiEcho) {
+              gdi_send_data_response("The return value is : ", newline_start);
+              gdi_print_number(result, newline_end);
+            }
             if(result == NO_ERROR)
             {
-              gdi_send_data_response("OK", newline_end);
+              if(gdiEcho) {
+                gdi_send_data_response("OK", newline_end);
+              }
             }
             else
             {
@@ -1104,10 +1101,10 @@ void gdi_map_to_functions()
               }
             }
             result = DebugModbusWriteRegs(slave, addr, (u8 *)buffer.gdi_float, (datasize * sizeof(gdi_float) / 2));
-
-            gdi_send_data_response("The return value is : ", newline_start);
-            gdi_print_number(result, newline_end);
-
+            if(gdiEcho) {
+              gdi_send_data_response("The return value is : ", newline_start);
+              gdi_print_number(result, newline_end);
+            }
             if (result != NO_ERROR) {
               gdi_send_data_response("Register Write Failed!", newline_end);
             } else {
@@ -1122,19 +1119,27 @@ void gdi_map_to_functions()
       case modbus_read_regs :
       {
         u8 result;
-        if (gdi_req_func_info.number_of_parameters < 3)
+        u8 paramcount;
+        if(!gdiEcho) {
+          uid = (u16) atoi(*(gdi_req_func_info.parameters + i));
+          i++;
+          paramcount = 4;
+        } else {
+          paramcount = 3;
+        }
+        if (gdi_req_func_info.number_of_parameters < paramcount)
           gdi_send_data_response("ERROR", newline_both);
         else
         {
-          slave = (u8) atoi(*(gdi_req_func_info.parameters + 0));
-          addr = (u16) atoi(*(gdi_req_func_info.parameters + 1));
-          datasize = (u16) atoi(*(gdi_req_func_info.parameters + 2)); 
-
-          //gdi_send_data_response("slave, addr and datasize are = ", newline_start);
-          //gdi_print_number(slave, space_end);
-          //gdi_print_number(addr, space_end);
-          //gdi_print_number(datasize, newline_end);
-
+          slave = (u8) atoi(*(gdi_req_func_info.parameters + i + 0));
+          addr = (u16) atoi(*(gdi_req_func_info.parameters + i + 1));
+          datasize = (u16) atoi(*(gdi_req_func_info.parameters + i + 2)); 
+          if(gdiEcho) {
+            gdi_send_data_response("slave, addr and datasize are = ", newline_start);
+            gdi_print_number(slave, space_end);
+            gdi_print_number(addr, space_end);
+            gdi_print_number(datasize, newline_end);
+          }
           if((0 == addr) || (0 == datasize)) {
             gdi_send_data_response("ERROR", newline_both);
           } else {
@@ -1153,13 +1158,15 @@ void gdi_map_to_functions()
 
             if(NO_ERROR == result)
             {
-              //gdi_send_data_response("The register values read are : ", no_newline);
+              gdi_send_data_response("The register values read are : ", no_newline);
               for (i=0; i<datasize;i++) { 
                 gdi_print_wrong_endian_number(buffer.uint16[i], space_end); 
               }
             }
-            //gdi_send_data_response("The return value is : ", newline_start);
-            gdi_print_number(result, newline_end);
+            if(gdiEcho) {
+              gdi_send_data_response("The return value is : ", newline_start);
+              gdi_print_number(result, newline_end);
+            }
             if(result == NO_ERROR)
             {
               gdi_send_data_response("OK", newline_end);
@@ -1177,7 +1184,15 @@ void gdi_map_to_functions()
       case modbus_write_regs :
       {
         u8 result;
-        if (gdi_req_func_info.number_of_parameters < 3)
+        u8 paramcount;
+        if(!gdiEcho) {
+          uid = (u16) atoi(*(gdi_req_func_info.parameters + i));
+          i++;
+          paramcount = 4;
+        } else { 
+          paramcount = 3; 
+        }
+        if (gdi_req_func_info.number_of_parameters < paramcount)
           gdi_send_data_response("ERROR", newline_both);
         else
         {
@@ -1185,17 +1200,18 @@ void gdi_map_to_functions()
           if (result == 0) {
             gdi_send_data_response("ERROR", newline_both);
           } else {
-            slave = (u8) atoi(*(gdi_req_func_info.parameters + 0));
-            addr = (u16) atoi(*(gdi_req_func_info.parameters + 1));
-            datasize = (u16) atoi(*(gdi_req_func_info.parameters + result)); 
-
-            gdi_send_data_response("slave, addr and datasize are : ", newline_start);
-            gdi_print_number(slave, space_end);
-            gdi_print_number(addr, space_end);
-            gdi_print_number(datasize, newline_end);
-            gdi_send_data_response("The register values to write are : ", no_newline);
-            for(i=0;i < datasize;i++) {
-              gdi_print_wrong_endian_number(buffer.uint16[i], space_end);
+            slave = (u8) atoi(*(gdi_req_func_info.parameters + i + 0));
+            addr = (u16) atoi(*(gdi_req_func_info.parameters + i + 1));
+            datasize = (u16) atoi(*(gdi_req_func_info.parameters + result)); //Do not add i as result already points to the parameter after values to write
+            if(gdiEcho) {
+              gdi_send_data_response("slave, addr and datasize are : ", newline_start);
+              gdi_print_number(slave, space_end);
+              gdi_print_number(addr, space_end);
+              gdi_print_number(datasize, newline_end);
+              gdi_send_data_response("The register values to write are : ", no_newline);
+              for(i=0;i < datasize;i++) {
+                gdi_print_wrong_endian_number(buffer.uint16[i], space_end);
+              }
             }
             if(slave <= 16)
             { // Adresses 0 - 16 are actually on the MODBUS
@@ -1205,9 +1221,10 @@ void gdi_map_to_functions()
             { // Adresses 17 - 20 are mapped to cool and lid, addr is reg, datasize is reg count, buffer is wrong endian
               result = coolLidWriteRegs(slave, addr, (u16 *)buffer.uint16, datasize);
             }
-            gdi_send_data_response("The return value is : ", newline_start);
-            gdi_print_number(result, newline_end);
-
+            if(gdiEcho) {
+              gdi_send_data_response("The return value is : ", newline_start);
+              gdi_print_number(result, newline_end);
+            }
             if (result != NO_ERROR) {
               gdi_send_data_response("Register Write Failed!", newline_end);
             } else {

@@ -479,8 +479,8 @@ void logUpdate(int16_t * ch0value, int16_t * ch1value, int16_t * ch2value, int16
 /* ---------------------------------------------------------------------------*/
 
 /* Write log data to Linux box (Called from gdi, thus running in gdi context) */
-/* <uid>,<state=<state>>,seq_number=s;log={t1,t2,t3,t4[,t1,t2,t3,t4 [,t1,t2,t3,t4[,t1,t2,t3,t4]]]} */
-/* or <uid>,<state=<state>>,OK\r  */
+/* state=<state>,seq_number=<seqNum>;log={<t0>,<t1>,<t2>,<t3>[,<t0>,<t1>,<t2>,<t3>[,<t0>,<t1>,<t2>,<t3>[,<t0>,<t1>,<t2>,<t3>]]]]} */
+/* or state=<state>\r  */
 
 int getClLog(char *poutText )
 {
@@ -491,12 +491,9 @@ int getClLog(char *poutText )
   int dataAdded = 0;
   
   *poutText = 0;
-
   if( coolTempOK && lidTempOK ) { clState = CL_STATE_CLOK; } else { clState = CL_STATE_CLNOK; }
-  strcat(poutText,"<state=");
+  strcat(poutText,"state=");
   strcat(poutText,cl_states[clState]);
-  strcat(poutText,",");
-
   // Send all available log elements for each tube
   while(NULL != (pinData = cl_dequeue(&cl_logDataQueue)) )
   {
@@ -504,7 +501,7 @@ int getClLog(char *poutText )
     dataAdded = 1;
     if(nElements == 0)
     { // Before payload
-      strcat(poutText,"<seq_number=");
+      strcat(poutText,",seq_number=");
       Itoa(pinData->seqNum, str);
       strcat(poutText,str);
       strcat(poutText,";log={");
@@ -529,7 +526,7 @@ int getClLog(char *poutText )
   
   if(dataAdded) { 
     poutText[strlen(poutText)]=0;
-    strcat(poutText, "}>");
+    strcat(poutText, "}>"); // #### Remove '>' when KS has updated tube mand.
   } 
   //DEBUG_PRINTF("Lenght of log %d",strlen(poutText));
   return nElements;
@@ -610,6 +607,26 @@ bool coolLidWriteRegs(u8 slave, u16 addr, u16 *data, u16 datasize)
           calib_data[2].c_1 = fanData[0].regulator.setPoint;
           NVSwrite(sizeof(calib_data), calib_data);
           DEBUG_PRINTF("\r\nWrote calib.\r\n");
+        }
+        else if(SET_IDLE_MODE == val)
+        {
+          xMessage *msgout;
+          msgout = pvPortMalloc(sizeof(xMessage));
+          if(msgout)
+          {
+            msgout->ucMessageID = DISABLE_NEIGHBOUR_TUBE_TEMP;
+            xQueueSend(TubeSequencerQueueHandle, &msgout, portMAX_DELAY);
+          }
+        }
+        else if(SET_AUTOMATIC_MODE == val)
+        {
+          xMessage *msgout;
+          msgout = pvPortMalloc(sizeof(xMessage));
+          if(msgout)
+          {
+            msgout->ucMessageID = ENABLE_NEIGHBOUR_TUBE_TEMP;
+            xQueueSend(TubeSequencerQueueHandle, &msgout, portMAX_DELAY);
+          }
         }
         break;
       default:

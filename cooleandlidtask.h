@@ -24,6 +24,7 @@ typedef enum {
   PELTIER_ADDR,
   //PELTIER_ADDR2,
   FAN_ADDR,
+  NEIGHBOUR_TUBE_TEMP_SWITCH,
   nofADDR
 } coolandlid_addrs_t;
 /* Exported constants --------------------------------------------------------*/
