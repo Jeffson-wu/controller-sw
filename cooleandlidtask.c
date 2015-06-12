@@ -170,23 +170,26 @@ static uint16_t pwmCh[5] = {0, 0, 0, 0, 0};
 
 static peltierData_t peltierData[1] = {
 //  {PELTIER_1, {STOP_STATE, -26213, &pwmCh[0], &adcCh[0]}}
-		{PELTIER_1, {STOP_STATE, -26213, &pwmCh[0], &adcCh[3]}}
+//	{PELTIER_1, {STOP_STATE, -19963, &pwmCh[0], &adcCh[3]}} //DV2
+		{PELTIER_1, {STOP_STATE, -19963, &pwmCh[0], &adcCh[0]}} //DV3
 };
 
 static lidData_t lidData[1] = {
-	//{LID_HEATER_1, {STOP_STATE, -26213, &pwmCh[3], &adcCh[1]}}
-  {LID_HEATER_1, {STOP_STATE, -26213, &pwmCh[4], &adcCh[1]}}
+	//{LID_HEATER_1, {STOP_STATE, -19963, &pwmCh[3], &adcCh[1]}} //DV1
+  {LID_HEATER_1, {STOP_STATE, -19963, &pwmCh[4], &adcCh[1]}} //DV2
+
 };
 
 static fanData_t fanData[1] = {
-//  {FAN_1, {STOP_STATE, 0, &pwmCh[4], &adcCh[3]}}
-		{FAN_1, {STOP_STATE, 0, &pwmCh[3], &adcCh[0]}}
+//  {FAN_1, {STOP_STATE, 0, &pwmCh[4], &adcCh[3]}} //DV1
+//	{FAN_1, {STOP_STATE, 0, &pwmCh[3], &adcCh[0]}} //DV2
+		{FAN_1, {STOP_STATE, 0, &pwmCh[3], &adcCh[3]}} //DV3
 };
 
 calib_data_t __attribute__ ((aligned (2))) calib_data[3] = {
   /* Default calibration data - use if no valid data found in NVS */
     { 15000   },       /* Lid     90degC */
-    { -26811 },       /* Peltier  4degC */
+    { -19963 },       /* Peltier  15degC */
     { -13528 }        /* Fan      40degC */
   };
 
@@ -222,7 +225,7 @@ void standAlone() //These settings should be made from the Linux Box
 void fan(fanData_t *fanData){
   regulatorData_t *reg;
   reg = &fanData->regulator;
-  reg->setPoint = -10168; //40oC
+  reg->setPoint = -13168; //40oC
   int64_t out = 0;
   int16_t Kp = -10;
 
@@ -256,7 +259,7 @@ void fan(fanData_t *fanData){
 void peltier(peltierData_t *peltierData){
   regulatorData_t *reg;
   reg = &peltierData->regulator;
-  //reg->setPoint = -26811; //4oC
+  reg->setPoint = -21783; //15oC //-24507; //5oC
   int64_t out = 0;
   int16_t Kp = -20;
 
@@ -276,8 +279,8 @@ void peltier(peltierData_t *peltierData){
     break;
   }
   if( abs(reg->setPoint - *reg->adcVal) < 100 ) { coolTempOK = TRUE; }
-	if (out > 25000)
-		out = 25000;
+	if (out > 32767) //25000
+		out = 32767;
 	if (out < 0)
 		out = 0;
 	*reg->pwmVal = out;
@@ -291,7 +294,8 @@ void lid(lidData_t *lidData)
   regulatorData_t *reg;
   reg = &lidData->regulator;
   int64_t out = 0;
-  int16_t Kp = 0.5; //120;
+  int16_t Kp = 1.5;
+  reg->setPoint = 14040; //120oC
 
   switch (reg->state) {
     case STOP_STATE:
@@ -312,17 +316,15 @@ void lid(lidData_t *lidData)
     {
     	out = 32767;
 
-    	reg->state = CTRL_CLOSED_LOOP_STATE;
-
-    	//if (*reg->adcVal > (reg->setPoint-2000)) //ca -10oC
-    	//	reg->state = CTRL_CLOSED_LOOP_STATE;
+    	if (*reg->adcVal > (reg->setPoint-2000)) //ca -10oC
+    		reg->state = CTRL_CLOSED_LOOP_STATE;
     }
     break;
     case CTRL_CLOSED_LOOP_STATE:
     {
     	out = Kp*(reg->setPoint - *reg->adcVal);
 
-    	if (*reg->adcVal < reg->setPoint-2500)
+    	if (*reg->adcVal < reg->setPoint-4000)
     		reg->state = CTRL_OPEN_LOOP_STATE;
     }
     break;
@@ -337,9 +339,11 @@ void lid(lidData_t *lidData)
 	//out = 10000;
 	*reg->pwmVal = out;
 
+/*
 #ifdef DEBUG_COOL
   static int8_t cnt = 0;
 #endif
+
 #ifdef DEBUG_COOL
     if (cnt == 50)
     {
@@ -348,6 +352,7 @@ void lid(lidData_t *lidData)
     }
     cnt++;
 #endif
+*/
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -669,9 +674,9 @@ void CoolAndLidTask( void * pvParameters )
   while(1)
   {
   #ifdef DEBUG_COOL
-      if (cnt == 50)
+      if (cnt == 40)
       {
-        DEBUG_PRINTF("PELC:%ld,%d,PELH:%ld,LID1:%ld,%d,ST:%d,LID2:%ld,%d,ST:%d", dac_2_temp(adcCh[0]), pwmCh[0], dac_2_temp(adcCh[3]), dac_2_temp(adcCh[1]), pwmCh[1],lidData[0].regulator.state, dac_2_temp(adcCh[2]), pwmCh[2],lidData[1].regulator.state);
+        DEBUG_PRINTF("PEL_PWM:%d, PEL:%ld, FAN_PWM:%d, FAN:%ld, LID_PWM:%d, LID:%ld", pwmCh[0], dac_2_temp(adcCh[0]), pwmCh[3], dac_2_temp(adcCh[3]), pwmCh[4], dac_2_temp(adcCh[1]));
         cnt = 0;
       }
       cnt++;
