@@ -60,9 +60,6 @@ xQueueHandle GDIQueueHandle;
 extern xQueueHandle CoolAndLidQueueHandle;
 
 /* ---------------------------------------------------------------------------*/
-xSemaphoreHandle xModbusSemaphore = NULL;
-
-/* ---------------------------------------------------------------------------*/
 /* Task Handles ---------------------------------------------------------------*/
 xTaskHandle pvTubeSequencerTaskTask;
 xTaskHandle modbusCreatedTask;
@@ -458,16 +455,18 @@ int main(void)
 
   ConfigOSTimer();
 
-  xModbusSemaphore = xSemaphoreCreateMutex();
-  /*create queue*/
+  /* create queues */
   ModbusQueueHandle=xQueueCreate( 32, ( unsigned portBASE_TYPE ) sizeof( void * ) );
-  vQueueAddToRegistry(ModbusQueueHandle,(char *)"MODBUS");
+  vQueueAddToRegistry(ModbusQueueHandle,(char *)"MODBUS_Q");
   LogQueueHandle=xQueueCreate( 64, ( unsigned portBASE_TYPE ) sizeof( void * ) );
-  vQueueAddToRegistry(LogQueueHandle,(char *)"LOG");
+  vQueueAddToRegistry(LogQueueHandle,(char *)"LOG_Q");
   CoolAndLidQueueHandle=xQueueCreate( QUEUESIZE, ( unsigned portBASE_TYPE ) sizeof( void * ) );
-  vQueueAddToRegistry(CoolAndLidQueueHandle,(char *)"CooleAndLid");
+  vQueueAddToRegistry(CoolAndLidQueueHandle,(char *)"CL_Q");
   TubeSequencerQueueHandle=xQueueCreate( 100, ( unsigned portBASE_TYPE ) sizeof( void * ) );
-  vQueueAddToRegistry(TubeSequencerQueueHandle,(char *)"GDI");
+  vQueueAddToRegistry(TubeSequencerQueueHandle,(char *)"Seq_Q");
+  GDIQueueHandle=xQueueCreate( 32, ( unsigned portBASE_TYPE ) sizeof( void * ) );
+  vQueueAddToRegistry(GDIQueueHandle,(char *)"GDI_Q");
+  /* create tasks */
   xTaskCreate( ModbusTask, ( const char * ) "Modbus task", ( unsigned short ) 400, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &modbusCreatedTask );
   xTaskCreate( LogTask, ( const char * ) "Log task", ( unsigned short ) 400, NULL, ( ( unsigned portBASE_TYPE ) 3 ) | portPRIVILEGE_BIT, &pvLogTask );
   xTaskCreate( gdi_task, ( const char * ) "Gdi task", ( unsigned short ) 600, NULL, ( ( unsigned portBASE_TYPE ) 1 ) | portPRIVILEGE_BIT, &gdiCreatedTask );

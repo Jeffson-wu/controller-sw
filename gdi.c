@@ -71,6 +71,7 @@ xSemaphoreHandle GDI_RXSemaphore = NULL;
 
 extern xQueueHandle ModbusQueueHandle;
 extern xQueueHandle CoolAndLidQueueHandle;
+extern xQueueHandle GDIQueueHandle;
 
 USART_TypeDef *uart = USART1;
 u32 test_variable= 9876543;
@@ -1155,10 +1156,9 @@ void gdi_map_to_functions()
             {
               result = -1;
             }
-
             if(NO_ERROR == result)
             {
-              gdi_send_data_response("The register values read are : ", no_newline);
+              if(gdiEcho) { gdi_send_data_response("The register values read are : ", no_newline); }
               for (i=0; i<datasize;i++) { 
                 gdi_print_wrong_endian_number(buffer.uint16[i], space_end); 
               }
@@ -1425,9 +1425,12 @@ void gdi_init()
 void gdi_task(void *pvParameters)
 {
   GDI_RXSemaphore = xSemaphoreCreateMutex();
+  vQueueAddToRegistry(GDI_RXSemaphore,(char *)"GDIRx sem");
   xSemaphoreTake( GDI_RXSemaphore, portMAX_DELAY );
   gdi_init(); /*Setup debug uart, This must be after the GDI_RXSemaphore is instantiated */
-
+#ifdef DEBUG_USE_ECHO_AS_DEFAULT
+    gdi_send_msg_on_monitor("!! Echo=1 Not for use with Linux box !!");
+#endif
   while(1)
   {
     /*wait for mutex*/
@@ -1445,5 +1448,69 @@ void gdi_task(void *pvParameters)
   vTaskDelete(NULL);
 }
 
+u8 DebugModbusReadRegs(u8 slave, u16 addr, u16 register_count, u8 *buffer)
+{
+  xMessage *msgin;
+  xMessage *msgout;
+  ReadModbusRegsReq *p;
+  msgout=pvPortMalloc(sizeof(xMessage)+sizeof(ReadModbusRegsReq));
+  if(NULL == msgout)
+  {
+    GDI_PRINTF("Malloc failed! DebugModbusReadRegs Tube %d, Reg %d",slave,addr);
+    return -1;
+  }
+  else
+  {
+    msgout->ucMessageID = READ_MODBUS_REGS;
+    p = (ReadModbusRegsReq *)msgout->ucData;
+    p->slave = slave;
+    p->addr = addr;
+    p->datasize = register_count;
+    p->reply = GDIQueueHandle;
+    assert_param(xQueueSend(ModbusQueueHandle, &msgout, portMAX_DELAY)== pdPASS);
+    /* wait for queue msg */
+    if( xQueueReceive( GDIQueueHandle, &msgin, (TickType_t)120 ) == pdPASS )
+    {
+      ReadModbusRegsRes *preg;
+      u16 *modbus_data = (u16*)buffer;
+      int i=0;
+      
+      preg = (ReadModbusRegsRes *)msgin->ucData;
+      for(i = 0; i < (preg->datasize); i++)
+      {
+        modbus_data[i] =(((u16)(preg->data[i*2])<<8) | (preg->data[(i*2)+1]));
+      }
+    }
+    else
+    {
+      return -2;
+    }
+  }
+  return 0;
+}
+
+bool DebugModbusWriteRegs(u8 slave, u16 addr, u8 *data, u16 register_count)
+{
+  xMessage *msgout;
+  WriteModbusRegsReq *p;
+  msgout=pvPortMalloc(sizeof(xMessage)+sizeof(ReadModbusRegsReq));
+  if(NULL == msgout)
+  {
+    GDI_PRINTF("Malloc failed! DebugModbusWriteRegs Tube %d, Reg %d",slave,addr);
+    return -1;
+  }
+  else
+  {
+    msgout->ucMessageID = WRITE_MODBUS_REGS;
+    p=(WriteModbusRegsReq *)msgout->ucData;
+    p->slave = slave;
+    p->addr = addr;
+    p->datasize = register_count;
+    p->reply = NULL; //we do not want the reply
+    memcpy(p->data, data, register_count*sizeof(u16));
+    assert_param(xQueueSend(ModbusQueueHandle, &msgout, portMAX_DELAY)== pdPASS);
+  }
+  return 0;
+}
 
 

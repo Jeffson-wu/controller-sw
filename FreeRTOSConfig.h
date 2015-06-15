@@ -101,7 +101,7 @@
 #define configUSE_ALTERNATIVE_API 		0
 #define configCHECK_FOR_STACK_OVERFLOW	2/*0 TFK DEBUG_RTOS*/
 #define configUSE_RECURSIVE_MUTEXES		1
-//#define configQUEUE_REGISTRY_SIZE		30/*0 TFK DEBUG_RTOS*/
+#define configQUEUE_REGISTRY_SIZE		30/*0 TFK DEBUG_RTOS*/
 //#define configGENERATE_RUN_TIME_STATS	1 /*0 TFK DEBUG_RTOS*/
 //#define configUSE_MALLOC_FAILED_HOOK 1  /*0 TFK DEBUG_RTOS*/
 //#define configUSE_STATS_FORMATTING_FUNCTIONS 1 /*0 TFK DEBUG_RTOS*/
@@ -109,6 +109,9 @@
 void assert_failed(unsigned char* file, unsigned int line); //Implemented in main.c
 #define configASSERT(expr) ((expr) ? (void)0 : assert_failed((unsigned char *)__FILE__, __LINE__))
 
+/* Enhance debug */
+#define INCLUDE_pcTaskGetTaskName 1
+#define INCLUDE_xTaskGetCurrentTaskHandle 1
 
 /*Use timers*/
 #define configUSE_TIMERS                1

@@ -64,6 +64,9 @@ int debug_cnt = 0;
 void UART_SendMsg(USART_TypeDef *uart, u8 *buffer, int len);
 void Modbus_init(USART_TypeDef *uart);
 
+/* ---------------------------------------------------------------------------*/
+xSemaphoreHandle xModbusSemaphore = NULL;
+
 xQueueHandle ModbusQueueHandle;
 static  xTimerHandle TimerHandle;
 
@@ -390,19 +393,10 @@ void Modbus_init(USART_TypeDef *uart)
   usedUart=uart;
   TimerHandle=xTimerCreate((char*)"Modbus Response timer", MODBUS_RESPONSE_TIMEOUT, pdTRUE, NULL, response_timeoutCB);
   xModbusSemaphore = xSemaphoreCreateMutex();
+  vQueueAddToRegistry(xModbusSemaphore,(char *)"MODBUS sem");
   xSemaphoreTake( xModbusSemaphore, portMAX_DELAY );
   UART_Init(USART2, recieveChar);
   configTimerModbusTimeout();
-}
-
-u8 DebugModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer)
-{
-  return ModbusReadRegs(slave, addr, datasize, buffer);
-}
-
-bool DebugModbusWriteRegs(u8 slave, u16 addr, u8 *data, u16 datasize)
-{
-  return ModbusWriteRegs(slave, addr, data, datasize);
 }
 
 

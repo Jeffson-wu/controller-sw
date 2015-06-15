@@ -651,6 +651,7 @@ void CoolAndLidTask( void * pvParameters )
 
   /* Create ADC synchrinization semaphore and let the ADC ISR know about it */
   vSemaphoreCreateBinary(xADSSemaphore);
+  vQueueAddToRegistry(xADSSemaphore,(char *)"ADC sem");
   assert_param(NULL != xADSSemaphore);
   xSemaphoreTake(xADSSemaphore, portMAX_DELAY); //Default is taken. ISR will give.
 
