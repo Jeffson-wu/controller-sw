@@ -919,15 +919,10 @@ char * get_tube_state(long TubeId, char *poutText)
   char state[20]="idle";
   char progress[5]="50";
   char stage_nr[5]="3";
-
+  char numberStr[20];
+  uint16_t hw_status = 0;
+  uint16_t event = 0;
   *poutText = 0;
-
-  if(Tubeloop[TubeId-1].event_reg)      /* last event/status register read from tube*/
-  { // Report event to linux box 
-  }
-  if(Tubeloop[TubeId-1].hw_status_reg)  /* last hw status register read from tube   */
-  { // Report hw status to linux box
-  }
 
   if(Tubeloop[TubeId-1].state == TUBE_OUT_OF_DATA)
   {
@@ -969,6 +964,18 @@ char * get_tube_state(long TubeId, char *poutText)
     strcat(poutText, ";stage_number=");
     strcat(poutText, stage_nr);
     getLog(poutText, TubeId);
+  }
+  if( (event = Tubeloop[TubeId-1].event_reg) )      /* last event/status register read from tube*/
+  { // Report event to linux box 
+    sprintf(numberStr, ";event=%d", (int)Tubeloop[TubeId-1].event_reg);
+    Tubeloop[TubeId-1].event_reg = 0;
+    strcat(poutText, numberStr);
+  }
+  if( (hw_status = Tubeloop[TubeId-1].hw_status_reg) )  /* last hw status register read from tube   */
+  { // Report hw status to linux box
+    sprintf(numberStr, ";hw_status=%d", (int)Tubeloop[TubeId-1].hw_status_reg);
+    Tubeloop[TubeId-1].hw_status_reg = 0;
+    strcat(poutText, numberStr);
   }
   strcat(poutText, ";");
   return poutText;
