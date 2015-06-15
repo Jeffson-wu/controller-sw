@@ -50,7 +50,7 @@
 
 /* Private debug define ------------------------------------------------------*/
 //#define DEBUG_MB /* General debug */
-#define DEBUG_HF /* Searching for a hard fault */
+//#define DEBUG_HF /* Searching for a hard fault */
 extern void gdi_send_msg_on_monitor(char * response);
 #define DEBUG_BUFFER_SIZE 600
 char buf[DEBUG_BUFFER_SIZE];                   /* buffer for debug printf*/

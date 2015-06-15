@@ -31,6 +31,7 @@ extern xQueueHandle CoolAndLidQueueHandle;
 #define USE_PAUSE_FEATURE
 #define USE_NEIGHBOUR_TUBE_TEMP_FEATURE
 #define USE_LOGGING_FEATURE
+#define USE_LID_DETECT_FEATURE
 
 /* Private debug define ------------------------------------------------------*/
 //#define SIMULATE_HEATER /*Disable communication to M0 CPU's return temperature reached when temp is requested*/
@@ -300,6 +301,8 @@ bool getseq(u8 tubeId,stageCmd_t * data);
 static int tubequefree(long tubeid);
 void tubeinitQueue();
 void stop_all_tube_LED();
+void start_lid_heating();
+void stop_lid_heating();
 
 /* Private functions ---------------------------------------------------------*/
 void InitTubeTimers()
@@ -609,9 +612,81 @@ void Heater_PinConfig(void)
   GPIO_InitStructure.GPIO_Pin = GPIO_Pin_3 | GPIO_Pin_4 | GPIO_Pin_11 | GPIO_Pin_12;
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPD;
   GPIO_Init(GPIOC, &GPIO_InitStructure);
+#ifdef USE_LID_DETECT_FEATURE
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_5;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPU; // TODO: On DV30 use GPIO_Mode_IN_FLOATING; as Sergii loves external pullups
+  GPIO_Init(GPIOB, &GPIO_InitStructure);
+#endif // USE_LID_DETECT_FEATURE
+}
+
+#ifdef USE_LID_DETECT_FEATURE
+/* ---------------------------------------------------------------------------*/
+/* This fn is executed in the context of the TimerTask */
+void LidDetectedFromISR(void *pvParameter1, uint32_t lidState)
+{
+  DEBUG_IF_PRINTF("Lid Detect: %d", (int)lidState);
+  if(1 == lidState)
+  { // Lid has been opened
+    stop_lid_heating();
+#ifdef USE_PAUSE_FEATURE
+    long TubeId;
+    for(TubeId = 1; TubeId < 17; TubeId++)
+    {
+      pause_tube_state(TubeId);
+    }
+#else // USE_PAUSE_FEATURE
+    long TubeId;
+    for(TubeId = 1; TubeId < 17; TubeId++)
+    {
+      stop_tube_seq(TubeId);
+    }
+#endif // USE_PAUSE_FEATURE
+  }
 }
 
 /* ---------------------------------------------------------------------------*/
+/* This fn is executed in the context of the sysTick ISR */
+void vApplicationTickHook()
+{
+  // debounce is required
+  static u16 pinState = 0xAAAA; // 1010101010101010 -> do not get all 0 or all 1 straighr away
+  static bool lidState = FALSE;
+  BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+
+  if(Bit_SET == GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_5))
+  {
+    pinState = (pinState << 1) + 1;
+  }
+  else
+  {
+    pinState = (pinState << 1);
+  }
+  if(0x0000 == pinState) 
+  {
+    if(TRUE == lidState)
+    {
+      lidState = FALSE;
+      xTimerPendFunctionCallFromISR( LidDetectedFromISR,
+                               NULL, (uint32_t)1,
+                               &xHigherPriorityTaskWoken);
+    }
+  }
+  if(0xFFFF == pinState) 
+  {
+    if(FALSE == lidState)
+    {
+      lidState = TRUE;
+      xTimerPendFunctionCallFromISR( LidDetectedFromISR,
+                             NULL, (uint32_t)0,
+                             &xHigherPriorityTaskWoken);
+    }
+  }
+}
+#endif // USE_LID_DETECT_FEATURE
+
+/* ---------------------------------------------------------------------------*/
+/* This fn is executed in the context of the TimerTask */
 void ReadTubeHeaterRegFromISR( void *pvParameter1, uint32_t ulParameter2 )
 {
   u8 tube = (u8)ulParameter2;
@@ -646,7 +721,7 @@ void EXTI_Handler(void)
   {
     if (SET == EXTI_GetFlagStatus(gpio_EXTI_CNF[ExtiGpio].EXTI_LINE))
     {
-      DEBUG_IF_PRINTF("INTERRUPT-READ STATUS ON HEATER[%s]",heater[ExtiGpio]);
+      DEBUG_IF_PRINTF("INTERRUPT ON HEATER[%s]",heater[ExtiGpio]);
       xTimerPendFunctionCallFromISR( ReadTubeHeaterRegFromISR,
                                NULL,
                                ( uint32_t ) heater2tube[ExtiGpio].tube_1,
@@ -885,7 +960,7 @@ char * get_tube_state(long TubeId, char *poutText)
     strcpy(state, "error");
   }
   Itoa(Tubeloop[TubeId-1].curr.seq_num, stage_nr);
-  strcpy(poutText, "OK<state=\"");
+  strcpy(poutText, "OK,state=\"");
   strcat(poutText, state);
   if(Tubeloop[TubeId-1].state != TUBE_IDLE)
   {
@@ -895,7 +970,7 @@ char * get_tube_state(long TubeId, char *poutText)
     strcat(poutText, stage_nr);
     getLog(poutText, TubeId);
   }
-  strcat(poutText, ">");
+  strcat(poutText, ";");
   return poutText;
 }
 

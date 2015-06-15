@@ -878,6 +878,7 @@ void CoolAndLidTask( void * pvParameters )
         case STOP_LID_HEATING:
         {
           lidData[0].regulator.state = STOP_STATE;
+          //setCLStatusReg(0xf00f); //Set flag for stopped lid heating ####JRJ
           //lidData[1].regulator.state = STOP_STATE;
         }
         break;

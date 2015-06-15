@@ -1101,8 +1101,8 @@ void gdi_map_to_functions()
           // "at@gdi:seq_cmd(<uid>,<tube>,tubestop)\r"
           else if(!strncmp((*(gdi_req_func_info.parameters + i + 1)),"tubestop", strlen("tubestop")))
           {
-            GDI_PRINTF("tubestop on Tube:%ld", TubeId);
-            if(stop_tube_seq(TubeId))    /*Start the seq*/
+            GDI_PRINTF("T%ld: Stop seq", TubeId);
+            if(stop_tube_seq(TubeId))    /*Stop the seq*/
             {
               gdi_send_data_response("OK", newline_end);
             }
@@ -1114,8 +1114,8 @@ void gdi_map_to_functions()
           // "at@gdi:seq_cmd(<uid>,<tube>,tubepause)\r"
           else if(!strncmp((*(gdi_req_func_info.parameters +gdi_req_func_info.number_of_parameters-1)), "tubepause", strlen("tubepause")))
           {
-            GDI_PRINTF("tubepause on Tube:%ld", TubeId);
-            if(pause_tube_state(TubeId))    /*Start the seq*/
+            GDI_PRINTF("T%ld: pause seq", TubeId);
+            if(pause_tube_state(TubeId))    /*Pause the seq*/
             {
               gdi_send_data_response("OK", newline_end);
             }
