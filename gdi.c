@@ -40,8 +40,7 @@
 #define CHAR_BACKSPACE '\b'
 char *command_prefix = "at@gdi:";
 int uid;
-// longest command is "at@gdi:seq_cmd(<tube>,<PauseTemp>,<stage1>,<Temp1>,<Time1>,<stage2>,<Temp2>,<Time2>,.,.,.,.,.,., )\n"
-// wich is 25 + 36 * 35 (for 35 cycles of 3 stages) 
+// longest command is ?? // TODO: #### investigate this
 #define INPUT_BUF_SIZE 500
 #define SIZE_OF_STR_RESULT 400
 #define CRASH_KEY 666
@@ -72,6 +71,7 @@ xSemaphoreHandle GDI_RXSemaphore = NULL;
 
 extern xQueueHandle ModbusQueueHandle;
 extern xQueueHandle CoolAndLidQueueHandle;
+extern xQueueHandle GDIQueueHandle;
 
 USART_TypeDef *uart = USART1;
 u32 test_variable= 9876543;
@@ -150,8 +150,8 @@ gdi_func_table_type gdi_func_info_table[] =
 #endif
   {"modbus_read_regs",  " Read register values",      "at@gdi:modbus_read_regs(slave,addr,datasize)",modbus_read_regs},
   {"modbus_write_regs", " Write register values",     "at@gdi:modbus_write_regs(slave,addr,[data1,data2,..],datasize)",modbus_write_regs},
-  {"setpwm",            " Set PWM value",             "at@gdi:setpwm(idx, pwm)",    setpwm },
-  {"setdac",            " Set DAC value",             "at@gdi:setdac(idx, pwm)",    setdac },
+  {"setpwm",            " Set PWM [%]",               "at@gdi:setpwm(mcu, idx, pwm)", setpwm },
+  {"setdac",            " Set DAC [%]",               "at@gdi:setdac(idx, dac)",    setdac },
   {"getadc",            " Get latest ADC values",     "at@gdi:getadc()",            getadc },
   {"crash",             " Force crash",               "at@gdi:crash(key)",          crash_cmd },
   { NULL, NULL, NULL, 0 }
@@ -720,6 +720,8 @@ void gdi_map_to_functions()
     case help :
       while(gdi_func_info_table[i].command_name != NULL)
       {
+        gdi_send_data_response("All commands are shown as if echo is on. (i.e. no uid parameter)", newline_end);
+        gdi_send_data_response("If echo is off add uid as first parameter (increasing the total param count by 1.)", newline_end);
         gdi_send_data_response(gdi_func_info_table[i].func_info, newline_start);
         gdi_send_data_response(" - ", no_newline);
         gdi_send_data_response(gdi_func_info_table[i].func_format, newline_end);
@@ -759,12 +761,29 @@ void gdi_map_to_functions()
       u8  fn_idx;
       xMessage *msg;        
       int result = TRUE;
-
+      u8 paramcount;
+      
       if(!gdiEcho) {
         uid = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
         i++;
+        paramcount = 3; // 3 or 2 params
+      } else {
+        paramcount = 2; // 2 or 1 params
       }
-      fn_idx   = (u8)  strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
+      if (gdi_req_func_info.number_of_parameters > 1) {
+        fn_idx   = (u8)  strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
+      }
+      else
+      {
+        gdi_send_data_response("NOK invalid parameter count", newline_both);
+        break;
+      }
+      if( ( (6 == fn_idx) && (gdi_req_func_info.number_of_parameters != (paramcount - 1) ) ) ||
+          ( (6 != fn_idx) && (gdi_req_func_info.number_of_parameters != paramcount ) )  )
+      {
+        gdi_send_data_response("NOK invalid parameter count", newline_both);
+        break;
+      }
 
       if(6 == fn_idx) {
         int tubeNum;
@@ -826,10 +845,18 @@ void gdi_map_to_functions()
         s16 setpoint;
         xMessage *msg;        
         int result = TRUE;
+        u8 paramcount;
 
         if(!gdiEcho) {
           uid = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
           i++;
+          paramcount = 2;
+        } else {
+          paramcount = 1;
+        }
+        if (gdi_req_func_info.number_of_parameters != paramcount) {
+          gdi_send_data_response("NOK invalid parameter count", newline_both);
+          break;
         }
         SetCooleAndLidReq *p;
         msg = pvPortMalloc(sizeof(xMessage)+sizeof(SetCooleAndLidReq)+20);
@@ -855,10 +882,19 @@ void gdi_map_to_functions()
         s16 setpoint;
         xMessage *msg;        
         int result = TRUE;
+        u8 paramcount;
 
         if(!gdiEcho) {
           uid = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
           i++;
+          paramcount = 2;
+        } else {
+          paramcount = 1;
+        }
+        
+        if (gdi_req_func_info.number_of_parameters != paramcount) {
+          gdi_send_data_response("NOK invalid parameter count", newline_both);
+          break;
         }
         SetCooleAndLidReq *p;
         msg = pvPortMalloc(sizeof(xMessage)+sizeof(SetCooleAndLidReq)+20);
@@ -886,10 +922,19 @@ void gdi_map_to_functions()
         s16 setpoint;
         xMessage *msg;        
         int result = TRUE;
+        u8 paramcount;
 
         if(!gdiEcho) {
           uid = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
           i++;
+          paramcount = 2;
+        } else {
+          paramcount = 1;
+        }
+        
+        if (gdi_req_func_info.number_of_parameters != paramcount) {
+          gdi_send_data_response("NOK invalid parameter count", newline_both);
+          break;
         }
         SetCooleAndLidReq *p;
         msg = pvPortMalloc(sizeof(xMessage)+sizeof(SetCooleAndLidReq)+20);
@@ -913,28 +958,74 @@ void gdi_map_to_functions()
     case setpwm:
       {
         s16 pwm;
-        s16 idx;
+        s16 chn;
+        s16 mcu;
+        u8 result;
         xMessage *msg;        
+        u8 paramcount;
 
         if(!gdiEcho) {
           uid = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
           i++;
+          paramcount = 4;
+        } else {
+          paramcount = 3;
+        }
+
+        if (gdi_req_func_info.number_of_parameters != paramcount) {
+          gdi_send_data_response("NOK invalid parameter count", newline_both);
+          break;
         }
         SetPWMReq *p;
         msg = pvPortMalloc(sizeof(xMessage)+sizeof(SetPWMReq)+20);
         if(msg)
         {
-          idx = (s16) strtol(*(gdi_req_func_info.parameters + i++), (char **)NULL, 10);
+          mcu = (s16) strtol(*(gdi_req_func_info.parameters + i++), (char **)NULL, 10);
+          chn = (s16) strtol(*(gdi_req_func_info.parameters + i++), (char **)NULL, 10);
           pwm = (s16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
-          if((pwm >= 0)&&(pwm <= 100)&&(idx >= 0)&&(idx <= 4)) {
+          if((mcu < 0)||(mcu > 4)||(pwm < 0)||(pwm > 100)||(chn < 0)||(chn > 5)||( (5==chn)&&(0<mcu) ) ) {
+            gdi_send_data_response("NOK invalid parameter", newline_end);
+            break;
+          }
+          if(0 == mcu)
+          {
             msg->ucMessageID = SET_PWM;
             p = (SetPWMReq *)msg->ucData;
             p->value = pwm;
-            p->idx =   idx;
+            p->idx =   chn;
             xQueueSend(CoolAndLidQueueHandle, &msg, portMAX_DELAY);
             gdi_send_data_response("OK", newline_end);
-          } else {
-            gdi_send_data_response("NOK invalid parameter", newline_end);
+          }
+          else
+          {
+            if(0<pwm) 
+            {
+              u16 data = 0;
+              data = SET_MANUEL_MODE;
+              data = ((data<<8)&0x0ff00) + ((data>>8)&0x00ff);
+              result = DebugModbusWriteRegs( (mcu-1)*4+chn , TUBE_COMMAND_REG, (u8*)&data, 1);
+              data = (pwm * 32768UL) / 100;            
+              data = ((data<<8)&0x0ff00) + ((data>>8)&0x00ff);
+              if (NO_ERROR == result) {
+                result = DebugModbusWriteRegs( (mcu-1)*4+chn , PWM_1_REG + mcu -1, (u8*)&data, 1);
+              }
+            }
+            else
+            { // Switch off
+              u16 data = 0;
+              data = SET_MANUEL_STOP;
+              data = ((data<<8)&0x0ff00) + ((data>>8)&0x00ff);
+              result = DebugModbusWriteRegs( (mcu-1)*4+chn , TUBE_COMMAND_REG, (u8*)&data, 1);
+              data = 0;            
+              if (NO_ERROR == result) {
+                result = DebugModbusWriteRegs( (mcu-1)*4+chn , PWM_1_REG + mcu -1, (u8*)&data, 1);
+              }
+            }
+            if(result == NO_ERROR) {
+              gdi_send_data_response("OK", newline_end);
+            } else {
+              gdi_send_data_response("NOK MB-err", newline_end);
+            }
           }
         }
       }
@@ -943,7 +1034,7 @@ void gdi_map_to_functions()
     case setdac:
       {
         s16 dac;
-        s16 idx;
+        s16 chn;
         xMessage *msg;        
     
         if(!gdiEcho) {
@@ -954,13 +1045,13 @@ void gdi_map_to_functions()
         msg = pvPortMalloc(sizeof(xMessage)+sizeof(SetDACReq)+20);
         if(msg)
         {
-          idx = (s16) strtol(*(gdi_req_func_info.parameters + i++), (char **)NULL, 10);
+          chn = (s16) strtol(*(gdi_req_func_info.parameters + i++), (char **)NULL, 10);
           dac = (s16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
-          if((dac >= 0)&&(dac <= 100)&&(idx >= 0)&&(idx <= 1)) {
+          if((dac >= 0)&&(dac <= 100)&&(chn >= 0)&&(chn <= 1)) {
             msg->ucMessageID = SET_DAC;
             p = (SetDACReq *)msg->ucData;
             p->value = dac;
-            p->idx =   idx;
+            p->idx =   chn;
             xQueueSend(CoolAndLidQueueHandle, &msg, portMAX_DELAY);
             gdi_send_data_response("OK", newline_end);
           } else {
@@ -1124,13 +1215,15 @@ void gdi_map_to_functions()
             result = DebugModbusReadRegs(slave, addr, ((datasize * sizeof(gdi_float)) / 2), (u8 *)buffer.gdi_float);
             if(NO_ERROR == result)
             {
-              gdi_send_data_response("The register values read are : ", no_newline);
+              if(gdiEcho) { gdi_send_data_response("The register values read are : ", no_newline); }
               for (i=0; i<datasize;i++) { 
                 gdi_print_wrong_endian_gdi_float(buffer.gdi_float[i], space_end); 
               }
             }
-            gdi_send_data_response("The return value is : ", newline_start);
-            gdi_print_number(result, newline_end);
+            if(gdiEcho) { 
+              gdi_send_data_response("The return value is : ", newline_start);
+              gdi_print_number(result, newline_end);
+            }
             if(result == NO_ERROR)
             {
               gdi_send_data_response("OK", newline_end);
@@ -1179,10 +1272,10 @@ void gdi_map_to_functions()
               }
             }
             result = DebugModbusWriteRegs(slave, addr, (u8 *)buffer.gdi_float, (datasize * sizeof(gdi_float) / 2));
-
-            gdi_send_data_response("The return value is : ", newline_start);
-            gdi_print_number(result, newline_end);
-
+            if(gdiEcho) { 
+              gdi_send_data_response("The return value is : ", newline_start);
+              gdi_print_number(result, newline_end);
+            }
             if (result != NO_ERROR) {
               gdi_send_data_response("Register Write Failed!", newline_end);
             } else {
@@ -1227,13 +1320,15 @@ void gdi_map_to_functions()
 
             if(NO_ERROR == result)
             {
-              gdi_send_data_response("The register values read are : ", no_newline);
+              if(gdiEcho) { gdi_send_data_response("The register values read are : ", no_newline); }
               for (i=0; i<datasize;i++) { 
                 gdi_print_wrong_endian_number(buffer.uint16[i], space_end); 
               }
             }
-            gdi_send_data_response("The return value is : ", newline_start);
-            gdi_print_number(result, newline_end);
+            if(gdiEcho) {
+              gdi_send_data_response("The return value is : ", newline_start);
+              gdi_print_number(result, newline_end);
+            }
             if(result == NO_ERROR)
             {
               gdi_send_data_response("OK", newline_end);
@@ -1500,6 +1595,7 @@ void gdi_init()
 void gdi_task(void *pvParameters)
 {
   GDI_RXSemaphore = xSemaphoreCreateMutex();
+  vQueueAddToRegistry(GDI_RXSemaphore,(char *)"GDIRx sem");
   xSemaphoreTake( GDI_RXSemaphore, portMAX_DELAY );
   gdi_init(); /*Setup debug uart, This must be after the GDI_RXSemaphore is instantiated */
 #ifdef DEBUG_USE_ECHO_AS_DEFAULT
@@ -1522,5 +1618,69 @@ void gdi_task(void *pvParameters)
   vTaskDelete(NULL);
 }
 
+u8 DebugModbusReadRegs(u8 slave, u16 addr, u16 register_count, u8 *buffer)
+{
+  xMessage *msgin;
+  xMessage *msgout;
+  ReadModbusRegsReq *pReq;
+  msgout=pvPortMalloc(sizeof(xMessage)+sizeof(ReadModbusRegsReq));
+  if(NULL == msgout)
+  {
+    GDI_PRINTF("Malloc failed! DebugModbusReadRegs Tube %d, Reg %d",slave,addr);
+    return -1;
+  }
+  else
+  {
+    msgout->ucMessageID = READ_MODBUS_REGS;
+    pReq = (ReadModbusRegsReq *)msgout->ucData;
+    pReq->slave = slave;
+    pReq->addr = addr;
+    pReq->datasize = register_count;
+    pReq->reply = GDIQueueHandle;
+    assert_param(xQueueSend(ModbusQueueHandle, &msgout, portMAX_DELAY)== pdPASS);
+    /* wait for queue msg */
+    if( xQueueReceive( GDIQueueHandle, &msgin, (TickType_t)120 ) == pdPASS )
+    {
+      ReadModbusRegsRes *preg;
+      u16 *modbus_data = (u16*)buffer;
+      int i=0;
+      
+      preg = (ReadModbusRegsRes *)msgin->ucData;
+      for(i = 0; i < (preg->datasize); i++)
+      {
+        modbus_data[i] =(((u16)(preg->data[i*2])<<8) | (preg->data[(i*2)+1]));
+      }
+    }
+    else
+    {
+      return -2;
+    }
+  }
+  return 0;
+}
+
+bool DebugModbusWriteRegs(u8 slave, u16 addr, u8 *data, u16 register_count)
+{
+  xMessage *msgout;
+  WriteModbusRegsReq *pReq;
+  msgout=pvPortMalloc(sizeof(xMessage)+sizeof(ReadModbusRegsReq));
+  if(NULL == msgout)
+  {
+    GDI_PRINTF("Malloc failed! DebugModbusWriteRegs Tube %d, Reg %d",slave,addr);
+    return -1;
+  }
+  else
+  {
+    msgout->ucMessageID = WRITE_MODBUS_REGS;
+    pReq = (WriteModbusRegsReq *)msgout->ucData;
+    pReq->slave = slave;
+    pReq->addr = addr;
+    pReq->datasize = register_count;
+    pReq->reply = NULL; //we do not want the reply
+    memcpy(pReq->data, data, register_count*sizeof(u16));
+    assert_param(xQueueSend(ModbusQueueHandle, &msgout, portMAX_DELAY)== pdPASS);
+  }
+  return 0;
+}
 
 

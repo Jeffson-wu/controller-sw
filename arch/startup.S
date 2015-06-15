@@ -140,7 +140,7 @@ __isr_vector:
     .long    Default_Handler           	/* 51: SPI3 */
     .long    Default_Handler           	/* 52: UART4 */
     .long    Default_Handler           	/* 53: UART5 */
-    .long    modbus_end_of_telegram    	/* 54: TIM6 */
+    .long    modbus_end_of_telegram_Handler  /* 54: TIM6 */
     .long    Default_Handler           	/* 55: TIM7 */
     .long    Default_Handler           	/* 56: DMA2_Channel1 */
     .long    Default_Handler           	/* 57: DMA2_Channel2 */

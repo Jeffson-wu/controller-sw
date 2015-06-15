@@ -50,11 +50,11 @@
 
 /* Private debug define ------------------------------------------------------*/
 //#define DEBUG_MB /* General debug */
-//#define DEBUG_HF /* Searching for a hard fault */
+#define DEBUG_HF /* Searching for a hard fault */
 extern void gdi_send_msg_on_monitor(char * response);
 #define DEBUG_BUFFER_SIZE 600
 char buf[DEBUG_BUFFER_SIZE];                   /* buffer for debug printf*/
-#ifdef DEBUG
+#ifdef DEBUG_MB
 #define DEBUG_MB_PRINTF(fmt, args...)      snprintf(buf, DEBUG_BUFFER_SIZE, fmt, ## args);  gdi_send_msg_on_monitor(buf);
 #else
 #define DEBUG_MB_PRINTF(fmt, args...)          /* Don't do anything in release builds */
@@ -64,8 +64,6 @@ char buf[DEBUG_BUFFER_SIZE];                   /* buffer for debug printf*/
 #else
 #define DEBUG_HF_PRINTF(fmt, args...)          /* Don't do anything in release builds */
 #endif
-
-extern xSemaphoreHandle xModbusSemaphore;
 
 USART_ERROR USART2_ERROR = 0;
 
@@ -82,6 +80,9 @@ int debug_cnt = 0;
 
 void UART_SendMsg(USART_TypeDef *uart, u8 *buffer, int len);
 void Modbus_init(USART_TypeDef *uart);
+
+/* ---------------------------------------------------------------------------*/
+xSemaphoreHandle xModbusSemaphore = NULL;
 
 xQueueHandle ModbusQueueHandle;
 static  xTimerHandle TimerHandle;
@@ -146,7 +147,7 @@ static uint16_t gen_crc16(const uint8_t *buf, int len)
   return crc;  
 }
 
-void modbus_end_of_telegram()
+void modbus_end_of_telegram_Handler()
 {/*end of telegram 3.5 chars of silence*/
     portBASE_TYPE xHigherPriorityTaskWoken;
     dbgTraceStoreISRBegin(TRACE_ISR_ID_MB_EOT);
@@ -179,7 +180,7 @@ void response_timeoutCB(xTimerHandle handle)
     }
 }
 
-void recieveChar(void)
+void recieveCharISR_CB(void)
 {
   while(USART_GetITStatus(USART2, USART_IT_RXNE))
   {
@@ -204,6 +205,24 @@ void recieveChar(void)
       USART2_ERROR = OVERRUN;
     }
   }
+#ifdef DEBUG_HF
+     /*     @arg USART_FLAG_CTS:  CTS Change flag (not available for UART4 and UART5)
+      *     @arg USART_FLAG_LBD:  LIN Break detection flag
+      *     @arg USART_FLAG_TXE:  Transmit data register empty flag
+      *     @arg USART_FLAG_TC:   Transmission Complete flag
+      *     @arg USART_FLAG_RXNE: Receive data register not empty flag
+      *     @arg USART_FLAG_IDLE: Idle Line detection flag
+      *     @arg USART_FLAG_ORE:  OverRun Error flag
+      *     @arg USART_FLAG_NE:   Noise Error flag
+      *     @arg USART_FLAG_FE:   Framing Error flag
+      *     @arg USART_FLAG_PE:   Parity Error flag*/
+      //if(USART_GetFlagStatus(USART2, USART_FLAG_LBD))  { DEBUG_HF_PRINTF("-#-LDB");  USART_ClearFlag(USART2, USART_FLAG_LBD);  }
+      if(USART_GetFlagStatus(USART2, USART_FLAG_IDLE)) { DEBUG_HF_PRINTF("-#-IDLE"); }
+      if(USART_GetFlagStatus(USART2, USART_FLAG_ORE))  { DEBUG_HF_PRINTF("-#-ORE");  }
+      //if(USART_GetFlagStatus(USART2, USART_FLAG_NE))   { DEBUG_HF_PRINTF("-#-NE");   }
+      //if(USART_GetFlagStatus(USART2, USART_FLAG_FE))   { DEBUG_HF_PRINTF("-#-FE");   }
+      //if(USART_GetFlagStatus(USART2, USART_FLAG_PE))   { DEBUG_HF_PRINTF("-#-PE");   }
+#endif
  //portEND_SWITCHING_ISR( xHigherPriorityTaskWoken );
 }
 
@@ -221,6 +240,7 @@ USART_ERROR waitForRespons(u8 *telegram, int *telegramSize)
   DEBUG_MB_PRINTF("MB-SemTake");
   xSemaphoreTake( xModbusSemaphore, portMAX_DELAY );
   DEBUG_MB_PRINTF("MB-GotSem.");
+  DEBUG_HF_PRINTF("* RChr: %d", NOFRecvChars);
   xTimerStop( TimerHandle, 0 ); 
   modbus_err = USART2_ERROR;
   /*handle modbus telegram*/
@@ -242,8 +262,8 @@ static USART_ERROR ModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer)
 {
   u16 crc;
   USART_ERROR ERR;
-  u8 telegram[255];
-  int telegramsize=255;
+  u8 telegram[256];
+  int telegramsize=256;
   telegram[0]=slave;
   telegram[1]=READ_HOLDINGS_REGISTERS;
   telegram[2]=(addr & 0xFF00)>>8;
@@ -255,11 +275,10 @@ static USART_ERROR ModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer)
   recvBuffer=telegram;
   recvBufferSize=telegramsize;
   debug[debug_cnt].chars = 0xAA;
-  //NOFRecvChars = 0;
   UART_SendMsg(usedUart, telegram, 6+2);
   DEBUG_MB_PRINTF("MBR->");
   ERR = waitForRespons(telegram, &telegramsize);
-  DEBUG_HF_PRINTF("* TelRRS:%d", telegramsize);
+ // DEBUG_HF_PRINTF("* TelRRS:%d", telegramsize);
   DEBUG_MB_PRINTF("MBR<-");
   if(ERR != NO_ERROR)
   {
@@ -283,8 +302,8 @@ static USART_ERROR ModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer)
 static USART_ERROR ModbusWriteRegs(u8 slave, u16 addr, u8 *data, u16 datasize)
 {
   u16 crc;
-  u8 telegram[255];
-  int telegramsize=255;
+  u8 telegram[256];
+  int telegramsize=256;
   USART_ERROR ERR;
   telegram[0]=slave;
   telegram[1]=WRITE_MULTIPLE_REGISTERS;/*write multiple regs*/
@@ -310,8 +329,8 @@ static USART_ERROR ModbusWriteRegs(u8 slave, u16 addr, u8 *data, u16 datasize)
 static USART_ERROR ModbusBroadcast(u16 addr, u8 *data, u16 datasize)
 {
   u16 crc;
-  u8 telegram[255];
-  int telegramsize=255;
+  u8 telegram[256];
+  int telegramsize=256;
 
   telegram[0]=0; // Id 0 is broadcast
   telegram[1]=WRITE_MULTIPLE_REGISTERS;/*write multiple regs*/
@@ -420,21 +439,12 @@ void Modbus_init(USART_TypeDef *uart)
   usedUart=uart;
   TimerHandle=xTimerCreate((char*)"Modbus Response timer", MODBUS_RESPONSE_TIMEOUT, pdTRUE, NULL, response_timeoutCB);
   xModbusSemaphore = xSemaphoreCreateMutex();
+  vQueueAddToRegistry(xModbusSemaphore,(char *)"MODBUS sem");
   DEBUG_MB_PRINTF("MB-SemTake-Init");
   xSemaphoreTake( xModbusSemaphore, portMAX_DELAY );
   DEBUG_MB_PRINTF("MB-Sem-Init-OK");
-  UART_Init(USART2, recieveChar);
+  UART_Init(USART2, recieveCharISR_CB);
   configTimerModbusTimeout();
-}
-
-u8 DebugModbusReadRegs(u8 slave, u16 addr, u16 register_count, u8 *buffer)
-{
-  return ModbusReadRegs(slave, addr, register_count, buffer);
-}
-
-bool DebugModbusWriteRegs(u8 slave, u16 addr, u8 *data, u16 register_count)
-{
-  return ModbusWriteRegs(slave, addr, data, register_count);
 }
 
 

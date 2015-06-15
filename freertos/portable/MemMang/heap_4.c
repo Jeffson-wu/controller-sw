@@ -93,10 +93,11 @@ extern void printHeap(void);
 
 /* Allocate the memory for the heap. */
 static uint8_t ucHeap[ configTOTAL_HEAP_SIZE ];
+
+//#define DEBUG
 #define DEBUG_BUFFER_SIZE 100
 char buf[DEBUG_BUFFER_SIZE]; /*buffer for debug printf*/
 extern void gdi_send_msg_on_monitor(char * response);
-#define PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
 #ifdef DEBUG
 #define DEBUG_HEAP_PRINTF(fmt, args...)      snprintf(buf, DEBUG_BUFFER_SIZE, fmt, ## args);  gdi_send_msg_on_monitor(buf);
 #else

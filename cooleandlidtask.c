@@ -334,7 +334,7 @@ int getAdc(char *poutText)
 #else
   adsGetLatest(&adcData[0], &adcData[1], &adcData[2], &adcData[3]);
 #endif
-  strcat(poutText,"<adc_values={");
+  strcat(poutText,"adc_values={");
   Itoa(adcData[0], str);
   strcat(poutText,str);
   strcat(poutText, ","); 
@@ -710,6 +710,7 @@ void CoolAndLidTask( void * pvParameters )
   gpioInit();
   /* Create ADC synchrinization semaphore and let the ADC ISR know about it */
   vSemaphoreCreateBinary(xADCSemaphore);
+  vQueueAddToRegistry(xADCSemaphore,(char *)"ADS sem");
   assert_param(NULL != xADCSemaphore);
   xSemaphoreTake(xADCSemaphore, portMAX_DELAY); //Default is taken. ISR will give.
   logInit();
@@ -717,6 +718,7 @@ void CoolAndLidTask( void * pvParameters )
   // adcInit() is called from main() to obtain HW REV ID first thing. 
   awdInit(7 /*chToWatch*/);
   adcSetIsrSemaphore(xADCSemaphore);
+  vQueueAddToRegistry(xADCSemaphore,(char *)"ADC sem");
   adcConfigConversionTimer(&adcTimerCallback);
   adcStartSeq();
   DEBUG_PRINTF("ADC Initialized\r\n");
@@ -920,22 +922,34 @@ void CoolAndLidTask( void * pvParameters )
         break;
         case SET_PWM:
         {
-          SetPWMReq *p;
-          p=(SetPWMReq *)(msg->ucData);
-          pwmCh[p->idx] = (p->value * 32768/100);
-          switch(p->idx)
+          SetPWMReq *pPWMReq;
+          pPWMReq = (SetPWMReq *)(msg->ucData);
+          pwmCh[pPWMReq->idx] = (pPWMReq->value * 32768/100);
+          switch(pPWMReq->idx)
           {
             case 0:
               /* pwmCh[0], TIM4,CH3 - PB8 - J175 : PWM0_TIM4CH3 - TopHeater1Ctrl */
-              lidData[0].regulator.state = MANUAL_STATE;
+              if(0 == pPWMReq->value) {
+                lidData[0].regulator.state = STOP_STATE;
+              } else {
+                lidData[0].regulator.state = MANUAL_STATE;
+              }
               break;
             case 1:
               /* pwmCh[1], TIM4,CH4 - PB9 - J26  : PWM1_TIM4CH4 - FAN control */
-              fanData[0].regulator.state = MANUAL_STATE;
+              if(0 == pPWMReq->value) {
+                fanData[0].regulator.state = STOP_STATE;
+              } else {
+                fanData[0].regulator.state = MANUAL_STATE;
+              }
               break;
             case 2:
               /* pwmCh[2], TIM3,CH1 - PC6 - J33  : PWM2_TIM3CH1 - Peltier PWM 1 */
-              peltierData[0].regulator.state = MANUAL_STATE;
+              if(0 == pPWMReq->value) {
+                peltierData[0].regulator.state = STOP_STATE;
+              } else {
+                peltierData[0].regulator.state = MANUAL_STATE;
+              }
               break;
             case 3:
               /* pwmCh[3], TIM3,CH2 - PC7 - J176 : PWM3_TIM3CH2 - TopHeater2Ctrl */
