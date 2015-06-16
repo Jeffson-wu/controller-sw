@@ -23,7 +23,14 @@ This README would normally document whatever steps are necessary to get your app
 * Code review
 * Other guidelines
 
-### Debug Core Dumps ###
+# Debug #
+## Debug With Eclipse ##
+OpenRTOS Viewer
+Queue table
+Semaphores are taken when "Current length" is 0.
+Semaphores are given when "Current length" is 1.
+
+## Debug Core Dumps ##
 1.1	Reading the symbols:
 To do a disassembly.
  gna@ubuntu:~/gnacode/controller-sw$ arm-none-eabi-objdump -D controller > dis.txt
