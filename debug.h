@@ -1,44 +1,42 @@
 /**
   ******************************************************************************
-  * @file    cooleandlidtask.h 
+  * @file    debug.h 
   * @author  Jari Rene Jensen
   * @version V1.0.0
-  * @date    30-Oct -2013
-  * @brief   Header for Cooler and lid heater task
+  * @date    19 - May - 2015
+  * @brief   Debug features
   ******************************************************************************
   * @attention
   *
-  * <h2><center>&copy; COPYRIGHT 2013 Xtel </center></h2>
+  * <h2><center>&copy; COPYRIGHT 2015 Xtel </center></h2>
   *
   ******************************************************************************
   */ 
   
 /* Define to prevent recursive inclusion -------------------------------------*/
-#ifndef __COOLERANDLIDTASK_H
-#define __COOLERANDLIDTASK_H
+#ifndef __DEBUG_H
+#define __DEBUG_H
 
 /* Includes ------------------------------------------------------------------*/
 /* Exported types ------------------------------------------------------------*/
-typedef enum {
-  LID_ADDR = 17,
-  PELTIER_ADDR,
-  //PELTIER_ADDR2,
-  FAN_ADDR,
-  NEIGHBOUR_TUBE_TEMP_SWITCH,
-  nofADDR
-} coolandlid_addrs_t;
 /* Exported constants --------------------------------------------------------*/
+#define TRACE_ISR_ID_UART1 1
+#define TRACE_ISR_ID_UART2 2
+#define TRACE_ISR_ID_UART3 3
+#define TRACE_ISR_ID_UART2_TX 4
+#define TRACE_ISR_ID_EXTI 5
+#define TRACE_ISR_ID_ADC 5
+#define TRACE_ISR_ID_MB_EOT 6
+
 /* Exported macro ------------------------------------------------------------*/
+
 /* Exported functions ------------------------------------------------------- */
 
-void CoolAndLidTask( void * pvParameters );
-int getClLog(char *poutText );
-bool coolLidReadRegs(u8 slave, u16 addr, u16 datasize, u16 *buffer);
-bool coolLidWriteRegs(u8 slave, u16 addr, u16 *data, u16 datasize);
-int getCoolandlidHWReport(char *poutText);
-int getAdc(char *poutText);
+inline void dbgTraceStoreISRBegin(int id);
+inline void dbgTraceStoreISREnd();
+char *dbgPrintIsr(char *buf);
 
-#endif /* __COOLERANDLIDTASK_H */
 
-/************************ (C) COPYRIGHT Xtel *****END OF FILE****/
 
+
+#endif /* __DEBUG_H */

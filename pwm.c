@@ -15,10 +15,10 @@
 
 #define STM32F051
 /* Private variables ---------------------------------------------------------*/
-TIM_TimeBaseInitTypeDef  TIM_TimeBaseStructure;
-TIM_OCInitTypeDef  TIM_OCInitStructure;
-uint16_t TimerPeriod_TIM3 = 0;
-uint16_t TimerPeriod_TIM4 = 0;
+static TIM_TimeBaseInitTypeDef TIM_TimeBaseStructure;
+static TIM_OCInitTypeDef  TIM_OCInitStructure;
+static uint16_t TimerPeriod_TIM3 = 0;
+static uint16_t TimerPeriod_TIM4 = 0;
 
 uint16_t Channel1Pulse = 0, Channel2Pulse = 0, Channel3Pulse = 0, Channel4Pulse = 0;
 
@@ -110,6 +110,14 @@ void PWM_Init(uint32_t TIM3_pwm_freq, uint32_t TIM4_pwm_freq)
 
 }
 
+void PWM_Stop(void)
+{
+  TIM_SetCompare3(TIM4,0);
+  TIM_SetCompare4(TIM4,0);
+  TIM_SetCompare1(TIM3,0);
+  TIM_SetCompare2(TIM3,0);
+  TIM_SetCompare3(TIM3,0);
+}
 
 /**
   * @brief  Set the dutycycle for a given PWM port in %
@@ -121,23 +129,23 @@ void PWM_Set(uint16_t pwm_width,PWMPort_t pwm_port)
   uint16_t ChannelPulse;
   switch (pwm_port)
   {
-    case TopHeaterCtrl1PWM:
+    case PWM0_TIM4CH3:
       ChannelPulse = (uint16_t) (((uint32_t) pwm_width * (TimerPeriod_TIM4 - 1)) / 32768);
       TIM_SetCompare3(TIM4,ChannelPulse);
     break;
-    case FANctrlPWM:
+    case PWM1_TIM4CH4:
       ChannelPulse = (uint16_t) (((uint32_t) pwm_width * (TimerPeriod_TIM4 - 1)) / 32768);
       TIM_SetCompare4(TIM4,ChannelPulse);
     break;
-    case PeltierCtrl1PWM:
+    case PWM2_TIM3CH1:
       ChannelPulse = (uint16_t) (((uint32_t) pwm_width * (TimerPeriod_TIM3 - 1)) / 32768);
       TIM_SetCompare1(TIM3,ChannelPulse);
     break;
-    case TopHeaterCtrl2PWM:
+    case PWM3_TIM3CH2:
       ChannelPulse = (uint16_t) (((uint32_t) pwm_width * (TimerPeriod_TIM3 - 1)) / 32768);
       TIM_SetCompare2(TIM3,ChannelPulse);
     break;
-    case AuxCtrlPWM:
+    case PWM4_TIM3CH3:
       ChannelPulse = (uint16_t) (((uint32_t) pwm_width * (TimerPeriod_TIM3 - 1)) / 32768);
       TIM_SetCompare3(TIM3,ChannelPulse);
     break;	

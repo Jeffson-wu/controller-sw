@@ -37,19 +37,28 @@
 #include "cooleandlidtask.h"
 #include "stm32f10x_tim.h"
 #include "logtask.h"
-#include "swupdatetask.h"
 #include "gdi.h"
 #include "trcUser.h"
 #include "trcConfig.h"
 #include "trcHardwarePort.h"
 #include "util.h"
 #include "serial.h"
+#include "adc.h"
 #include "../heater-sw/heater_reg.h"
+#include "version.h"
+#include "debug.h"
 
-
+/* Private feature defines ---------------------------------------------------*/
 #define QUEUESIZE 10
 
+/* Private debug define ------------------------------------------------------*/
 //#define DEBUG_CLOCK_MSO /*Set mux to output sysclk or other clocks on PA8*/
+
+#ifdef DEBUG
+#define DEBUG_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
+#else
+#define DEBUG_PRINTF(fmt, args...)      /* Don't do anything in release builds */
+#endif
 
 /* ---------------------------------------------------------------------------*/
 /* Task Message Queues -------------------------------------------------------*/
@@ -74,6 +83,7 @@ xTimerHandle yTimer[4];
 uint32_t load=0xA5A5 ;
 
 void ModbusTask( void * pvParameters );
+void Modbus_init(USART_TypeDef *uart);
 void CoolAndLidTask( void * pvParameters );
 void gdi_task(void *pvParameters);
 void TubeSequencerTask( void * pvParameter);
@@ -83,11 +93,6 @@ void ErrorOff();
 void LogOn(int log_time);
 void LogOff();
 
-#ifdef DEBUG
-#define DEBUG_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
-#else
-#define DEBUG_PRINTF(fmt, args...)      /* Don't do anything in release builds */
-#endif
 /* ---------------------------------------------------------------------------*/
 /* Global variables                                                           */
 /* ---------------------------------------------------------------------------*/
@@ -104,6 +109,12 @@ void fn(void)
   taskYIELD();
   fn();
   nesting--;
+}
+
+void printHeap(void) {
+  extern size_t xFreeBytesRemaining;
+  sprintf(buf, "Heap free bytes: %d", xFreeBytesRemaining);
+  gdi_send_msg_on_monitor(buf);
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -218,13 +229,6 @@ void HW_Init(void)
   /* TIM Configuration */
   PWM_PinConfig();
 
-  NVIC_PriorityGroupConfig(NVIC_PriorityGroup_4);
-  /* FREERTOS CONFIG For simplicity all bits must be defined
-    to be pre-emption priority bits.  The following assertion will fail if
-    this is not the case (if some bits represent a sub-priority).
-      configASSERT( ( portAIRCR_REG & portPRIORITY_GROUP_MASK ) <= ulMaxPRIGROUPValue );*/
-
-//#define DEBUG_CLOCK_MSO
 #ifdef DEBUG_CLOCK_MSO
     /*Debug output on PA8 to measure actual clock*/
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA, ENABLE);
@@ -238,6 +242,16 @@ void HW_Init(void)
     //RCC_GetClocksFreq(&CLOCKS);
     //CLOCKS.SYSCLK_Frequency;
 #endif
+}
+
+/* ---------------------------------------------------------------------------*/
+void NVICInit(void)
+{
+  NVIC_PriorityGroupConfig(NVIC_PriorityGroup_4);
+  /* FREERTOS CONFIG For simplicity all bits must be defined
+    to be pre-emption priority bits.  The following assertion will fail if
+    this is not the case (if some bits represent a sub-priority).
+      configASSERT( ( portAIRCR_REG & portPRIORITY_GROUP_MASK ) <= ulMaxPRIGROUPValue );*/
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -268,6 +282,7 @@ void ErrorOff()
 }
 
 /* ---------------------------------------------------------------------------*/
+/* --> For USE_DEVELOPMENT_LOGGING feature */
 void LogOn(int log_time)/*In secs*/
 {
   if( xTimerStart(yTimer[2], 0 ) != pdPASS );
@@ -279,7 +294,7 @@ void LogOff()
 {
   if( xTimerStop( yTimer[2], 0 ) != pdPASS );
 }
-
+/* <-- For USE_DEVELOPMENT_LOGGING feature */
 /* ---------------------------------------------------------------------------*/
 void vError_LEDToggle(xTimerHandle pxTimer )
 {
@@ -314,12 +329,14 @@ void ConfigOSTimer ()
               ( void * ) 102,       // Assign each timer a unique id equal to its array index.
               vError_LEDToggle      // Each timer calls the same callback when it expires.
               );
+/* --> For USE_DEVELOPMENT_LOGGING feature */
   yTimer[2]= xTimerCreate((char *)"LogTimer",       // Just a text name, not used by the kernel.
               ( 100 * z ),          // The timer period in ticks.
               pdTRUE,               // The timers will auto-reload themselves when they expire.
               ( void * ) 103,       // Assign each timer a unique id equal to its array index.
               vReadTubeTemp         // Each timer calls the same callback when it expires.
               );
+/* <-- For USE_DEVELOPMENT_LOGGING feature */
   yTimer[3]= xTimerCreate((char *)"ResetHeaters",       // Just a text name, not used by the kernel.
               ( 100 * r ),          // The timer period in ticks.
               pdTRUE,               // The timers will auto-reload themselves when they expire.
@@ -432,26 +449,27 @@ void noRecieve(void)
 }
 
 /* ---------------------------------------------------------------------------*/
-/**
-  * @brief  Main program.
-  * @param  None
-  * @retval None
-  */
+/*  Main program.                                                             */
+
+uint16_t HW_Rev_Id __attribute__ ((section (".buildId_data")));
+
 int main(void)
 {
+  NVICInit(); // MUST be done prior to adcInit()
+  adcInit();
+  HW_Rev_Id = readHwRevId(); // Obtain HW Revision ID ASAP
   HW_Init();
   UART_Init(USART3,noRecieve); /*Only for monitoring no RX*/
-  PWM_Init(20000,1000); //20kHz PWM : (TIM3(Topheater2,Peltier, Aux), TIM4(Topheater1, Fan))
-  sprintf(buf, "Monitor Port UP\r\n");
+  PWM_Init(20000,1000); // 20kHz/1kHz PWM : (TIM3(Fan, Aux), TIM4(Topheater1, Topheater2))
+  UART_SendMsg(USART3, (u8*)"Monitor Port UP\r\n" , 17);
+  sprintf(buf, "HW Rev ID = %d", HW_Rev_Id);
   gdi_send_msg_on_monitor(buf);
-  sprintf(buf, "Build on: " __DATE__ " " __TIME__);
+  sprintf(buf, "SW build = %s", buildDateStr);
+  gdi_send_msg_on_monitor(buf);
+  sprintf(buf, "Git Id = %s", gitCommitIdStr);
   gdi_send_msg_on_monitor(buf);
   init_os_trace(); /*GDB CMD:dump binary memory gdb_dump_23.txt 0x20000000 0x20010000  -- http://percepio.com/*/
-  PWM_Set(0,TopHeaterCtrl1PWM);
-  PWM_Set(0,TopHeaterCtrl2PWM);
-  PWM_Set(0,FANctrlPWM); 
-  PWM_Set(0,PeltierCtrl1PWM);
-  PWM_Set(0,AuxCtrlPWM);
+  PWM_Stop();
 
   ConfigOSTimer();
 
@@ -473,48 +491,9 @@ int main(void)
   xTaskCreate( CoolAndLidTask, (const char *) "Cool Lid task" /*max 16 chars*/, 300, NULL, ( (unsigned portBASE_TYPE) 4 ) | portPRIVILEGE_BIT, &pvCooleAndLidTask );
   xTaskCreate( TubeSequencerTask, ( const char * ) "TubeSeq task", ( unsigned short ) 1000, NULL, ( ( unsigned portBASE_TYPE ) 4 ) | portPRIVILEGE_BIT, &pvTubeSequencerTaskTask );
 
-#if 1 //
-  {
-    int i;
-    long *p;
-    long TubeId;
-    xMessage *msg;
-
-    for(i = 1; i < 17; i++)
-    {
-      TubeId = i;
-      msg = pvPortMalloc(sizeof(xMessage)+sizeof(long));
-      if(msg)
-      {
-        msg->ucMessageID = TUBE_TEST_SEQ;
-        p = (long *)msg->ucData;
-        *p = TubeId;
-        xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
-      }
-    }
-  }
-#endif
-
-  { // Synchronize M0 LEDs
-    xMessage *msg;
-    WriteModbusRegsReq *p;
-  
-    msg = pvPortMalloc(sizeof(xMessage)+sizeof(WriteModbusRegsReq));
-    if(msg)
-    {
-      msg->ucMessageID=BROADCAST_MODBUS;
-      p=(WriteModbusRegsReq *)msg->ucData;
-      p->slave    = 0;    //not used for broadcast
-      p->addr     = 0;
-      p->datasize = 0;    //datasize;
-      p->reply    = NULL; //No reply
-      xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);      
-    }
-  }
   vTaskStartScheduler();
   return 0;
 }
-
 
 #ifdef  USE_FULL_ASSERT
 /**
@@ -525,22 +504,45 @@ int main(void)
   * @retval None
   */
 void assert_failed(unsigned char* file, unsigned int line)
-{ 
+{ extern size_t xFreeBytesRemaining;
   /* User can add his own implementation to report the file name and line number,
      ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
   char buf[100];
-  GPIO_SetBits(GPIOB,GPIO_Pin_11);  /* Turn on error LED */
-  GPIO_ResetBits(GPIOC,GPIO_Pin_9); /* Turn off hartbeat LED */  
+  u8 data;
+  GPIO_SetBits(GPIOB,GPIO_Pin_11);    /* Turn on error LED */
+  GPIO_ResetBits(GPIOC,GPIO_Pin_9);   /* Turn off hartbeat LED */  
   GPIO_ResetBits(GPIOB,GPIO_Pin_0);   /* Turn off RX LED */
   GPIO_ResetBits(GPIOB,GPIO_Pin_1);   /* Turn off TX LED */
+  PWM_Stop();
   sprintf(buf, "assert_failed: %s %d", file, line);
   gdi_send_msg_on_monitor(buf);
-  //vTraceConsoleMessage("assert_failed: %s %d", file, line);
+  sprintf(buf, "Heap free bytes: %d", xFreeBytesRemaining);
+  gdi_send_msg_on_monitor(buf);
+  
+  sprintf(buf, "Task: %s", pcTaskGetTaskName( xTaskGetCurrentTaskHandle()) );
+  gdi_send_msg_on_monitor(buf);
+  gdi_send_msg_on_monitor(dbgPrintIsr(buf));
+
+  //__asm("BKPT #0\n") ; // Break into the debugger
+
   /* Infinite loop */
-  while (1)
-  {
-  }  
-  // Go to core dump mode instead of the infinite loop
+  /* cmd = "bu" -> "OK" to let Linux know that the M3 crashed */
+  while(USART_GetFlagStatus(USART1, USART_FLAG_RXNE)==RESET);
+  data = USART_ReceiveData(USART1);
+  if('B' == (data & 0x0DF) )
+  { 
+    while(USART_GetFlagStatus(USART1, USART_FLAG_RXNE)==RESET);
+    data = USART_ReceiveData(USART1);
+    if('U' == (data & 0x0DF) )
+    { 
+      while(USART_GetFlagStatus(USART1, USART_FLAG_RXNE)==RESET);
+      data = USART_ReceiveData(USART1);
+      if('\r' == data)
+      { 
+        gdi_send_msg_response("OK");
+      }
+    }
+  }
 }
 #endif
 
@@ -561,10 +563,11 @@ void HardFault_Handler(void)
 
 void prvGetRegistersFromStack( uint32_t *pulFaultStackAddress )
 {
-  static uint32_t hardFaultSP;
+  static uint32_t hardFaultSP __attribute__ ((section (".regPointer")));
+  u8 data;
   /* These are volatile to try and prevent the compiler/linker optimising them
   away as the variables never actually get used.  If the debugger won't show the
-  values of the variables, make them global my moving their declaration outside
+  values of the variables, make them global by moving their declaration outside
   of this function. */
   volatile uint32_t r0;
   volatile uint32_t r1;
@@ -580,8 +583,8 @@ void prvGetRegistersFromStack( uint32_t *pulFaultStackAddress )
   volatile uint32_t r11;
   volatile uint32_t r12;
   /*                sp is held in pulFaultStackAddress */
-  volatile uint32_t lr; /* Link register. */
-  volatile uint32_t pc; /* Program counter. */
+  volatile uint32_t lr; /* Link register. r14 */
+  volatile uint32_t pc; /* Program counter. r15 */
   volatile uint32_t psr;/* Program status register. */
   volatile uint32_t _CFSR;
   volatile uint32_t _HFSR;
@@ -598,9 +601,10 @@ void prvGetRegistersFromStack( uint32_t *pulFaultStackAddress )
   register unsigned int _r9  __asm("r9");
   register unsigned int _r10 __asm("r10");
   register unsigned int _r11 __asm("r11");
-  register unsigned int _r13 __asm("r13");
-  hardFaultSP = _r13; // Save current SP to find variables below in a RAM dump.
 
+  register unsigned int _r13 __asm("r13");
+
+  hardFaultSP = _r13; // Save current SP to find variables below in a RAM dump.
   r0 = pulFaultStackAddress[ 0 ];
   r1 = pulFaultStackAddress[ 1 ];
   r2 = pulFaultStackAddress[ 2 ];
@@ -621,7 +625,7 @@ void prvGetRegistersFromStack( uint32_t *pulFaultStackAddress )
   // Configurable Fault Status Register
   // Consists of MMSR, BFSR and UFSR
   _CFSR = (*((volatile unsigned long *)(0xE000ED28))) ;   
-                                                                                  
+  
   // Hard Fault Status Register
   _HFSR = (*((volatile unsigned long *)(0xE000ED2C))) ;
   
@@ -640,18 +644,59 @@ void prvGetRegistersFromStack( uint32_t *pulFaultStackAddress )
 
   GPIO_SetBits(GPIOB,GPIO_Pin_11);  /* Turn on error LED */
   GPIO_ResetBits(GPIOC,GPIO_Pin_9); /* Turn off hartbeat LED */
-
   GPIO_SetBits(GPIOB,GPIO_Pin_0);   /* Turn on RX LED */
   GPIO_SetBits(GPIOB,GPIO_Pin_1);   /* Turn on TX LED */
-  PWM_Set(0,TopHeaterCtrl1PWM);
-  PWM_Set(0,TopHeaterCtrl2PWM);
-  PWM_Set(0,FANctrlPWM); 
-  PWM_Set(0,PeltierCtrl1PWM);
-  PWM_Set(0,AuxCtrlPWM);
-
+  PWM_Stop();
+  gdi_send_msg_on_monitor("\r\n!! HardFault !!"); //Print PC and SP for quick ref.
+  //Bus Fault Status Register
+  if(_CFSR & 0x00000100) { gdi_send_msg_on_monitor("IBUSRR"); }
+  if(_CFSR & 0x00000200) { gdi_send_msg_on_monitor("PRECISERR"); }
+  if(_CFSR & 0x00000400) { gdi_send_msg_on_monitor("IMPRECISERR"); }
+  if(_CFSR & 0x00000800) { gdi_send_msg_on_monitor("UNSTKERR"); }
+  if(_CFSR & 0x00001000) { gdi_send_msg_on_monitor("STKERR"); }
+  if(_CFSR & 0x00008000) { 
+      sprintf(buf, "BFARVALID  - BFAR: %08X", (unsigned int)_BFAR);
+      gdi_send_msg_on_monitor(buf);
+    }
+  //Usage Fault Status Register
+  if(_CFSR & 0x00010000) { gdi_send_msg_on_monitor("UNDEFINSTR"); }
+  if(_CFSR & 0x00020000) { gdi_send_msg_on_monitor("INVSTATE"); }
+  if(_CFSR & 0x00040000) { gdi_send_msg_on_monitor("INVPC"); }
+  if(_CFSR & 0x00080000) { gdi_send_msg_on_monitor("NOCP"); }
+  if(_CFSR & 0x00200000) { gdi_send_msg_on_monitor("DIVBYZERO"); }
+  if(_CFSR & 0x00100000) { gdi_send_msg_on_monitor("UNALIGNED"); }
+  //Memory Manage Fault Status Register
+  if(_CFSR & 0x00000080) { gdi_send_msg_on_monitor("MMARVALID"); }
+  if(_CFSR & 0x00000010) { gdi_send_msg_on_monitor("MSTKERR"); }
+  if(_CFSR & 0x00000008) { gdi_send_msg_on_monitor("MUNSTKERR"); }
+  if(_CFSR & 0x00000002) { gdi_send_msg_on_monitor("DACCVIOL"); }
+  if(_CFSR & 0x00000001) { gdi_send_msg_on_monitor("IACCVIOL"); }
+  sprintf(buf, "Task: %s", pcTaskGetTaskName( xTaskGetCurrentTaskHandle()) );
+  gdi_send_msg_on_monitor(buf);
+  gdi_send_msg_on_monitor(dbgPrintIsr(buf));
+  
   //__asm("BKPT #0\n") ; // Break into the debugger
 
-  while (1) {} // Go to core dump mode instead of the infinite loop
+  /* cmd = "bu" -> "OK" to let Linux know that the M3 crashed */
+  while(1)
+  {
+    while(USART_GetFlagStatus(USART1, USART_FLAG_RXNE)==RESET);
+    data = USART_ReceiveData(USART1);
+    if('B' == (data & 0x0DF) )
+    { 
+      while(USART_GetFlagStatus(USART1, USART_FLAG_RXNE)==RESET);
+      data = USART_ReceiveData(USART1);
+      if('U' == (data & 0x0DF) )
+      { 
+        while(USART_GetFlagStatus(USART1, USART_FLAG_RXNE)==RESET);
+        data = USART_ReceiveData(USART1);
+        if('\r' == data)
+        { 
+          gdi_send_msg_response("OK");
+        }
+      }
+    }
+  }
   r0=r0;
   r1=r1;
   r2=r2;

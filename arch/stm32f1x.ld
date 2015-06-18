@@ -87,6 +87,9 @@ SECTIONS
 	.data : AT (__etext)
 	{
 		__data_start__ = .;
+		/* Do NOT move buildId_data. It needs to be at a known location to determine build ids for core dumps */
+		*(.regPointer)
+		*(.buildId_data)
 		__fl_code_start__ = .;
 		*(.fl_text)
 		*(.fl_text*)

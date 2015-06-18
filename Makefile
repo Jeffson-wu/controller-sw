@@ -15,31 +15,33 @@ CXX = $(TARGET)g++
 OBJCOPY = $(TARGET)objcopy
 INCLUDES = -I ./include -I ./board -I ./arch -I ./freertos/include -I ./ -I ./freertos/portable/GCC/ARM_CM3 -I ./GenericRecorderLibSrc/Include -I./GenericRecorderLibSrc/ConfigurationTemplate
 ifeq ($(TARGET),arm-none-eabi-)
-  CFLAGS = -g -O0 -c -Wall -Werror -mcpu=cortex-m3 -mthumb -D__START=main -D__STARTUP_CLEAR_BSS -DSTM32F1XX -DUSE_STDPERIPH_DRIVER $(INCLUDES)
+  CFLAGS = -g -O0 -c -Wall -Werror -mcpu=cortex-m3 -mthumb -ffunction-sections -D__START=main -D__STARTUP_CLEAR_BSS -DSTM32F1XX -DUSE_STDPERIPH_DRIVER $(INCLUDES)
 else
   CFLAGS = -g -O0 -c -Wall -Werror -D__START=main -D__STARTUP_CLEAR_BSS -DSTM32F1XX -DUSE_STDPERIPH_DRIVER $(INCLUDES) --coverage
   CXXFLAGS = -g -O0 -c -Wall -Werror `pkg-config cpputest --cflags` --coverage
 endif
 
 LDFLAGS = -T arch/stm32f1x.ld -mcpu=cortex-m3 -mthumb -nostartfiles -Wl,--gc-section
-LIBS = -lc -lgcc -lnosys
+LIBS = -lc -lgcc -lnosys -lm
 OBJECTS_DIR = obj
 DEPENDS_DIR = dep
 PROGRAM = controller
 
 SOURCES = \
     main.c \
+    version.c \
     util.c \
     serial.c \
     modbus.c \
     gdi.c \
     pwm.c \
-    ads1148.c \
+    adc.c \
     sequencer.c \
     cooleandlidtask.c \
     logtask.c \
-	pid.c \
-	nvs.c \
+    pid.c \
+    nvs.c \
+    debug.c \
     arch/startup.S \
     arch/system_stm32f10x.c \
     arch/core_cm3.c \
@@ -87,6 +89,16 @@ DEPS = $(patsubst %,$(DEPENDS_DIR)/%,$(SOURCES:%.c=%.d))
 DEPENDS = $(DEPS:%.S=%.d)
 
 all: $(SOURCES) $(PROGRAM) $(PROGRAM).hex
+
+.PHONY: version.c
+
+version.c:
+	echo '#include "version.h"' > $@ 
+	echo '/* This file is AUTO GENERATED - Do NOT Check in!!! */' >> $@
+	echo 'char buildRevStr[] = SW_VERSION ;' >> $@ 
+	echo -n 'char buildDateStr[] = ' >> $@ 
+	date +'"%Y.%m.%d-%T";' >> $@ 
+	echo -n "char gitCommitIdStr[] = \"$(shell git describe --always --dirty)\";" >> $@
 
 $(PROGRAM): $(OBJECTS)
 	@echo -n "Linking $@... "
@@ -163,7 +175,7 @@ check_coverage:
 	@rm -rf test_output.txt gcov_output.txt gcov_error.txt
 
 clean:
-	@rm -rf $(OBJECTS) $(PROGRAM) $(UPDATEIMAGE)
+	@rm -rf $(OBJECTS) $(PROGRAM) $(UPDATEIMAGE) version.c
 	@rm -rf $(util_tests_OBJECTS)
 	@rm -rf util_tests
 	@rm -rf cpputest_*.xml

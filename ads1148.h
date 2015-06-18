@@ -118,6 +118,8 @@
 /* Exported macro ------------------------------------------------------------*/
 /* Exported functions ------------------------------------------------------- */
 
+// read error state
+uint16_t getADSStatusReg(void);
 // Set up as we use it.
 int ads1148Init(void);
 // Get state of DRDY
@@ -130,18 +132,19 @@ void adsRead(int16_t * value);
 void adsStartSeq(void);
 // Re-start conversion
 void adsContiniueSeq(void);
-
+// ADC is started on timeout
 void adsTimerCallback(xTimerHandle xTimer);
 // Stop sequential convertion.
 void adsStoptSeq(void);
 // Retrieve latest value from all ADC channels.
 void adsGetLatest(int16_t * ch0value, int16_t * ch1value, int16_t * ch2value, int16_t * ch3value);
-
+// Setup timer to start conversions each 1/10 s
 void adsConfigConversionTimer(tmrTIMER_CALLBACK convStartFn);
-
-int32_t dac_2_temp(signed short dac);
-signed short temp_2_dac(int16_t temp);
+// Convert ADC value to temperature
+int32_t adc_2_temp(signed short dac);
+signed short temp_2_adc(int16_t temp);
 void adsIrqEnable(void);
+// Tell ADS driver which semaphore to use for sync.
 void adsSetIsrSemaphore(xSemaphoreHandle sem);
 
 

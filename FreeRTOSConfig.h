@@ -81,7 +81,7 @@
 
 #define configUSE_PREEMPTION		1
 #define configUSE_IDLE_HOOK			0
-#define configUSE_TICK_HOOK			0
+#define configUSE_TICK_HOOK			1  // Lid Detect Debounce
 #define configCPU_CLOCK_HZ			( ( unsigned long ) 72000000 )
 #define configTICK_RATE_HZ			( ( portTickType ) 1000 )
 #define configMAX_PRIORITIES		( 16 )
@@ -101,7 +101,7 @@
 #define configUSE_ALTERNATIVE_API 		0
 #define configCHECK_FOR_STACK_OVERFLOW	2/*0 TFK DEBUG_RTOS*/
 #define configUSE_RECURSIVE_MUTEXES		1
-#define configQUEUE_REGISTRY_SIZE		30/*0 TFK DEBUG_RTOS*/
+#define configQUEUE_REGISTRY_SIZE		20 /*0 TFK DEBUG_RTOS*/
 //#define configGENERATE_RUN_TIME_STATS	1 /*0 TFK DEBUG_RTOS*/
 //#define configUSE_MALLOC_FAILED_HOOK 1  /*0 TFK DEBUG_RTOS*/
 //#define configUSE_STATS_FORMATTING_FUNCTIONS 1 /*0 TFK DEBUG_RTOS*/
@@ -173,7 +173,7 @@ extern unsigned long vGetCounter();
 
 
 #define configUSE_TRACE_FACILITY 0
-			  #include "trcKernelPort.h"
+#include "trcKernelPort.h"
 
 
 #endif /* FREERTOS_CONFIG_H */
