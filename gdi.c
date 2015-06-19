@@ -1480,6 +1480,7 @@ u8 DebugModbusReadRegs(u8 slave, u16 addr, u16 register_count, u8 *buffer)
       {
         modbus_data[i] =(((u16)(preg->data[i*2])<<8) | (preg->data[(i*2)+1]));
       }
+      vPortFree(msgin);
     }
     else
     {
