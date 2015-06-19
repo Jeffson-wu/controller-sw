@@ -1299,7 +1299,7 @@ void gdi_map_to_functions()
           paramcount = 3;
         }
         if (gdi_req_func_info.number_of_parameters < paramcount)
-          gdi_send_data_response("ERROR", newline_both);
+          gdi_send_data_response("NOK missing param", newline_both);
         else
         {
           slave = (u8) strtol(*(gdi_req_func_info.parameters + i + 0), (char **)NULL, 10);
@@ -1314,7 +1314,7 @@ void gdi_map_to_functions()
           }
 
           if((0 == addr) || (0 == datasize)) {
-            gdi_send_data_response("ERROR", newline_both);
+            gdi_send_data_response("NOK param err", newline_both);
           } else {
             result = DebugModbusReadRegs(slave, addr, datasize, (u8 *)buffer.uint16);
 
@@ -1335,7 +1335,7 @@ void gdi_map_to_functions()
             }
             else
             {
-              gdi_send_data_response("ERROR", newline_end);
+              gdi_send_data_response("NOK ModbusReadRegs faoled", newline_end);
             }
 
           }
@@ -1639,7 +1639,7 @@ u8 DebugModbusReadRegs(u8 slave, u16 addr, u16 register_count, u8 *buffer)
     pReq->reply = GDIQueueHandle;
     assert_param(xQueueSend(ModbusQueueHandle, &msgout, portMAX_DELAY)== pdPASS);
     /* wait for queue msg */
-    if( xQueueReceive( GDIQueueHandle, &msgin, (TickType_t)120 ) == pdPASS )
+    if( xQueueReceive( GDIQueueHandle, &msgin, (TickType_t)500 ) == pdPASS ) // How long to wait. MB queue size is 10, MB timeout is 100ms -> more than a secound??
     {
       ReadModbusRegsRes *preg;
       u16 *modbus_data = (u16*)buffer;
@@ -1650,6 +1650,7 @@ u8 DebugModbusReadRegs(u8 slave, u16 addr, u16 register_count, u8 *buffer)
       {
         modbus_data[i] =(((u16)(preg->data[i*2])<<8) | (preg->data[(i*2)+1]));
       }
+      vPortFree(msgin);
     }
     else
     {
