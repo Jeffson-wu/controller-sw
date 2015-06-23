@@ -956,9 +956,10 @@ char * get_tube_state(long TubeId, char *poutText)
   Itoa(Tubeloop[TubeId-1].curr.seq_num, stage_nr);
   strcpy(poutText, "OK,state=\"");
   strcat(poutText, state);
+  strcat(poutText, "\"");
   if(Tubeloop[TubeId-1].state != TUBE_IDLE)
   {
-    strcat(poutText, "\";progress=");
+    strcat(poutText, ";progress=");
     strcat(poutText, progress);
     strcat(poutText, ";stage_number=");
     strcat(poutText, stage_nr);
