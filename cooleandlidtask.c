@@ -241,17 +241,17 @@ static uint16_t dacCh[1] = {0};
 static int16_t *adcDiffSource[2] = {&adcCh[4], &adcCh[2]}; 
 
 static peltierData_t peltierData[nPELTIER] = {
-  {PELTIER_1, {STOP_STATE, -26213, &dacCh[0], &adcCh[0]}}
+  {PELTIER_1, {STOP_STATE, -26213, &dacCh[3], &adcCh[3]}}
 };
 
 static lidData_t lidData[nLID_HEATER] = {
-  {LID_HEATER_1, {STOP_STATE, -26213, &pwmCh[5], &adcCh[1]}}
+  {LID_HEATER_1, {STOP_STATE, -26213, &pwmCh[5], &adcCh[2]}}
 };
 
 static uint16_t *pwmChMirror[2] = {&pwmCh[0], &pwmCh[1]};
 
 static fanData_t fanData[nFAN] = {
-  {FAN_1, {STOP_STATE, 0, &pwmCh[1], &adcDiff[0]/*&adcCh[3]*/}}
+  {FAN_1, {STOP_STATE, 0, &pwmCh[1], /*&adcDiff[0]*/ &adcCh[0]}}
 };
 
 calib_data_t __attribute__ ((aligned (2))) calib_data[3] = {
@@ -381,7 +381,7 @@ int getAdc(char *poutText)
 void fan(fanData_t *fanData){
   regulatorData_t *reg;
   reg = &fanData->regulator;
-  reg->setPoint = -13168; //40oC
+  reg->setPoint = 2600; //40oC
   int64_t out = 0;
   int16_t Kp = -10;
 
@@ -416,7 +416,8 @@ void fan(fanData_t *fanData){
     { out = 32767; }
   if (out < 12000)
     { out = 12000; }
-  *reg->pwmVal = out;
+  //*reg->pwmVal = out;
+  *reg->pwmVal = 17000; // ToDo: remove hard coded value
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -425,11 +426,11 @@ void fan(fanData_t *fanData){
 void peltier(peltierData_t *peltierData){
   regulatorData_t *reg;
   reg = &peltierData->regulator;
-  reg->setPoint = 217; //??oC
-  reg->setPointLL = reg->setPoint - 20;
-  reg->setPointHL = reg->setPoint + 20;
+  reg->setPoint = 1600; //??oC
+  //reg->setPointLL = reg->setPoint - 20;
+  //reg->setPointHL = reg->setPoint + 20;
   int64_t out = 0;
-  int16_t Kp = -20;
+  int16_t Kp = -2;
 
   switch (reg->state) {
     case STOP_STATE:
@@ -459,12 +460,16 @@ void peltier(peltierData_t *peltierData){
     default:
     break;
   }
-  if( abs(reg->setPoint - *reg->adcVal) < 100 ) { coolTempOK = TRUE; }
+  if( abs(reg->setPoint - *reg->adcVal) < 10 ) { coolTempOK = TRUE; }
   if (out > DAC_UPPER_LIMIT)
     { out = DAC_UPPER_LIMIT; }
   if (out < 0)
     { out = 0; }
-  *reg->pwmVal = out;
+//    *reg->pwmVal = out;
+
+  *reg->pwmVal = 1100; //ToDo: remove.
+
+
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -474,18 +479,19 @@ void lid(lidData_t *lidData)
 {
   regulatorData_t *reg;
   reg = &lidData->regulator;
-  reg->setPoint = 14040; //120oC
-  reg->setPointLL = reg->setPoint - 200;
-  reg->setPointHL = reg->setPoint + 200;
+  reg->setPoint = 2700; //???oC
+  //reg->setPointLL = reg->setPoint - 200;
+  //reg->setPointHL = reg->setPoint + 200;
   int64_t out = 0;
-  int16_t Kp = 1.5;
+  int16_t Kp = 45; //1.5;
 
   switch (reg->state) {
     case STOP_STATE:
     {
       *reg->pwmVal = 0;
       reg->hysteresisActiveFlag = 0;
-      reg->state = CTRL_OPEN_LOOP_STATE;
+      //reg->state = CTRL_OPEN_LOOP_STATE;
+      reg->state = CTRL_CLOSED_LOOP_STATE; // << remove
     } 
     break;
     case MANUAL_STATE:
@@ -497,7 +503,7 @@ void lid(lidData_t *lidData)
     {
       out = 32767;
 
-      if (*reg->adcVal > (reg->setPoint-2000)) //ca -10oC
+      if (*reg->adcVal > (reg->setPoint-40)) //ca -10oC
         reg->state = CTRL_CLOSED_LOOP_STATE;
     }
     break;
@@ -505,14 +511,14 @@ void lid(lidData_t *lidData)
     {
       out = Kp*(reg->setPoint - *reg->adcVal);
 
-      if (*reg->adcVal < reg->setPoint-4000)
-        reg->state = CTRL_OPEN_LOOP_STATE;
+      //if (*reg->adcVal < reg->setPoint-100) // << incomment
+      //  reg->state = CTRL_OPEN_LOOP_STATE;
     }
     break;
     default:
     break;
   }
-  if( abs(reg->setPoint - *reg->adcVal) < 100 ) { lidTempOK = TRUE; }
+  if( abs(reg->setPoint - *reg->adcVal) < 10 ) { lidTempOK = TRUE; }
   if (out > 32767)
     { out = 32767; }
   if (out < 0)
