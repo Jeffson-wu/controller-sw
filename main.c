@@ -98,6 +98,7 @@ void LogOff();
 /* ---------------------------------------------------------------------------*/
 char buf[300]; /*buffer for debug printf*/
 
+extern void stopPeltier(void);
 /* ---------------------------------------------------------------------------*/
 /* Functions                                                                  */
 /* ---------------------------------------------------------------------------*/
@@ -144,15 +145,6 @@ void HeartBeat_ErrorLed_Pinconfig()
   GPIO_ResetBits(GPIOB,GPIO_Pin_11);/*ErrorLED */
   GPIO_ResetBits(GPIOB,GPIO_Pin_0); /*RX LED*/
   GPIO_ResetBits(GPIOB,GPIO_Pin_1); /*TX LED*/
-
-  /* Enable the GPIO M0_RESET Clock */
-  RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
-
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0;/*M0_RESET*/
-  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
-  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-  GPIO_Init(GPIOA, &GPIO_InitStructure);
-  GPIO_SetBits(GPIOA,GPIO_Pin_0);
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -259,13 +251,13 @@ void ResetHeaters()
 {
   if( xTimerStart(yTimer[3], 0 ) != pdPASS );
   vTraceConsoleMessage("ResetHeaters!");
-  GPIO_ResetBits(GPIOA,GPIO_Pin_0);
+  //GPIO_ResetBits(GPIOA,GPIO_Pin_0);
 }
 
 /* ---------------------------------------------------------------------------*/
 void vHeatersReset(xTimerHandle pxTimer )
 {
-  GPIO_SetBits(GPIOA,GPIO_Pin_0);
+  //GPIO_SetBits(GPIOA,GPIO_Pin_0);
   if( xTimerStop( yTimer[3], 0 ) != pdPASS );
 }
 
@@ -337,6 +329,7 @@ void ConfigOSTimer ()
               vReadTubeTemp         // Each timer calls the same callback when it expires.
               );
 /* <-- For USE_DEVELOPMENT_LOGGING feature */
+// TODO: remove this functionality as it is no longer supported by HW
   yTimer[3]= xTimerCreate((char *)"ResetHeaters",       // Just a text name, not used by the kernel.
               ( 100 * r ),          // The timer period in ticks.
               pdTRUE,               // The timers will auto-reload themselves when they expire.
@@ -469,6 +462,7 @@ int main(void)
   sprintf(buf, "Git Id = %s", gitCommitIdStr);
   gdi_send_msg_on_monitor(buf);
   init_os_trace(); /*GDB CMD:dump binary memory gdb_dump_23.txt 0x20000000 0x20010000  -- http://percepio.com/*/
+  stopPeltier();
   PWM_Stop();
 
   ConfigOSTimer();
@@ -514,6 +508,7 @@ void assert_failed(unsigned char* file, unsigned int line)
   GPIO_ResetBits(GPIOB,GPIO_Pin_0);   /* Turn off RX LED */
   GPIO_ResetBits(GPIOB,GPIO_Pin_1);   /* Turn off TX LED */
   PWM_Stop();
+  stopPeltier();
   sprintf(buf, "assert_failed: %s %d", file, line);
   gdi_send_msg_on_monitor(buf);
   sprintf(buf, "Heap free bytes: %d", xFreeBytesRemaining);

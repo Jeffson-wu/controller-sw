@@ -30,7 +30,7 @@
 #define ADC_PIN_CH_1 GPIO_Pin_5 
 #define ADC_PIN_CH_2 GPIO_Pin_6 
 #define ADC_PIN_CH_3 GPIO_Pin_7
-#define ADC_MUX_CH_0 ADC_Channel_4
+#define ADC_MUX_CH_0 ADC_Channel_0 //####
 #define ADC_MUX_CH_1 ADC_Channel_5
 #define ADC_MUX_CH_2 ADC_Channel_6
 #define ADC_MUX_CH_3 ADC_Channel_7

@@ -19,6 +19,7 @@
 #define USE_CL_DATA_LOGGING
 #define USE_ANALOG_WATCH_DOG
 #define USE_TWO_LEVEL_LID_POWER
+#define DISABLE_ERROR_REPOTING
 
 /* Private debug define ------------------------------------------------------*/
 //#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
@@ -72,6 +73,10 @@ char buf[20];
 #define LID_DETECT_PORT   GPIOB
 #define PELTIER_EN_PIN    GPIO_Pin_6
 #define PELTIER_EN_PORT   GPIOC
+#define PELTIER_DAC_PIN   GPIO_Pin_4
+#define PELTIER_DAC_PORT  GPIOA
+#define DAC_UPPER_LIMIT   3725
+
 #ifdef USE_CL_DATA_LOGGING
   #define CL_SAMPLES_PER_LOG  10    //Each log is the avarage over this number of samples
   #define CL_LOG_ELEMENT_SIZE 4     //Log all four sensors
@@ -174,7 +179,7 @@ bool msgSent = FALSE;
 
 // Events to be sent to the Linux box
 static uint16_t cl_status = 0;
-static uint8_t clState = 0;
+static uint8_t clState = CL_STATE_CLNOK;
 static bool coolTempOK = FALSE;
 static bool lidTempOK = FALSE;
 
@@ -278,9 +283,13 @@ static void gpioInit(void)
   RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
   RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOC, ENABLE);
 
+  GPIO_InitStructure.GPIO_Pin = PELTIER_DAC_PIN;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AIN;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
+  GPIO_Init(PELTIER_DAC_PORT, &GPIO_InitStructure);
+
   GPIO_InitStructure.GPIO_Pin = LOCK_OUTPUT_PIN;
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
-  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
   GPIO_Init(LOCK_OUTPUT_PORT, &GPIO_InitStructure);
 
   GPIO_InitStructure.GPIO_Pin = PELTIER_EN_PIN;
@@ -295,6 +304,7 @@ static void gpioInit(void)
 /* ---------------------------------------------------------------------------*/
 void stopPeltier()
 {
+  GPIO_ResetBits(PELTIER_EN_PORT, PELTIER_EN_PIN);
   *peltierData[0].regulator.pwmVal = 0;
   //*peltierData[1].regulator.pwmVal = 0;
   peltierData[0].regulator.state = STOP_STATE;
@@ -361,7 +371,7 @@ int getAdc(char *poutText)
   strcat(poutText, ","); 
   Itoa(adcData[3], str);
   strcat(poutText,str);
-  strcat(poutText, "}>");
+  strcat(poutText, "}");
   return 0;
 }
 
@@ -403,9 +413,9 @@ void fan(fanData_t *fanData){
   }
 
   if (out > 32767)
-    out = 32767;
-	if (out < 12000)
-		out = 12000;
+    { out = 32767; }
+  if (out < 12000)
+    { out = 12000; }
   *reg->pwmVal = out;
 }
 
@@ -415,9 +425,9 @@ void fan(fanData_t *fanData){
 void peltier(peltierData_t *peltierData){
   regulatorData_t *reg;
   reg = &peltierData->regulator;
-  reg->setPoint = -21783; //15oC //-24507; //5oC
-  reg->setPointLL = reg->setPoint - 200;
-  reg->setPointHL = reg->setPoint + 200;
+  reg->setPoint = 217; //??oC
+  reg->setPointLL = reg->setPoint - 20;
+  reg->setPointHL = reg->setPoint + 20;
   int64_t out = 0;
   int16_t Kp = -20;
 
@@ -425,6 +435,7 @@ void peltier(peltierData_t *peltierData){
     case STOP_STATE:
     {
       *reg->pwmVal = 0;
+      GPIO_ResetBits(PELTIER_EN_PORT, PELTIER_EN_PIN);  //Disable Peltier
       reg->state = CTRL_CLOSED_LOOP_STATE; //Starts when power on
     }
     break;
@@ -435,11 +446,13 @@ void peltier(peltierData_t *peltierData){
     break;
     case CTRL_OPEN_LOOP_STATE:
     {
+      GPIO_SetBits(PELTIER_EN_PORT, PELTIER_EN_PIN); //Enable peltier
       reg->state = CTRL_CLOSED_LOOP_STATE;
     } 
     break;
     case CTRL_CLOSED_LOOP_STATE:
     {
+      GPIO_SetBits(PELTIER_EN_PORT, PELTIER_EN_PIN); //Enable peltier
       out = Kp*(reg->setPoint - *reg->adcVal);
     }
     break;
@@ -447,10 +460,10 @@ void peltier(peltierData_t *peltierData){
     break;
   }
   if( abs(reg->setPoint - *reg->adcVal) < 100 ) { coolTempOK = TRUE; }
-	if (out > 32767) //25000
-		out = 32767;
+  if (out > DAC_UPPER_LIMIT)
+    { out = DAC_UPPER_LIMIT; }
   if (out < 0)
-    out = 0;
+    { out = 0; }
   *reg->pwmVal = out;
 }
 
@@ -484,7 +497,7 @@ void lid(lidData_t *lidData)
     {
       out = 32767;
 
-    	if (*reg->adcVal > (reg->setPoint-2000)) //ca -10oC
+      if (*reg->adcVal > (reg->setPoint-2000)) //ca -10oC
         reg->state = CTRL_CLOSED_LOOP_STATE;
     }
     break;
@@ -492,7 +505,7 @@ void lid(lidData_t *lidData)
     {
       out = Kp*(reg->setPoint - *reg->adcVal);
 
-    	if (*reg->adcVal < reg->setPoint-4000)
+      if (*reg->adcVal < reg->setPoint-4000)
         reg->state = CTRL_OPEN_LOOP_STATE;
     }
     break;
@@ -500,11 +513,10 @@ void lid(lidData_t *lidData)
     break;
   }
   if( abs(reg->setPoint - *reg->adcVal) < 100 ) { lidTempOK = TRUE; }
-	if (out > 32767)
-		out = 32767;
+  if (out > 32767)
+    { out = 32767; }
   if (out < 0)
-    out = 0;
-	//out = 10000;
+    { out = 0; }
   *reg->pwmVal = out;
 
 /*
@@ -658,8 +670,12 @@ int getClLog(char *poutText )
 
   if( coolTempOK && lidTempOK ) { clState = CL_STATE_CLOK; } else { clState = CL_STATE_CLNOK; }
   strcat(poutText,"state=");
+#ifdef DISABLE_ERROR_REPOTING
+  strcat(poutText,cl_states[CL_STATE_CLOK]); // Juste say everything is OK
+#else
   strcat(poutText,cl_states[clState]);
-  //strcat(poutText,",");
+#endif
+  //#### strcat(poutText,",");
 
   // Send all available log elements
   while(NULL != (pinData = cl_dequeue(&cl_logDataQueue)) )
@@ -889,7 +905,6 @@ void CoolAndLidTask( void * pvParameters )
   DAC_Cmd( DAC_Channel_1, ENABLE);
   /* <-- Init DAC */
 
-
 // use "setCLStatusReg(HW_DEFAULT_CAL_USED)" if default calib is used
 #ifdef STANDALONE
   standAlone();
@@ -948,7 +963,9 @@ void CoolAndLidTask( void * pvParameters )
 #ifdef USE_TWO_LEVEL_LID_POWER
     if(1) { //(NoWell == mode) {
       // Bottom heaters disabled : full power on top heater
-      *pwmChMirror[0] = *pwmChMirror[1] = *(lidData[0].regulator.pwmVal);
+      if(MANUAL_STATE != lidData[0].regulator.state) {
+        *pwmChMirror[0] = *pwmChMirror[1] = *(lidData[0].regulator.pwmVal);
+      }
     }
     else
     {
@@ -971,9 +988,11 @@ void CoolAndLidTask( void * pvParameters )
 
     PWM_Set(pwmCh[0], PWM0_TIM4CH3);
     PWM_Set(pwmCh[1], PWM1_TIM4CH4);
-    PWM_Set(pwmCh[2], PWM2_TIM3CH1);
+    //PC6 is now Peltier_EN  PWM_Set(pwmCh[2], PWM2_TIM3CH1);
     PWM_Set(pwmCh[3], PWM3_TIM3CH2);
     PWM_Set(pwmCh[4], PWM4_TIM3CH3);
+    
+    if (dacCh[0] > DAC_UPPER_LIMIT) { dacCh[0] = DAC_UPPER_LIMIT; }
     DAC_SetChannel1Data(DAC_Align_12b_R, dacCh[0]);
     //DAC_SetChannel2Data(DAC_Align_12b_R, dacCh[1]);
 
@@ -1068,6 +1087,7 @@ void CoolAndLidTask( void * pvParameters )
               PWM_Set(*fanData[0].regulator.pwmVal, PWM1_TIM4CH4);
               break;
             case 5:
+              DEBUG_PRINTF("Set LidLock @ %d", p->value);
               if(1 == p->value) { GPIO_SetBits(LOCK_OUTPUT_PORT,   LOCK_OUTPUT_PIN); }
               if(0 == p->value) { GPIO_ResetBits(LOCK_OUTPUT_PORT, LOCK_OUTPUT_PIN); }
               break;
@@ -1084,6 +1104,7 @@ void CoolAndLidTask( void * pvParameters )
           SetPWMReq *pPWMReq;
           pPWMReq = (SetPWMReq *)(msg->ucData);
           pwmCh[pPWMReq->idx] = (pPWMReq->value * 32768/100);
+          DEBUG_PRINTF("Set PWM ch %d @ %d", pPWMReq->idx, pwmCh[pPWMReq->idx]);
           switch(pPWMReq->idx)
           {
             case 0:
@@ -1129,11 +1150,17 @@ void CoolAndLidTask( void * pvParameters )
           p=(SetDACReq *)(msg->ucData);
           if(p->idx <= sizeof(dacCh)/sizeof(uint16_t))
           {
-            dacCh[p->idx] = (p->value * 4096/100) & 0x0FFF;
+            dacCh[p->idx] = (((p->value * 4096) - 1)/100) & 0x0FFF;
+            DEBUG_PRINTF("Set DAC ch %d @ %d", p->idx, dacCh[p->idx]);
             switch(p->idx)
             {
               case 0:
-                //peltierData[0].regulator.state = MANUAL_STATE;
+                if (0 == p->value) { 
+                  GPIO_ResetBits(PELTIER_EN_PORT, PELTIER_EN_PIN); 
+                } else { 
+                  GPIO_SetBits(PELTIER_EN_PORT, PELTIER_EN_PIN);
+                }
+                peltierData[0].regulator.state = MANUAL_STATE;
                 break;
               case 1:
                 //??[?].regulator.state = MANUAL_STATE;
