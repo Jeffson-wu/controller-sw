@@ -30,7 +30,7 @@ extern xQueueHandle CoolAndLidQueueHandle;
 #define USE_PAUSE_FEATURE
 #define USE_NEIGHBOUR_TUBE_TEMP_FEATURE
 #define USE_LOGGING_FEATURE
-#define USE_LID_DETECT_FEATURE
+//#define USE_LID_DETECT_FEATURE
 #define DISABLE_ERROR_STATES
 
 /* Private debug define ------------------------------------------------------*/
@@ -683,6 +683,8 @@ void vApplicationTickHook()
     }
   }
 }
+#else
+  void vApplicationTickHook(){}
 #endif // USE_LID_DETECT_FEATURE
 
 /* ---------------------------------------------------------------------------*/

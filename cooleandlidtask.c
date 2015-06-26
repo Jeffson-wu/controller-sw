@@ -241,7 +241,7 @@ static uint16_t dacCh[1] = {0};
 static int16_t *adcDiffSource[2] = {&adcCh[4], &adcCh[2]}; 
 
 static peltierData_t peltierData[nPELTIER] = {
-  {PELTIER_1, {STOP_STATE, -26213, &dacCh[3], &adcCh[3]}}
+  {PELTIER_1, {STOP_STATE, -26213, &dacCh[0], &adcCh[3]}}
 };
 
 static lidData_t lidData[nLID_HEATER] = {
@@ -251,7 +251,7 @@ static lidData_t lidData[nLID_HEATER] = {
 static uint16_t *pwmChMirror[2] = {&pwmCh[0], &pwmCh[1]};
 
 static fanData_t fanData[nFAN] = {
-  {FAN_1, {STOP_STATE, 0, &pwmCh[1], /*&adcDiff[0]*/ &adcCh[0]}}
+  {FAN_1, {STOP_STATE, 0, &pwmCh[3], /*&adcDiff[0]*/ &adcCh[0]}}
 };
 
 calib_data_t __attribute__ ((aligned (2))) calib_data[3] = {
@@ -292,6 +292,7 @@ static void gpioInit(void)
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
   GPIO_Init(LOCK_OUTPUT_PORT, &GPIO_InitStructure);
 
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
   GPIO_InitStructure.GPIO_Pin = PELTIER_EN_PIN;
   GPIO_Init(PELTIER_EN_PORT, &GPIO_InitStructure);
 
