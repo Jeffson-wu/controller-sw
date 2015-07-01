@@ -116,8 +116,6 @@ typedef struct
   s16 idx;
 } SetDACReq;
 
-void ResetHeaters();
-
 
 #endif
 

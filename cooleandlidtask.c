@@ -424,6 +424,7 @@ void fan(fanData_t *fanData){
 /* ---------------------------------------------------------------------------*/
 /* Peltier handling */
 /* ---------------------------------------------------------------------------*/
+// TODO: JRJ implement reset for current source at least once every 4 hours
 void peltier(peltierData_t *peltierData){
   regulatorData_t *reg;
   reg = &peltierData->regulator;

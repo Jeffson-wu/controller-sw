@@ -47,7 +47,7 @@ int uid;
 
 /* Private debug define ------------------------------------------------------*/
 //#define DEBUG_USE_ECHO_AS_DEFAULT
-//#define DEBUG
+#define DEBUG
 
 #ifdef DEBUG
 #define GDI_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
@@ -734,8 +734,7 @@ void gdi_map_to_functions()
       if(!gdiEcho) {
         uid = (u16) strtol(*(gdi_req_func_info.parameters), (char **)NULL, 10);
       }
-      ResetHeaters();
-      *(int*)0=0; //JRJ #### DEBUG usage Hardfault
+      //TODO: reset M3
     break;
 
     case echo :
