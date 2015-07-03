@@ -51,16 +51,14 @@
 /* Private debug define ------------------------------------------------------*/
 //#define DEBUG_MB /* General debug */
 //#define DEBUG_HF /* Searching for a hard fault */
-extern void gdi_send_msg_on_monitor(char * response);
-#define DEBUG_BUFFER_SIZE 600
-char buf[DEBUG_BUFFER_SIZE];                   /* buffer for debug printf*/
+
 #ifdef DEBUG_MB
-#define DEBUG_MB_PRINTF(fmt, args...)      snprintf(buf, DEBUG_BUFFER_SIZE, fmt, ## args);  gdi_send_msg_on_monitor(buf);
+#define DEBUG_MB_PRINTF(fmt, args...)      snprintf(dbgbuf, DEBUG_BUFFER_SIZE, fmt, ## args);  send_msg_on_monitor(dbgbuf);
 #else
 #define DEBUG_MB_PRINTF(fmt, args...)          /* Don't do anything in release builds */
 #endif
 #ifdef DEBUG_HF
-#define DEBUG_HF_PRINTF(fmt, args...)      snprintf(buf, DEBUG_BUFFER_SIZE, fmt, ## args);  gdi_send_msg_on_monitor(buf);
+#define DEBUG_HF_PRINTF(fmt, args...)      snprintf(dbgbuf, DEBUG_BUFFER_SIZE, fmt, ## args);  send_msg_on_monitor(dbgbuf);
 #else
 #define DEBUG_HF_PRINTF(fmt, args...)          /* Don't do anything in release builds */
 #endif

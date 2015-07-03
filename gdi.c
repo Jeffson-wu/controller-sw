@@ -32,6 +32,7 @@
 #include "gdi.h"
 #include "serial.h"
 #include <ctype.h>
+#include "debug.h"
 
 /* Private feature defines ---------------------------------------------------*/
 #define USE_FLOAT_REG_FEATURE
@@ -50,14 +51,12 @@ int uid;
 #define DEBUG
 
 #ifdef DEBUG
-#define GDI_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
+#define GDI_PRINTF(fmt, args...)      sprintf(dbgbuf, fmt, ## args);  send_msg_on_monitor(dbgbuf);
 #else
 #define GDI_PRINTF(fmt, args...)    /* Don't do anything in release builds */
 #endif
 
 /* Private variables ---------------------------------------------------------*/
-char buf[300]; /*buffer for debug printf*/
-
 static char inputCmdBuf = 0;
 static char input_buffer[2][INPUT_BUF_SIZE];
 
@@ -282,26 +281,6 @@ void gdi_send_msg_response(char * response)
   {
     while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
     USART_SendData(uart, *(message+i));
-  }
-}
-
-/* ---------------------------------------------------------------------------*/
-void gdi_send_msg_on_monitor(char * response)
-{
-  if(USART3_intitalized)
-  {
-    char i = 0;
-    int len = strlen(response)+3;
-    char message[strlen(response)+3];
-    strcpy(message, "\0");
-    strcat(message, response);
-    strcat(message, "\r\n");
-    while(i<len)
-    {
-      while(USART_GetFlagStatus(USART3, USART_FLAG_TXE)==RESET);
-      USART_SendData(USART3,*(message+i));
-      i++;
-    }
   }
 }
 
@@ -1615,7 +1594,7 @@ void gdi_task(void *pvParameters)
   xSemaphoreTake( GDI_RXSemaphore, portMAX_DELAY );
   gdi_init(); /*Setup debug uart, This must be after the GDI_RXSemaphore is instantiated */
 #ifdef DEBUG_USE_ECHO_AS_DEFAULT
-  gdi_send_msg_on_monitor("!! Echo=1 Not for use with Linux box !!");
+  PRINTF("!! Echo=1 Not for use with Linux box !!");
 #endif
   while(1)
   {

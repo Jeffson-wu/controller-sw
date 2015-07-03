@@ -42,28 +42,27 @@ extern xQueueHandle CoolAndLidQueueHandle;
 //#define DEBUG_IF    /*Debug of external interfaces modbus, IRQ and serial */
 //#define DEBUG_QUEUE /*Debug of stage queue */
 
-#define DEBUG_BUFFER_SIZE 600
 
 #ifdef DEBUG
-#define DEBUG_PRINTF(fmt, args...)      snprintf(buf, DEBUG_BUFFER_SIZE, fmt, ## args);  gdi_send_msg_on_monitor(buf);
+#define DEBUG_PRINTF(fmt, args...)      snprintf(dbgbuf, DEBUG_BUFFER_SIZE, fmt, ## args);  send_msg_on_monitor(dbgbuf);
 #else
 #define DEBUG_PRINTF(fmt, args...)                          /* Don't do anything in release builds */
 #endif
 
 #ifdef DEBUG_SEQ
-#define DEBUG_SEQ_PRINTF(fmt, args...)      snprintf(buf, DEBUG_BUFFER_SIZE, fmt, ## args);  gdi_send_msg_on_monitor(buf);
+#define DEBUG_SEQ_PRINTF(fmt, args...)      snprintf(dbgbuf, DEBUG_BUFFER_SIZE, fmt, ## args);  send_msg_on_monitor(dbgbuf);
 #else
 #define DEBUG_SEQ_PRINTF(fmt, args...)                      /* Don't do anything in release builds */
 #endif
 
 #ifdef DEBUG_IF
-#define DEBUG_IF_PRINTF(fmt, args...)      snprintf(buf, DEBUG_BUFFER_SIZE, fmt, ## args);  gdi_send_msg_on_monitor(buf);
+#define DEBUG_IF_PRINTF(fmt, args...)      snprintf(dbgbuf, DEBUG_BUFFER_SIZE, fmt, ## args);  send_msg_on_monitor(dbgbuf);
 #else
 #define DEBUG_IF_PRINTF(fmt, args...)                       /* Don't do anything in release builds */
 #endif
 
 #ifdef DEBUG_QUEUE
-#define DEBUG_QUEUE_PRINTF(fmt, args...)      snprintf(buf, DEBUG_BUFFER_SIZE, fmt, ## args);  gdi_send_msg_on_monitor(buf);
+#define DEBUG_QUEUE_PRINTF(fmt, args...)      snprintf(dbgbuf, DEBUG_BUFFER_SIZE, fmt, ## args);  send_msg_on_monitor(dbgbuf);
 #else
 #define DEBUG_QUEUE_PRINTF(fmt, args...)                       /* Don't do anything in release builds */
 #endif
@@ -90,8 +89,6 @@ xTimerHandle NeighbourTubeTempTimer[ 1 ];
 
 /* An array to hold the tick count of times each timer started - used for progress. */
 long lStartTickCounters[ NUM_TIMERS ] = { 0 };
-
-char buf[DEBUG_BUFFER_SIZE];                                /* buffer for debug printf*/
 
 /* Private variables ---------------------------------------------------------*/
 const char *  signals_txt[] =
@@ -1547,6 +1544,12 @@ void HeaterEventHandler (ReadModbusRegsRes *preg, xMessage *msg)
       DEBUG_PRINTF("%s rebooted T%ld state %d", heater[tube2heater[TubeId-1]], TubeId, Tubeloop[TubeId-1].state );
       /* Notify the Linux Box */ 
       setTubeHWReport(M0_BOOT, TubeId);
+      send_led_cmd(SET_LED_OFF, (tube2heater[TubeId-1] * 4) + 0);
+      send_led_cmd(SET_LED_OFF, (tube2heater[TubeId-1] * 4) + 1);
+      send_led_cmd(SET_LED_OFF, (tube2heater[TubeId-1] * 4) + 2);
+      send_led_cmd(SET_LED_OFF, (tube2heater[TubeId-1] * 4) + 3);
+      extern void ErrorOn();
+      ErrorOn();
     }
     else
     {
@@ -1794,7 +1797,7 @@ void TubeSequencerTask( void * pvParameter)
   tubeinitQueue();
   
   #ifdef SIMULATE_HEATER
-  gdi_send_msg_on_monitor("System is using SIMULATE_HEATER!!");
+  send_msg_on_monitor("System is using SIMULATE_HEATER!!");
   #endif
   while(1)
   {

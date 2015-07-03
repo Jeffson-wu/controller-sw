@@ -29,12 +29,17 @@
 #define TRACE_ISR_ID_MB_EOT 6
 
 /* Exported macro ------------------------------------------------------------*/
+#define PRINTF(fmt, args...)      sprintf(dbgbuf, fmt, ## args);  send_msg_on_monitor(dbgbuf);
+#define DEBUG_BUFFER_SIZE 600
+
+/* Exported variables ------------------------------------------------------- */
+extern char dbgbuf[]; /*buffer for debug printf*/
 
 /* Exported functions ------------------------------------------------------- */
 
 inline void dbgTraceStoreISRBegin(int id);
 inline void dbgTraceStoreISREnd();
-char *dbgPrintIsr(char *buf);
+char *dbgPrintIsr(char *str);
 void send_msg_on_monitor(char * response);
 void printHeap(void);
 

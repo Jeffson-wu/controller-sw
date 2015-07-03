@@ -33,8 +33,14 @@
 #include "trcConfig.h"
 #include "trcHardwarePort.h"
 #include "../heater-sw/heater_reg.h"
+#include "debug.h"
 #include "logtask.h"
 #include "util.h"
+
+/* Private feature defines ---------------------------------------------------*/
+//#define USE_DEVELOPMENT_LOGGING
+
+/* Private debug define ------------------------------------------------------*/
 
 extern xQueueHandle ModbusQueueHandle;
 extern xTimerHandle yTimer[];
@@ -68,7 +74,7 @@ typedef struct LOG_DATA_QUEUE {
 /* Private macro -------------------------------------------------------------*/
 //#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
 #ifdef DEBUG
-#define DEBUG_LOG_PRINTF(fmt, args...)      sprintf(message, fmt, ## args);  gdi_send_msg_on_monitor(message);
+#define DEBUG_LOG_PRINTF(fmt, args...)      sprintf(dbgbuf, fmt, ## args);  send_msg_on_monitor(dbgbuf);
 #else
 #define DEBUG_LOG_PRINTF(fmt, args...)    /* Don't do anything in release builds */
 #endif
@@ -77,7 +83,6 @@ bool log_tubes[NUM_OF_TUBES]={FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, F
 
 static logDataQueue_t __attribute__ ((aligned (16))) logDataQueue[NUM_OF_TUBES]; // #### Aligned for debug
 
-static char message[40];   /*buffer for printf*/
 int logcount[NUM_OF_TUBES]={0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 u8 cur_tubeid = 0;
 
@@ -317,12 +322,12 @@ void LogTask( void * pvParameters )
   uint16_t modbus_data;
   uint16_t modbus_addr;
   xMessage *msg;
-  long TubeId, log_interval;
+  long TubeId;
+#ifdef USE_DEVELOPMENT_LOGGING
+  long log_interval;
   int i = 1;
   static long last_tube_to_log;
-  
-  USART_TypeDef *uart = USART3;
-
+#endif // USE_DEVELOPMENT_LOGGING
   initQueue();
 
   while(1)
@@ -331,7 +336,7 @@ void LogTask( void * pvParameters )
     {
       switch(msg->ucMessageID)
       {
-/* --> For USE_DEVELOPMENT_LOGGING feature */
+#ifdef USE_DEVELOPMENT_LOGGING /* --> For USE_DEVELOPMENT_LOGGING feature */
       case START_DEV_LOG:
         i=1;
         TubeId = *((long *)(msg->ucData));
@@ -367,32 +372,20 @@ void LogTask( void * pvParameters )
           //error handling
         }
       break;
-/* <-- For USE_DEVELOPMENT_LOGGING feature */
+#endif // USE_DEVELOPMENT_LOGGING /* <-- For USE_DEVELOPMENT_LOGGING feature */
       case READ_MODBUS_REGS_RES:
         preg=(ReadModbusRegsRes *)msg->ucData;
         TubeId = preg->slave;
         modbus_addr = preg->addr;
         if(preg->resultOk == NO_ERROR) {
-/* --> For USE_DEVELOPMENT_LOGGING feature */
+#ifdef USE_DEVELOPMENT_LOGGING /* --> For USE_DEVELOPMENT_LOGGING feature */
           if( (TUBE1_TEMP_REG == modbus_addr) || (TUBE2_TEMP_REG == modbus_addr)||(TUBE3_TEMP_REG == modbus_addr) || (TUBE4_TEMP_REG == modbus_addr) )
           { // Debug Logging
             modbus_data =(((u16)(preg->data[0])<<8)|(preg->data[1]));
-            sprintf(message,"T%ld:%d.%01dC ",TubeId,modbus_data/10,modbus_data%10);
-            for(i=0;i<strlen(message);i++)
-            {
-              while(USART_GetFlagStatus(uart, USART_FLAG_TXE)==RESET);
-              USART_SendData(uart, *(message+i));
-            }
-            if(last_tube_to_log == TubeId) 
-            {
-              USART_SendData(uart, '\r');
-              while (USART_GetFlagStatus(uart, USART_FLAG_TXE) == RESET);
-              USART_SendData(uart, '\n');
-              while (USART_GetFlagStatus(uart, USART_FLAG_TXE) == RESET);
-            }
+            DEBUG_LOG_PRINTF("T%ld:%d.%01dC ",TubeId,modbus_data/10,modbus_data%10);
           }
-/* <-- For USE_DEVELOPMENT_LOGGING feature */
-          else if(modbus_addr == DATA_LOG)
+#endif //USE_DEVELOPMENT_LOGGING /* <-- For USE_DEVELOPMENT_LOGGING feature */
+          if(DATA_LOG == modbus_addr)
           { // Auto Logging
             // Data log is {seq#,stage#,t1,stage#,t2,stage#,t3,stage#,t4,stage#,t5,stage#,t6,stage#,t7,stage#,t8,stage#,t9,stage#,t10}
             modbus_data =(((u16)(preg->data[0])<<8)|(preg->data[1])); //Seq num

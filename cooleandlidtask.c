@@ -51,22 +51,24 @@
 #include "gdi.h"
 #include "util.h"
 #include "nvs.h"
+#include "debug.h"
 #include "../heater-sw/heater_reg.h"
 #include "cooleandlidtask.h"
+
 /* ---------------------------------------------------------------------------*/
-char buf[20];
-#define PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
+#define PRINTF(fmt, args...)      sprintf(dbgbuf, fmt, ## args);  send_msg_on_monitor(dbgbuf);
 #ifdef DEBUG
-#define DEBUG_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
+#define DEBUG_PRINTF(fmt, args...)      sprintf(dbgbuf, fmt, ## args);  send_msg_on_monitor(dbgbuf);
 #else
 #define DEBUG_PRINTF(fmt, args...)    /* Don't do anything in release builds */
 #endif
 #ifdef DEBUG_LOGGING
-#define DEBUG_LOGGING_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
+#define DEBUG_LOGGING_PRINTF(fmt, args...)      sprintf(dbgbuf, fmt, ## args);  send_msg_on_monitor(dbgbuf);
 #else
 #define DEBUG_LOGGING_PRINTF(fmt, args...)    /* Don't do anything in release builds */
 #endif
 
+#define PELT_EN_TOGGLE_TICKS  1000  // 4 hours 4*60*60*(ticks/sec) 14400000ms : ( 500/*ms*/ / portTICK_PERIOD_MS )
 #define LOCK_OUTPUT_PIN   GPIO_Pin_8
 #define LOCK_OUTPUT_PORT  GPIOA
 #define LID_DETECT_PIN    GPIO_Pin_5
@@ -174,6 +176,7 @@ typedef struct CL_DATA_LOG_T {
 /* ---------------------------------------------------------------------------*/
 // command queue
 xQueueHandle CoolAndLidQueueHandle;
+TimerHandle_t BQ24600Timer;
 extern xQueueHandle TubeSequencerQueueHandle;
 bool msgSent = FALSE;
 
@@ -301,6 +304,26 @@ static void gpioInit(void)
   GPIO_Init(LID_DETECT_PORT, &GPIO_InitStructure);
 }
 
+/* ---------------------------------------------------------------------------*/
+void togglePeltier() {
+  GPIO_ResetBits(PELTIER_EN_PORT, PELTIER_EN_PIN);
+  GPIO_SetBits(  PELTIER_EN_PORT, PELTIER_EN_PIN);
+}
+
+/* ---------------------------------------------------------------------------*/
+void initTogglePeltierTimer() {
+  BQ24600Timer = xTimerCreate((char *)"BQ24600Timer",
+            PELT_EN_TOGGLE_TICKS, // The timer period in ticks.
+            pdTRUE,               // auto-reload.
+            ( void * ) 0,         // id.
+            togglePeltier         // callback.
+            );
+  if( BQ24600Timer == NULL ) {
+    PRINTF("Peltier driver restart timer not created");
+  } else {
+    xTimerStart(BQ24600Timer, 0);
+  }
+}
 
 /* ---------------------------------------------------------------------------*/
 void stopPeltier()
@@ -916,6 +939,7 @@ void CoolAndLidTask( void * pvParameters )
 // use "setCLStatusReg(HW_DEFAULT_CAL_USED)" if default calib is used
 #ifdef STANDALONE
   standAlone();
+  initTogglePeltierTimer();
   setCLStatusReg(0xf00f); //Debug####JRJ
   DEBUG_PRINTF("CL stand alone\r\n");
 #endif

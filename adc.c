@@ -20,7 +20,6 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "adc.h"
-#include "gdi.h" //Debug printf
 #include "pwm.h" //PWM_Stop()
 #include "debug.h"
 
@@ -38,10 +37,8 @@
 /* Private debug defines -----------------------------------------------------*/
 //#define DEBUG
 
-char buf[20];
-#define PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
 #ifdef DEBUG
-#define DEBUG_PRINTF(fmt, args...)      sprintf(buf, fmt, ## args);  gdi_send_msg_on_monitor(buf);
+#define DEBUG_PRINTF(fmt, args...)      sprintf(dbgbuf, fmt, ## args);  send_msg_on_monitor(dbgbuf);
 #else
 #define DEBUG_PRINTF(fmt, args...)    /* Don't do anything in release builds */
 #endif
