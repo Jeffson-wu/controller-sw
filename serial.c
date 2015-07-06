@@ -165,12 +165,14 @@ void UART_Init(USART_TypeDef *uart, void (*recvCallback)())
 void UART3_Handler(void)
 {
    dbgTraceStoreISRBegin(TRACE_ISR_ID_UART3);
+   vTraceStoreISRBegin(TRACE_ISR_ID_UART3);
    if (USART_GetITStatus(USART3, USART_IT_RXNE) && receiveUART3CB)
    {
      receiveUART3CB();
    }
    USART_ClearITPendingBit(USART3,USART_IT_RXNE);
    dbgTraceStoreISREnd();
+   vTraceStoreISREnd();
 
 }
 
@@ -178,6 +180,7 @@ void UART3_Handler(void)
 void UART2_Handler(void)
 {
   GPIO_SetBits(RS485_RX_LED);/*RX LED*/
+  vTraceStoreISRBegin(TRACE_ISR_ID_UART2);
   dbgTraceStoreISRBegin(TRACE_ISR_ID_UART2);
   if (USART_GetITStatus(USART2, USART_IT_RXNE) && receiveDataCB)
   {
@@ -185,19 +188,22 @@ void UART2_Handler(void)
   }
   USART_ClearITPendingBit(USART2,USART_IT_RXNE);
    dbgTraceStoreISREnd();
+   vTraceStoreISREnd();
   GPIO_ResetBits(RS485_RX_LED);/*RX LED*/
   GPIO_ResetBits(RS485_TX_LED);/*TX LED*/
 }
 
 void UART1_Handler(void)
 {
-  dbgTraceStoreISRBegin(TRACE_ISR_ID_UART1);
+   vTraceStoreISRBegin(TRACE_ISR_ID_UART1);
+   dbgTraceStoreISRBegin(TRACE_ISR_ID_UART1);
    if (USART_GetITStatus(USART1, USART_IT_RXNE) && receiveUART1CB)
    {
      receiveUART1CB();
    }
    USART_ClearITPendingBit(USART1,USART_IT_RXNE);
    dbgTraceStoreISREnd();
+   vTraceStoreISREnd();
 
 }
 

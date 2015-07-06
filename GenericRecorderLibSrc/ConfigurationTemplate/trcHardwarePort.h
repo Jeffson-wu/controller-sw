@@ -201,7 +201,7 @@
     #define HWTC_COUNT_DIRECTION DIRECTION_DECREMENTING
     #define HWTC_COUNT (*((uint32_t*)0xE000E018))
     #define HWTC_PERIOD ((*(uint32_t*)0xE000E014) + 1)
-    #define HWTC_DIVISOR 2    
+    #define HWTC_DIVISOR 4    
     #define IRQ_PRIORITY_ORDER 0  // lower IRQ priority values are more significant
 
 #elif (SELECTED_PORT == PORT_Renesas_RX600)    
@@ -219,7 +219,7 @@
     /* For Microchip PIC24 and dsPIC (16 bit) */
 
     /* Note: The trace library was originally designed for 32-bit MCUs, and is slower
-       than intended on 16-bit MCUs. Storing an event on a PIC24 takes about 70 µs. 
+       than intended on 16-bit MCUs. Storing an event on a PIC24 takes about 70 ï¿½s. 
        In comparison, 32-bit MCUs are often 10-20 times faster. If recording overhead 
        becomes a problem on PIC24, use the filters to exclude less interesting tasks 
        or system calls. */

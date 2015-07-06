@@ -57,7 +57,7 @@
  * vTracePrintF may use multiple records depending on the number of data args.
  ******************************************************************************/
 
-#define EVENT_BUFFER_SIZE 4000 /* Adjust wrt. to available RAM */
+#define EVENT_BUFFER_SIZE 7000 /* Adjust wrt. to available RAM */
 
 
 /*******************************************************************************
@@ -175,7 +175,7 @@
 #define NQueue            10
 #define NSemaphore        10
 #define NMutex            10
-#define NTimer            2
+#define NTimer            40
 #define NEventGroup       2
 
 /* Maximum object name length for each class (includes zero termination) */
@@ -276,7 +276,7 @@
  * 
  * Note that User Events are not displayed in FreeRTOS+Trace Free Edition.
  *****************************************************************************/
-#define INCLUDE_USER_EVENTS 1
+#define INCLUDE_USER_EVENTS 1// 1 TFK
 
 /*****************************************************************************
  * INCLUDE_READY_EVENTS
@@ -288,7 +288,7 @@
  * excluded. Note, this will make it impossible to calculate the correct
  * response times.
  *****************************************************************************/
-#define INCLUDE_READY_EVENTS 1
+#define INCLUDE_READY_EVENTS 0 // 1 TFK
 
 /*****************************************************************************
  * INCLUDE_NEW_TIME_EVENTS
@@ -326,7 +326,7 @@
  * traced kernel objects are deleted at runtime. If no deletes are made, this 
  * can be set to 0 in order to exclude the delete-handling code.
  *****************************************************************************/
-#define INCLUDE_OBJECT_DELETE 1
+#define INCLUDE_OBJECT_DELETE   1 
 
 /******************************************************************************
  * INCLUDE_MEMMANG_EVENTS
@@ -337,7 +337,7 @@
  * This controls if malloc and free calls should be traced. Set this to zero to
  * exclude malloc/free calls from the tracing.
  *****************************************************************************/
-#define INCLUDE_MEMMANG_EVENTS 1
+#define INCLUDE_MEMMANG_EVENTS 0 // 1 TFK
 
 /******************************************************************************
  * CONFIGURATION RELATED TO BEHAVIOR
@@ -514,7 +514,7 @@
 * (some microseconds) since ALL configurable interrupts are disabled during 
 * the recorder's critical sections in this mode, using the PRIMASK register.
  ******************************************************************************/
-#define USE_PRIMASK_CS 0
+#define USE_PRIMASK_CS 1
 
 /******************************************************************************
 * HEAP_SIZE_BELOW_16M
@@ -524,7 +524,7 @@
 * below 16 MB (2^24 byte), and you can live with addresses truncated to the 
 * lower 24 bit. Otherwise set it to 0 to get the full 32-bit addresses.
 ******************************************************************************/
-#define HEAP_SIZE_BELOW_16M 0
+#define HEAP_SIZE_BELOW_16M 1// 0 TFK
 
 #endif
 
