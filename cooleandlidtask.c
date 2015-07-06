@@ -68,7 +68,7 @@
 #define DEBUG_LOGGING_PRINTF(fmt, args...)    /* Don't do anything in release builds */
 #endif
 
-#define PELT_EN_TOGGLE_TICKS  1000  // 4 hours 4*60*60*(ticks/sec) 14400000ms : ( 500/*ms*/ / portTICK_PERIOD_MS )
+#define PELT_EN_TOGGLE_TICKS  14400000  // 4 hours 4*60*60*(ticks/sec) 14400000ms : ( 500/*ms*/ / portTICK_PERIOD_MS )
 #define LOCK_OUTPUT_PIN   GPIO_Pin_8
 #define LOCK_OUTPUT_PORT  GPIOA
 #define LID_DETECT_PIN    GPIO_Pin_5
@@ -939,7 +939,6 @@ void CoolAndLidTask( void * pvParameters )
 // use "setCLStatusReg(HW_DEFAULT_CAL_USED)" if default calib is used
 #ifdef STANDALONE
   standAlone();
-  initTogglePeltierTimer();
   setCLStatusReg(0xf00f); //Debug####JRJ
   DEBUG_PRINTF("CL stand alone\r\n");
 #endif
@@ -949,6 +948,7 @@ void CoolAndLidTask( void * pvParameters )
   } else {
     PRINTF("\r\nUsing stored calib:\r\n");
   }
+  initTogglePeltierTimer();
   lidData[0].regulator.setPoint     = calib_data[0].c_1;
   peltierData[0].regulator.setPoint = calib_data[1].c_1;
   fanData[0].regulator.setPoint     = calib_data[2].c_1;
