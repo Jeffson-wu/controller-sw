@@ -35,6 +35,8 @@
 inline void dbgTraceStoreISRBegin(int id);
 inline void dbgTraceStoreISREnd();
 char *dbgPrintIsr(char *buf);
+void send_msg_on_monitor(char * response);
+void printHeap(void);
 
 
 

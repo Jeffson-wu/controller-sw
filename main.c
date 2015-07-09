@@ -79,7 +79,7 @@ extern xTaskHandle pvSWUpdateTask;
 
 /* ---------------------------------------------------------------------------*/
 
-xTimerHandle yTimer[4];
+xTimerHandle yTimer[3];
 uint32_t load=0xA5A5 ;
 
 void ModbusTask( void * pvParameters );
@@ -98,6 +98,7 @@ void LogOff();
 /* ---------------------------------------------------------------------------*/
 char buf[300]; /*buffer for debug printf*/
 
+extern void stopPeltier(void);
 /* ---------------------------------------------------------------------------*/
 /* Functions                                                                  */
 /* ---------------------------------------------------------------------------*/
@@ -109,12 +110,6 @@ void fn(void)
   taskYIELD();
   fn();
   nesting--;
-}
-
-void printHeap(void) {
-  extern size_t xFreeBytesRemaining;
-  sprintf(buf, "Heap free bytes: %d", xFreeBytesRemaining);
-  gdi_send_msg_on_monitor(buf);
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -144,15 +139,6 @@ void HeartBeat_ErrorLed_Pinconfig()
   GPIO_ResetBits(GPIOB,GPIO_Pin_11);/*ErrorLED */
   GPIO_ResetBits(GPIOB,GPIO_Pin_0); /*RX LED*/
   GPIO_ResetBits(GPIOB,GPIO_Pin_1); /*TX LED*/
-
-  /* Enable the GPIO M0_RESET Clock */
-  RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
-
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0;/*M0_RESET*/
-  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
-  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-  GPIO_Init(GPIOA, &GPIO_InitStructure);
-  GPIO_SetBits(GPIOA,GPIO_Pin_0);
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -255,21 +241,6 @@ void NVICInit(void)
 }
 
 /* ---------------------------------------------------------------------------*/
-void ResetHeaters()
-{
-  if( xTimerStart(yTimer[3], 0 ) != pdPASS );
-  vTraceConsoleMessage("ResetHeaters!");
-  GPIO_ResetBits(GPIOA,GPIO_Pin_0);
-}
-
-/* ---------------------------------------------------------------------------*/
-void vHeatersReset(xTimerHandle pxTimer )
-{
-  GPIO_SetBits(GPIOA,GPIO_Pin_0);
-  if( xTimerStop( yTimer[3], 0 ) != pdPASS );
-}
-
-/* ---------------------------------------------------------------------------*/
 void ErrorOn()
 {
   if( xTimerStart(yTimer[1], 0 ) != pdPASS );
@@ -314,8 +285,7 @@ void ConfigOSTimer ()
 {
   int z = 100;
   int y = 2;
-  int x= 5;
-  int r= 5; 
+  int x = 5;
   int i = 0;
   yTimer[0]= xTimerCreate((char *)"HeartbeatTimer", // Just a text name, not used by the kernel.
               ( 100 * x ),          // The timer period in ticks.
@@ -337,12 +307,6 @@ void ConfigOSTimer ()
               vReadTubeTemp         // Each timer calls the same callback when it expires.
               );
 /* <-- For USE_DEVELOPMENT_LOGGING feature */
-  yTimer[3]= xTimerCreate((char *)"ResetHeaters",       // Just a text name, not used by the kernel.
-              ( 100 * r ),          // The timer period in ticks.
-              pdTRUE,               // The timers will auto-reload themselves when they expire.
-              ( void * ) 104,       // Assign each timer a unique id equal to its array index.
-              vHeatersReset         // Each timer calls the same callback when it expires.
-              );
 
   for (i = 0; i < 1; i++)/*Only start Heartbeat timer, error timer will be started when needed to flash errorled*/
   {
@@ -469,6 +433,7 @@ int main(void)
   sprintf(buf, "Git Id = %s", gitCommitIdStr);
   gdi_send_msg_on_monitor(buf);
   init_os_trace(); /*GDB CMD:dump binary memory gdb_dump_23.txt 0x20000000 0x20010000  -- http://percepio.com/*/
+  stopPeltier();
   PWM_Stop();
 
   ConfigOSTimer();
@@ -491,6 +456,23 @@ int main(void)
   xTaskCreate( CoolAndLidTask, (const char *) "Cool Lid task" /*max 16 chars*/, 300, NULL, ( (unsigned portBASE_TYPE) 4 ) | portPRIVILEGE_BIT, &pvCooleAndLidTask );
   xTaskCreate( TubeSequencerTask, ( const char * ) "TubeSeq task", ( unsigned short ) 1000, NULL, ( ( unsigned portBASE_TYPE ) 4 ) | portPRIVILEGE_BIT, &pvTubeSequencerTaskTask );
 
+  { // Synchronize LEDs
+    xMessage *msg;
+    WriteModbusRegsReq *p;
+    
+    // Synchronize M0 LEDs
+    msg = pvPortMalloc(sizeof(xMessage)+sizeof(WriteModbusRegsReq));
+    if(msg)
+    {
+      msg->ucMessageID=BROADCAST_MODBUS;
+      p=(WriteModbusRegsReq *)msg->ucData;
+      p->slave    = 0;    //not used for broadcast
+      p->addr     = 0;
+      p->datasize = 0;    //datasize;
+      p->reply    = NULL; //No reply
+      xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);      
+    }
+  }
   vTaskStartScheduler();
   return 0;
 }
@@ -514,6 +496,7 @@ void assert_failed(unsigned char* file, unsigned int line)
   GPIO_ResetBits(GPIOB,GPIO_Pin_0);   /* Turn off RX LED */
   GPIO_ResetBits(GPIOB,GPIO_Pin_1);   /* Turn off TX LED */
   PWM_Stop();
+  stopPeltier();
   sprintf(buf, "assert_failed: %s %d", file, line);
   gdi_send_msg_on_monitor(buf);
   sprintf(buf, "Heap free bytes: %d", xFreeBytesRemaining);

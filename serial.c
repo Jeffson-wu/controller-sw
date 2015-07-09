@@ -34,17 +34,9 @@
 #include "serial.h"
 #include "debug.h"
 
-#ifdef STM32F10C_EVAL
-#define  RS485_RE GPIOD,GPIO_Pin_3
-#define  RS485_DE GPIOD,GPIO_Pin_4
-#define  RS485_TX_LED GPIOB,GPIO_Pin_1
-#define  RS485_RX_LED GPIOB,GPIO_Pin_0
-#else
-#define  RS485_RE GPIOA,GPIO_Pin_0
 #define  RS485_DE GPIOA,GPIO_Pin_1
 #define  RS485_TX_LED GPIOB,GPIO_Pin_1
 #define  RS485_RX_LED GPIOB,GPIO_Pin_0
-#endif
 
 static void (*receiveDataCB)()=0;
 static void (*receiveUART1CB)()=0;

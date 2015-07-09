@@ -182,7 +182,7 @@ void PWM_PinConfig(void)
   GPIO_Init(GPIOB, &GPIO_InitStructure);
 
   /* GPIOC Configuration: Channel 1, 2 and 3 as alternate function push-pull */
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_6 | GPIO_Pin_7 | GPIO_Pin_8;
+  GPIO_InitStructure.GPIO_Pin = /*GPIO_Pin_6 | now PeltierCtrl_EN */ GPIO_Pin_7 | GPIO_Pin_8;
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
   GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
   GPIO_Init(GPIOC, &GPIO_InitStructure);
