@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include "stm32f10x_usart.h"
 #include "stm32f10x_dma.h"
+#include "stm32f10x_tim.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
@@ -59,9 +60,8 @@ void UART_SendMsg(USART_TypeDef *uart, u8 *buffer, int len)
      /*UART2 is used for RS485 communication*/
      DMA_InitTypeDef         DMA_InitStructure;
      NVIC_InitTypeDef NVIC_InitStructure;
-     len+=2;/*Delay to wait RS485 to settle*/
+//     len+=2;/*Delay to wait RS485 to settle*/
      GPIO_SetBits(RS485_DE);
-     GPIO_SetBits(RS485_TX_LED);/*TX LED*/
      if(len > 255)
      {
        DMA_InitStructure.DMA_BufferSize = 255;
@@ -107,14 +107,61 @@ void UART_SendMsg(USART_TypeDef *uart, u8 *buffer, int len)
    }
 }
 
+void configTimerRS485DE( void )
+{
+  TIM_TimeBaseInitTypeDef  TIM_TimeBaseStructure;
+  NVIC_InitTypeDef NVIC_InitStructure;
+  uint32_t TimerPeriod_TIM7 = 0;
+  uint32_t TIM7_pwm_freq = 1000000;/*Make uS tics*/
+  TimerPeriod_TIM7 = (SystemCoreClock / TIM7_pwm_freq ) - 1;
+  TimerPeriod_TIM7 = 2*TimerPeriod_TIM7 * 10*1000000/115200;
+ 
+  RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM7 , ENABLE);
+  TIM_Cmd(TIM7, DISABLE);
+  TIM_SetCounter(TIM7,0x00);
+
+  /* Time Base configuration */
+  TIM_TimeBaseStructure.TIM_Prescaler = 0;
+  TIM_TimeBaseStructure.TIM_CounterMode = TIM_CounterMode_Up;
+  TIM_TimeBaseStructure.TIM_Period = TimerPeriod_TIM7;
+  TIM_TimeBaseStructure.TIM_ClockDivision = 0;
+  TIM_TimeBaseStructure.TIM_RepetitionCounter = 0;
+  TIM_TimeBaseInit(TIM7, &TIM_TimeBaseStructure);
+
+  NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0x0D   /*0x0B - 0x0F */;
+  NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0x00; /*dont care*/
+  NVIC_InitStructure.NVIC_IRQChannel = TIM7_IRQn;
+  NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+  NVIC_Init(&NVIC_InitStructure);
+  TIM_ClearITPendingBit(TIM7, TIM_IT_Update);
+
+  TIM_ITConfig(TIM7, TIM_IT_Update, ENABLE);
+
+}
+
+void rs485de_Handler()
+{
+  GPIO_ResetBits(RS485_DE);
+  GPIO_ResetBits(RS485_TX_LED);/*TX LED*/
+  if (TIM_GetITStatus(TIM7, TIM_IT_Update) != RESET)
+  {
+      TIM_ClearITPendingBit(TIM7, TIM_IT_Update);
+      TIM_Cmd(TIM7, DISABLE);
+  }
+}
+
+
+
 void UART2_TX_Handler(void)
 {
   dbgTraceStoreISRBegin(TRACE_ISR_ID_UART2_TX);
 
    if(DMA_GetITStatus(DMA1_IT_TC7)==SET)
    {
-     GPIO_ResetBits(RS485_DE);
-     GPIO_ResetBits(RS485_TX_LED);/*TX LED*/
+     /*start timer to reset RS485_DE and RS485_TX_LED*/
+     TIM_Cmd(TIM7, ENABLE);
+     GPIO_SetBits(RS485_TX_LED);/*TX LED*/
+     TIM_SetCounter(TIM7,0x00);
      DMA_ClearITPendingBit(DMA1_IT_TC7);
    }
    portEND_SWITCHING_ISR( pdTRUE);
@@ -144,6 +191,7 @@ void UART_Init(USART_TypeDef *uart, void (*recvCallback)())
     NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
     NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
     NVIC_Init(&NVIC_InitStructure);
+    configTimerRS485DE();
   }
   else if(uart==USART1)
   {
