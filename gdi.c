@@ -1648,6 +1648,10 @@ u8 DebugModbusReadRegs(u8 slave, u16 addr, u16 register_count, u8 *buffer)
     pReq->datasize = register_count;
     pReq->reply = GDIQueueHandle;
     assert_param(xQueueSend(ModbusQueueHandle, &msgout, portMAX_DELAY)== pdPASS);
+    if( xQueueReceive(GDIQueueHandle , &msgin, (TickType_t)0 ) == pdPASS ) // Empty the queue. do not wait if the queue is empty
+    {
+       vPortFree(msgin);
+    }
     /* wait for queue msg */
     if( xQueueReceive( GDIQueueHandle, &msgin, (TickType_t)500 ) == pdPASS ) // How long to wait. MB queue size is 10, MB timeout is 100ms -> more than a sec??
     {
