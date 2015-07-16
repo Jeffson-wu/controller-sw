@@ -80,7 +80,7 @@ extern xTaskHandle pvSWUpdateTask;
 
 /* ---------------------------------------------------------------------------*/
 
-xTimerHandle yTimer[3];
+xTimerHandle heartbeatTimer;
 uint32_t load=0xA5A5 ;
 
 void ModbusTask( void * pvParameters );
@@ -89,10 +89,6 @@ void CoolAndLidTask( void * pvParameters );
 void gdi_task(void *pvParameters);
 void TubeSequencerTask( void * pvParameter);
 void LogTask( void * pvParameters );
-void ErrorOn();
-void ErrorOff();
-void LogOn(int log_time);
-void LogOff();
 
 /* ---------------------------------------------------------------------------*/
 /* Global variables                                                           */
@@ -241,38 +237,6 @@ void NVICInit(void)
 }
 
 /* ---------------------------------------------------------------------------*/
-void ErrorOn()
-{
-  if( xTimerStart(yTimer[1], 0 ) != pdPASS );
-}
-
-/* ---------------------------------------------------------------------------*/
-void ErrorOff()
-{
-  if( xTimerStop( yTimer[1], 0 ) != pdPASS );
-}
-
-/* ---------------------------------------------------------------------------*/
-#ifdef USE_DEVELOPMENT_LOGGING /* --> For USE_DEVELOPMENT_LOGGING feature */
-void LogOn(int log_time)/*In secs*/
-{
-  if( xTimerStart(yTimer[2], 0 ) != pdPASS );
-  if(xTimerChangePeriod( yTimer[2],10 * log_time,100)!= pdPASS );
-}
-
-/* ---------------------------------------------------------------------------*/
-void LogOff()
-{
-  if( xTimerStop( yTimer[2], 0 ) != pdPASS );
-}
-#endif // USE_DEVELOPMENT_LOGGING /* <-- For USE_DEVELOPMENT_LOGGING feature */
-/* ---------------------------------------------------------------------------*/
-void vError_LEDToggle(xTimerHandle pxTimer )
-{
-  GPIOB->ODR ^= GPIO_Pin_11;
-}
-
-/* ---------------------------------------------------------------------------*/
 void vHeartBeat_LEDToggle(xTimerHandle pxTimer )
 {
   GPIOC->ODR ^= GPIO_Pin_9;
@@ -282,78 +246,15 @@ void vHeartBeat_LEDToggle(xTimerHandle pxTimer )
 /* ---------------------------------------------------------------------------*/
 void ConfigOSTimer ()
 {
-  int y = 2;
-  int x = 5;
-  int i = 0;
-  yTimer[0]= xTimerCreate((char *)"HeartbeatTimer", // Just a text name, not used by the kernel.
-              ( 100 * x ),          // The timer period in ticks.
+  heartbeatTimer = xTimerCreate((char *)"HeartbeatTimer", // Just a text name, not used by the kernel.
+              ( 100 * 5 ),          // The timer period in ticks.
               pdTRUE,               // The timers will auto-reload themselves when they expire.
               ( void * ) 100,       // Assign each timer a unique id equal to its array index.
               vHeartBeat_LEDToggle  // Each timer calls the same callback when it expires.
               );
-  yTimer[1]= xTimerCreate((char *)"ErrorLedTimer", // Just a text name, not used by the kernel.
-              ( 100 * y ),          // The timer period in ticks.
-              pdTRUE,               // The timers will auto-reload themselves when they expire.
-              ( void * ) 102,       // Assign each timer a unique id equal to its array index.
-              vError_LEDToggle      // Each timer calls the same callback when it expires.
-              );
-#ifdef USE_DEVELOPMENT_LOGGING /* --> For USE_DEVELOPMENT_LOGGING feature */
-  yTimer[2]= xTimerCreate((char *)"LogTimer",       // Just a text name, not used by the kernel.
-              ( 100 * 100 ),          // The timer period in ticks.
-              pdTRUE,               // The timers will auto-reload themselves when they expire.
-              ( void * ) 103,       // Assign each timer a unique id equal to its array index.
-              vReadTubeTemp         // Each timer calls the same callback when it expires.
-              );
-#endif // USE_DEVELOPMENT_LOGGING /* <-- For USE_DEVELOPMENT_LOGGING feature */
-
-  for (i = 0; i < 1; i++)/*Only start Heartbeat timer, error timer will be started when needed to flash errorled*/
-  {
-    if( yTimer[i] == NULL )
-    {
-      // The timer was not created.
-    }
-    else
-    {
-      // Start the timer.  No block time is specified, and even if one was
-      // it would be ignored because the scheduler has not yet been
-      // started.
-      if( xTimerStart(yTimer[i], 0 ) != pdPASS )
-      {
-        // The timer could not be set into the Active state.
-      }
-    }
-  }
-}
-
-#if (SELECTED_PORT == PORT_ARM_CortexM)
-
-#define _PORT_INIT_EXISTS
-
-extern void prvSetupHardware(void);
-
-/* ---------------------------------------------------------------------------*/
-void port_init(void)
-{
-   // prvSetupHardware();
-}
-#endif
-
-/* ---------------------------------------------------------------------------*/
-void vApplicationMallocFailedHook( void )
-{
-  ErrorOn();
-  PRINTF("\n\rMalloc failed!\n\r");
-}
-
-/* ---------------------------------------------------------------------------*/
-void vApplicationStackOverflowHook( xTaskHandle *pxTask, signed char *pcTaskName )
-{
-  ErrorOn();
-  PRINTF("\n\rStack overflow!\n\r");
-  GPIO_SetBits(GPIOB,GPIO_Pin_0);   /* Turn on RX LED */
-  GPIO_SetBits(GPIOB,GPIO_Pin_1);   /* Turn on TX LED */
-  taskDISABLE_INTERRUPTS();  
-  for( ;; );
+  if(NULL != heartbeatTimer ) {
+    xTimerStart(heartbeatTimer, 0 );
+  } // This is a debug feature - if initi fails it is not handled
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -364,9 +265,6 @@ void init_os_trace()
   
   /* Put the recorder data structure on the heap (malloc), if no 
   static allocation. (See TRACE_DATA_ALLOCATION in trcConfig.h). */
-#ifdef _PORT_INIT_EXISTS
-  port_init();
-#endif
   vTraceInitTraceData();
   if (! uiTraceStart() )
   {
@@ -432,6 +330,7 @@ int main(void)
   PWM_Stop();
 
   ConfigOSTimer();
+  initErrorLedTimer();
 
   /* create queues */
   ModbusQueueHandle=xQueueCreate( 32, ( unsigned portBASE_TYPE ) sizeof( void * ) );

@@ -106,7 +106,7 @@
 //#define configUSE_MALLOC_FAILED_HOOK 1  /*0 TFK DEBUG_RTOS*/
 //#define configUSE_STATS_FORMATTING_FUNCTIONS 1 /*0 TFK DEBUG_RTOS*/
 //#define configASSERT 1 /*0 TFK DEBUG_RTOS*/
-void assert_failed(unsigned char* file, unsigned int line); //Implemented in main.c
+void assert_failed(unsigned char* file, unsigned int line); //Implemented in debug.c
 #define configASSERT(expr) ((expr) ? (void)0 : assert_failed((unsigned char *)__FILE__, __LINE__))
 
 /* Enhance debug */

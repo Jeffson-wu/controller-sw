@@ -45,6 +45,7 @@ int uid;
 #define INPUT_BUF_SIZE 500
 #define SIZE_OF_STR_RESULT 400
 #define CRASH_KEY 666
+#define ASSERT_KEY 333
 
 /* Private debug define ------------------------------------------------------*/
 //#define DEBUG_USE_ECHO_AS_DEFAULT
@@ -109,6 +110,7 @@ enum gdi_func_type
   setdac,
   getadc,
   crash_cmd,
+  bu_cmd,     // Crash cmd - used after crashes - see debug.c
   invalid_command
 };
 
@@ -153,6 +155,7 @@ gdi_func_table_type gdi_func_info_table[] =
   {"setdac",            " Set DAC [%]",               "at@gdi:setdac(idx, dac)",    setdac },
   {"getadc",            " Get latest ADC values",     "at@gdi:getadc()",            getadc },
   {"crash",             " Force crash",               "at@gdi:crash(key)",          crash_cmd },
+  {"bu",                "",                           "",                           bu_cmd }, // cmd used only after a crash - see debug.c
   { NULL, NULL, NULL, 0 }
 }; 
 
@@ -697,10 +700,10 @@ void gdi_map_to_functions()
     break;
 
     case help :
+      gdi_send_data_response("All commands are shown as if echo is on. (i.e. no uid parameter)", newline_end);
+      gdi_send_data_response("If echo is off add uid as first parameter (increasing the total param count by 1.)", newline_end);
       while(gdi_func_info_table[i].command_name != NULL)
       {
-        gdi_send_data_response("All commands are shown as if echo is on. (i.e. no uid parameter)", newline_end);
-        gdi_send_data_response("If echo is off add uid as first parameter (increasing the total param count by 1.)", newline_end);
         gdi_send_data_response(gdi_func_info_table[i].func_info, newline_start);
         gdi_send_data_response(" - ", no_newline);
         gdi_send_data_response(gdi_func_info_table[i].func_format, newline_end);
@@ -1480,11 +1483,23 @@ void gdi_map_to_functions()
         uid = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
         i++;
       }
+      if(ASSERT_KEY == (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10) )
+      {
+        assert_failed((unsigned char *)__FILE__, __LINE__);
+      }
       if(CRASH_KEY == (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10) )
       {
         forceHardFault();
       }
     }
+
+    case bu_cmd:
+    {
+      if(gdiEcho) {
+        gdi_send_data_response("BU recieved.", newline_both);
+      }
+    }
+    break;
 
     case invalid_command :
     {

@@ -38,7 +38,7 @@ extern xQueueHandle CoolAndLidQueueHandle;
 //#define SIMULATE_HEATER /*Disable communication to M0 CPU's return temperature reached when temp is requested*/
 //#define USE_DEVELOPMENT_LOGGING
 #define DEBUG       /*General debug shows state changes of tubes (new temp, new time etc.)*/
-#define DEBUG_SEQ   /*Debug of sequencer, to follow state of sequencer    */
+//#define DEBUG_SEQ   /*Debug of sequencer, to follow state of sequencer    */
 //#define DEBUG_IF    /*Debug of external interfaces modbus, IRQ and serial */
 //#define DEBUG_QUEUE /*Debug of stage queue */
 
@@ -762,11 +762,10 @@ void stop_lid_heating()
 /* ---------------------------------------------------------------------------*/
 void stop_all_tube_LED()
 {
-  long TubeId;
-  for(TubeId = 1; TubeId < 17; TubeId++)
-  {
-    send_led_cmd(SET_LED_OFF, TubeId);
-  }
+  send_led_cmd(SET_LED_ALL_OFF, 1);
+  send_led_cmd(SET_LED_ALL_OFF, 5);
+  send_led_cmd(SET_LED_ALL_OFF, 9);
+  send_led_cmd(SET_LED_ALL_OFF, 13);
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -822,16 +821,43 @@ void restart_tube_error(long TubeId)
   StopTubeTimer(TubeId);
   data_element[0] = TSeq->temp;
   data_element[1] = TSeq->time;
-  // Write both SETPOINT_REG and STAGE_NUM_REG at the same time to make sure the log stage and measurements are in sync.
-  WriteTubeHeaterReg(TubeId, SETPOINT_REG, data_element, sizeof(data_element)/2);
-  Tubeloop[TubeId-1].state = TUBE_WAIT_TEMP;
+  switch(Tubeloop[TubeId-1].state)
+  {
+    case TUBE_INIT:
+      // No change
+      break;
+    case TUBE_IDLE:
+      // No change
+      break;
+    case TUBE_WAIT_TEMP: //fall through
+    case TUBE_WAIT_TIME:
+      // Write both SETPOINT_REG and STAGE_NUM_REG at the same time to make sure the log stage and measurements are in sync.
+      WriteTubeHeaterReg(TubeId, SETPOINT_REG, data_element, sizeof(data_element)/2);
+      Tubeloop[TubeId-1].state = TUBE_WAIT_TEMP;
 
-  /* Set heater to automatic mode */
-  data = SET_AUTOMATIC_MODE;
-  WriteTubeHeaterReg(TubeId, TUBE_COMMAND_REG, &data, sizeof(data)/2);
+      /* Set heater to automatic mode */
+      data = SET_AUTOMATIC_MODE;
+      WriteTubeHeaterReg(TubeId, TUBE_COMMAND_REG, &data, sizeof(data)/2);
+      break;
+    case TUBE_WAIT_P_TEMP: //fall through
+    case TUBE_PAUSED:
+      // Write both SETPOINT_REG and STAGE_NUM_REG at the same time to make sure the log stage and measurements are in sync.
+      WriteTubeHeaterReg(TubeId, SETPOINT_REG, data_element, sizeof(data_element)/2);
+      /* Set heater to automatic mode */
+      data = SET_AUTOMATIC_MODE;
+      WriteTubeHeaterReg(TubeId, TUBE_COMMAND_REG, &data, sizeof(data)/2);
+      break;
+    case TUBE_OUT_OF_DATA:
+      // Handled when data becomes available.
+      break;
+    case TUBE_ERROR_STATE:
+      // No change
+      break;
+    default:
+      break;
+  }
   DEBUG_SEQ_PRINTF("M0 reboot - restarting Tube %ld Step %d Stage:%s, temp %d.%01dC",
         TubeId, TSeq->seq_num, stageToChar[TSeq->stage], TSeq->temp/10, TSeq->temp%10);
-
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -1209,7 +1235,7 @@ void HW_EventHandler(ReadModbusRegsRes *preg, xMessage *msg){
       default:
         break;
     }
-  }
+  }// ADC error all four wells are out of service
   if(Tubeloop[TubeId-1].hw_status_reg & (HW_ERR_SENSOR1_SHORTED | HW_ERR_SENSOR1_OPEN))
   { // sensor error on sensor 1
     switch(heater)
@@ -1378,6 +1404,7 @@ void HW_EventHandler(ReadModbusRegsRes *preg, xMessage *msg){
     switch(heater)
     {
       case Heater1:
+        send_led_cmd(SET_LED_ALL_OFF, (tube2heater[TubeId-1] * 4));
         restart_tube_error(1);
         restart_tube_error(2);
         restart_tube_error(3);
@@ -1388,6 +1415,7 @@ void HW_EventHandler(ReadModbusRegsRes *preg, xMessage *msg){
         setTubeHWReport(status, 4);
         break;
       case Heater2:
+        send_led_cmd(SET_LED_ALL_OFF, (tube2heater[TubeId-1] * 4));
         restart_tube_error(5);
         restart_tube_error(6);
         restart_tube_error(7);
@@ -1398,6 +1426,7 @@ void HW_EventHandler(ReadModbusRegsRes *preg, xMessage *msg){
         setTubeHWReport(status, 8);
         break;
       case Heater3:
+        send_led_cmd(SET_LED_ALL_OFF, (tube2heater[TubeId-1] * 4));
         restart_tube_error(9);
         restart_tube_error(10);
         restart_tube_error(11);
@@ -1408,6 +1437,7 @@ void HW_EventHandler(ReadModbusRegsRes *preg, xMessage *msg){
         setTubeHWReport(status, 12);
         break;
       case Heater4:
+        send_led_cmd(SET_LED_ALL_OFF, (tube2heater[TubeId-1] * 4));
         restart_tube_error(13);
         restart_tube_error(14);
         restart_tube_error(15);
@@ -1544,10 +1574,7 @@ void HeaterEventHandler (ReadModbusRegsRes *preg, xMessage *msg)
       DEBUG_PRINTF("%s rebooted T%ld state %d", heater[tube2heater[TubeId-1]], TubeId, Tubeloop[TubeId-1].state );
       /* Notify the Linux Box */ 
       setTubeHWReport(M0_BOOT, TubeId);
-      send_led_cmd(SET_LED_OFF, (tube2heater[TubeId-1] * 4) + 0);
-      send_led_cmd(SET_LED_OFF, (tube2heater[TubeId-1] * 4) + 1);
-      send_led_cmd(SET_LED_OFF, (tube2heater[TubeId-1] * 4) + 2);
-      send_led_cmd(SET_LED_OFF, (tube2heater[TubeId-1] * 4) + 3);
+      send_led_cmd(SET_LED_ALL_OFF, (tube2heater[TubeId-1] * 4));
       extern void ErrorOn();
       ErrorOn();
     }
@@ -1784,15 +1811,17 @@ void TubeSequencerTask( void * pvParameter)
   Tubeloop_t *T;
 
   Heater_PinConfig();
+  /* irq must be enabled immediately and before the M0s wake up and set their */
+  /* event lines. The interrupts results in a read register request being     */
+  /* queued up on the Modbus task so this cannot happen to early.             */
   heaterIrqInit();
-
-  InitTubeTimers();
-  vTaskDelay(1000);                                       /*Wait for heaters to boot*/
-
   ExtIrqEnable(Heater1);
   ExtIrqEnable(Heater2);
   ExtIrqEnable(Heater3);
   ExtIrqEnable(Heater4);
+
+  InitTubeTimers();
+  //vTaskDelay(1000);                                       /*Wait for heaters to boot*/
 
   tubeinitQueue();
   
@@ -1954,6 +1983,20 @@ void TubeSequencerTask( void * pvParameter)
           }
 #endif
           break;
+#ifdef USE_NEIGHBOUR_TUBE_TEMP_FEATURE
+          case DISABLE_NEIGHBOUR_TUBE_TEMP:
+            if( xTimerStop( NeighbourTubeTempTimer[0], 0 ) != pdPASS )
+            { // The timer could not be set into the Inactive state.
+              DEBUG_PRINTF("NeighbourTubeTempTimer could not be stopped!");
+            }
+            break;
+          case ENABLE_NEIGHBOUR_TUBE_TEMP:
+            if( xTimerStart( NeighbourTubeTempTimer[0], 0 ) != pdPASS )
+            { // The timer could not be set into the Active state.
+              DEBUG_PRINTF("NeighbourTubeTempTimer could not be started!");
+            }
+            break;
+#endif // USE_NEIGHBOUR_TUBE_TEMP_FEATURE
         default:
           DEBUG_SEQ_PRINTF("***UNHANDLED MESSAGE*** %s",
             signals_txt[(unsigned char)msg->ucMessageID]);

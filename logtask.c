@@ -43,7 +43,6 @@
 /* Private debug define ------------------------------------------------------*/
 
 extern xQueueHandle ModbusQueueHandle;
-extern xTimerHandle yTimer[];
 xQueueHandle LogQueueHandle;
 
 void LogOn(int log_time);
@@ -85,7 +84,9 @@ static logDataQueue_t __attribute__ ((aligned (16))) logDataQueue[NUM_OF_TUBES];
 
 int logcount[NUM_OF_TUBES]={0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 u8 cur_tubeid = 0;
-
+#ifdef USE_DEVELOPMENT_LOGGING
+  xTimerHandle logTimer;
+#endif // USE_DEVELOPMENT_LOGGING
 /* Private function prototypes -----------------------------------------------*/
 void SERIAL_String(const char *string);
 
@@ -279,6 +280,20 @@ void sendLog()
   SERIAL_String(")");
 }
 /* Public functions ----------------------------------------------------------*/
+/* ---------------------------------------------------------------------------*/
+#ifdef USE_DEVELOPMENT_LOGGING /* --> For USE_DEVELOPMENT_LOGGING feature */
+void LogOn(int log_time)/*In secs*/
+{
+  if( xTimerStart(logTimer, 0 ) != pdPASS );
+  if(xTimerChangePeriod( logTimer,10 * log_time,100)!= pdPASS );
+}
+
+/* ---------------------------------------------------------------------------*/
+void LogOff()
+{
+  if( xTimerStop( logTimer, 0 ) != pdPASS );
+}
+#endif // USE_DEVELOPMENT_LOGGING /* <-- For USE_DEVELOPMENT_LOGGING feature */
 
 /* ---------------------------------------------------------------------------*/
 void vReadTubeTemp(xTimerHandle pxTimer )
@@ -327,6 +342,12 @@ void LogTask( void * pvParameters )
   long log_interval;
   int i = 1;
   static long last_tube_to_log;
+  xTimerHandle logTimer;
+
+  logTimer = xTimerCreate((char *)"LogTimer", 10000, pdTRUE,( void * ) 103, vReadTubeTemp);
+  if(NULL != logTimer) { 
+    xTimerStart(logTimer, 0 ); 
+  } // This is a debug feature - if initi fails it is not handled
 #endif // USE_DEVELOPMENT_LOGGING
   initQueue();
 
@@ -368,7 +389,7 @@ void LogTask( void * pvParameters )
         } else {
           LogOn(log_interval);
         }
-        if(xTimerChangePeriod( yTimer[2],1 * log_interval,100)!= pdPASS ) {
+        if(xTimerChangePeriod( logTimer,1 * log_interval,100)!= pdPASS ) {
           //error handling
         }
       break;

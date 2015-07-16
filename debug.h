@@ -42,8 +42,9 @@ inline void dbgTraceStoreISREnd();
 char *dbgPrintIsr(char *str);
 void send_msg_on_monitor(char * response);
 void printHeap(void);
-
-
+void ErrorOn(void);
+void ErrorOff(void);
+void initErrorLedTimer(void);
 
 
 #endif /* __DEBUG_H */

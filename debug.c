@@ -17,6 +17,7 @@
 #include <string.h>
 #include "FreeRTOS.h"
 #include "task.h"
+#include "timers.h"
 #include "serial.h"
 #include "debug.h"
 /* ---------------------------------------------------------------------------*/
@@ -31,6 +32,9 @@ extern void gdi_send_msg_response(char * response);
 
 /* Private feature defines ---------------------------------------------------*/
 /* Private debug defines -----------------------------------------------------*/
+/* Private variables ---------------------------------------------------------*/
+xTimerHandle ErrorTimer;
+
 /* Private typedef -----------------------------------------------------------*/
 /* ---------------------------------------------------------------------------*/
 /* Private prototypes                                                         */
@@ -85,10 +89,56 @@ void send_msg_on_monitor(char * response)
 }
 
 /* ---------------------------------------------------------------------------*/
+void ErrorOn()
+{
+  if( xTimerStart(ErrorTimer, 0 ) != pdPASS );
+}
+
+/* ---------------------------------------------------------------------------*/
+void ErrorOff()
+{
+  if( xTimerStop( ErrorTimer, 0 ) != pdPASS );
+}
+
+/* ---------------------------------------------------------------------------*/
+void vError_LEDToggle(xTimerHandle pxTimer )
+{
+  GPIOB->ODR ^= GPIO_Pin_11;
+}
+
+/* ---------------------------------------------------------------------------*/
 void printHeap(void) {
   extern size_t xFreeBytesRemaining;
   sprintf(dbgbuf, "Heap free bytes: %d", xFreeBytesRemaining);
   send_msg_on_monitor(dbgbuf);
+}
+
+/* ---------------------------------------------------------------------------*/
+void vApplicationMallocFailedHook( void )
+{
+  ErrorOn();
+  PRINTF("\n\rMalloc failed!\n\r");
+}
+
+/* ---------------------------------------------------------------------------*/
+void initErrorLedTimer(){
+  ErrorTimer = xTimerCreate((char *)"ErrorLedTimer", // Just a text name, not used by the kernel.
+              ( 100 * 2 ),          // The timer period in ticks.
+              pdTRUE,               // The timers will auto-reload themselves when they expire.
+              ( void * ) 102,       // Assign each timer a unique id equal to its array index.
+              vError_LEDToggle      // Each timer calls the same callback when it expires.
+              );
+}
+
+/* ---------------------------------------------------------------------------*/
+void vApplicationStackOverflowHook( xTaskHandle *pxTask, signed char *pcTaskName )
+{
+  PRINTF("\n\rStack overflow!\n\r");
+  GPIO_SetBits(GPIOB,GPIO_Pin_0);   /* Turn on RX LED */
+  GPIO_SetBits(GPIOB,GPIO_Pin_1);   /* Turn on TX LED */
+  taskDISABLE_INTERRUPTS();  
+  //__asm("BKPT #0\n") ; // Break into the debugger
+  assert_failed((unsigned char *)__FILE__, __LINE__);
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -104,22 +154,24 @@ void assert_failed(unsigned char* file, unsigned int line)
 { extern size_t xFreeBytesRemaining;
   /* User can add his own implementation to report the file name and line number,
      ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
-  char afbuf[100];
+  char afbuf[200];
+  char tmpbuf[500];
   u8 data;
+  PWM_Stop();
+  stopPeltier();
   GPIO_SetBits(GPIOB,GPIO_Pin_11);    /* Turn on error LED */
   GPIO_ResetBits(GPIOC,GPIO_Pin_9);   /* Turn off hartbeat LED */  
   GPIO_ResetBits(GPIOB,GPIO_Pin_0);   /* Turn off RX LED */
   GPIO_ResetBits(GPIOB,GPIO_Pin_1);   /* Turn off TX LED */
-  PWM_Stop();
-  stopPeltier();
-  sprintf(afbuf, "assert_failed: %s %d", file, line);
-  send_msg_on_monitor(afbuf);
-  sprintf(afbuf, "Heap free bytes: %d", xFreeBytesRemaining);
-  send_msg_on_monitor(afbuf);
   
-  sprintf(afbuf, "Task: %s", pcTaskGetTaskName( xTaskGetCurrentTaskHandle()) );
+  sprintf(afbuf, "assert_failed: %s %d\r\n", file, line);
+  sprintf(tmpbuf, "Heap free bytes: %d\r\n", xFreeBytesRemaining);
+  strcat(afbuf, tmpbuf);
+  sprintf(tmpbuf, "Task: %s\r\n", pcTaskGetTaskName( xTaskGetCurrentTaskHandle()) );
+  strcat(afbuf, tmpbuf);
+  strcat(afbuf,  dbgPrintIsr(tmpbuf));
   send_msg_on_monitor(afbuf);
-  send_msg_on_monitor(dbgPrintIsr(afbuf));
+  __disable_irq(); // disable interrupt, or gdi swollows the bu cmd.
 
   //__asm("BKPT #0\n") ; // Break into the debugger
 
@@ -137,7 +189,8 @@ void assert_failed(unsigned char* file, unsigned int line)
       data = USART_ReceiveData(USART1);
       if('\r' == data)
       { 
-        gdi_send_msg_response("OK");
+        gdi_send_msg_response("OK - ");
+        gdi_send_msg_response(afbuf);
       }
     }
   }
@@ -165,7 +218,8 @@ void prvGetRegistersFromStack( uint32_t *pulFaultStackAddress )
   static uint32_t hardFaultSP __attribute__ ((section (".regPointer")));
   u8 data;
   int i;
-  char hfbuf[100];
+  char hfbuf[600];
+  char tmpbuf[50];
   /* These are volatile to try and prevent the compiler/linker optimising them
   away as the variables never actually get used.  If the debugger won't show the
   values of the variables, make them global by moving their declaration outside
@@ -232,53 +286,57 @@ void prvGetRegistersFromStack( uint32_t *pulFaultStackAddress )
   // Bus Fault Address Register
   _BFAR = (*((volatile unsigned long *)(0xE000ED38))) ;
 
+  PWM_Stop();
+  stopPeltier();
   GPIO_SetBits(GPIOB,GPIO_Pin_11);  /* Turn on error LED */
   GPIO_ResetBits(GPIOC,GPIO_Pin_9); /* Turn off hartbeat LED */
   GPIO_SetBits(GPIOB,GPIO_Pin_0);   /* Turn on RX LED */
   GPIO_SetBits(GPIOB,GPIO_Pin_1);   /* Turn on TX LED */
-  PWM_Stop();
-  send_msg_on_monitor("\r\n!! HardFault !!"); //Print PC and SP for quick ref.
+  sprintf(hfbuf, "HardFault\r\n"); //Print PC and SP for quick ref.
   //Bus Fault Status Register
-  if(_CFSR & 0x00000100) { send_msg_on_monitor("IBUSRR"); }
-  if(_CFSR & 0x00000200) { send_msg_on_monitor("PRECISERR"); }
-  if(_CFSR & 0x00000400) { send_msg_on_monitor("IMPRECISERR"); }
-  if(_CFSR & 0x00000800) { send_msg_on_monitor("UNSTKERR"); }
-  if(_CFSR & 0x00001000) { send_msg_on_monitor("STKERR"); }
+  if(_CFSR & 0x00000100) { strcat(hfbuf, "IBUSRR "); }
+  if(_CFSR & 0x00000200) { strcat(hfbuf, "PRECISERR "); }
+  if(_CFSR & 0x00000400) { strcat(hfbuf, "IMPRECISERR "); }
+  if(_CFSR & 0x00000800) { strcat(hfbuf, "UNSTKERR "); }
+  if(_CFSR & 0x00001000) { strcat(hfbuf, "STKERR "); }
   if(_CFSR & 0x00008000) { 
-      sprintf(hfbuf, "BFARVALID  - BFAR: %08X", (unsigned int)_BFAR);
-      send_msg_on_monitor(hfbuf);
+      sprintf(tmpbuf, "BFARVALID  - BFAR: %08X ", (unsigned int)_BFAR);
+      strcat(hfbuf, tmpbuf);
     }
   //Usage Fault Status Register
-  if(_CFSR & 0x00010000) { send_msg_on_monitor("UNDEFINSTR"); }
-  if(_CFSR & 0x00020000) { send_msg_on_monitor("INVSTATE"); }
-  if(_CFSR & 0x00040000) { send_msg_on_monitor("INVPC"); }
-  if(_CFSR & 0x00080000) { send_msg_on_monitor("NOCP"); }
-  if(_CFSR & 0x00200000) { send_msg_on_monitor("DIVBYZERO"); }
-  if(_CFSR & 0x00100000) { send_msg_on_monitor("UNALIGNED"); }
+  if(_CFSR & 0x00010000) { strcat(hfbuf, "UNDEFINSTR "); }
+  if(_CFSR & 0x00020000) { strcat(hfbuf, "INVSTATE "); }
+  if(_CFSR & 0x00040000) { strcat(hfbuf, "INVPC "); }
+  if(_CFSR & 0x00080000) { strcat(hfbuf, "NOCP ");  }
+  if(_CFSR & 0x00200000) { strcat(hfbuf, "DIVBYZERO "); }
+  if(_CFSR & 0x00100000) { strcat(hfbuf, "UNALIGNED "); }
   //Memory Manage Fault Status Register
-  if(_CFSR & 0x00000080) { send_msg_on_monitor("MMARVALID"); }
-  if(_CFSR & 0x00000010) { send_msg_on_monitor("MSTKERR"); }
-  if(_CFSR & 0x00000008) { send_msg_on_monitor("MUNSTKERR"); }
-  if(_CFSR & 0x00000002) { send_msg_on_monitor("DACCVIOL"); }
-  if(_CFSR & 0x00000001) { send_msg_on_monitor("IACCVIOL"); }
-  sprintf(hfbuf, "Task: %s", pcTaskGetTaskName( xTaskGetCurrentTaskHandle()) );
-  send_msg_on_monitor(hfbuf);
+  if(_CFSR & 0x00000080) { strcat(hfbuf, "MMARVALID "); }
+  if(_CFSR & 0x00000010) { strcat(hfbuf, "MSTKERR ");   }
+  if(_CFSR & 0x00000008) { strcat(hfbuf, "MUNSTKERR "); }
+  if(_CFSR & 0x00000002) { strcat(hfbuf, "DACCVIOL "); }
+  if(_CFSR & 0x00000001) { strcat(hfbuf, "IACCVIOL "); }
+  sprintf(tmpbuf, "\r\nTask: %s\r\n", pcTaskGetTaskName( xTaskGetCurrentTaskHandle()) );
+  strcat(hfbuf, tmpbuf);
   
+  sprintf(tmpbuf, "sp: 0x%08X\r\n", (unsigned int)hardFaultSP);
+  strcat(hfbuf, tmpbuf);
+  sprintf(tmpbuf, "lr: 0x%08X\r\n", (unsigned int)lr);
+  strcat(hfbuf, tmpbuf);
+  sprintf(tmpbuf, "pc: 0x%08X\r\n", (unsigned int)pc);
+  strcat(hfbuf, tmpbuf);
+  sprintf(tmpbuf, "psr: 0x%08X\r\n", (unsigned int)psr);
+  strcat(hfbuf, tmpbuf);
+  strcat(hfbuf, dbgPrintIsr(tmpbuf));
+  send_msg_on_monitor("\r\n!! HardFault !!\r\n"); //Print PC and SP for quick ref.
+  send_msg_on_monitor(hfbuf);
+  // TODO: If too much is printed it causes a hardfault which causes an infinete loop of hardfaults 
+  // TODO: Why does this happen and how to fix??
   for(i = 0; i < 13; i++ )
   {
-    sprintf(hfbuf, "r%d: 0x%08X", i, (unsigned int)r[i]);
-    send_msg_on_monitor(hfbuf);
+    PRINTF("r%d: 0x%08X\r\n", i, (unsigned int)r[i]);
   }
-  sprintf(hfbuf, "sp: 0x%08X", (unsigned int)hardFaultSP);
-  send_msg_on_monitor(hfbuf);
-  sprintf(hfbuf, "lr: 0x%08X", (unsigned int)lr);
-  send_msg_on_monitor(hfbuf);
-  sprintf(hfbuf, "pc: 0x%08X", (unsigned int)pc);
-  send_msg_on_monitor(hfbuf);
-  sprintf(hfbuf, "psr: 0x%08X", (unsigned int)psr);
-  send_msg_on_monitor(hfbuf);
  
-  send_msg_on_monitor(dbgPrintIsr(hfbuf));
   
   //__asm("BKPT #0\n") ; // Break into the debugger
 
@@ -297,7 +355,8 @@ void prvGetRegistersFromStack( uint32_t *pulFaultStackAddress )
         data = USART_ReceiveData(USART1);
         if('\r' == data)
         { 
-          gdi_send_msg_response("OK");
+          gdi_send_msg_response("OK - ");
+          gdi_send_msg_response(hfbuf);
         }
       }
     }
