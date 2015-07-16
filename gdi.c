@@ -1355,7 +1355,7 @@ void gdi_map_to_functions()
           } else {
             slave = (u8) strtol(*(gdi_req_func_info.parameters + i + 0), (char **)NULL, 10);
             addr = (u16) strtol(*(gdi_req_func_info.parameters + i + 1), (char **)NULL, 10);
-            datasize = (u16) strtol(*(gdi_req_func_info.parameters + i + result), (char **)NULL, 10); //####JRJ Do not add i, add1?? - test this
+            datasize = (u16) strtol(*(gdi_req_func_info.parameters + result), (char **)NULL, 10); //Do not add i as result already points to the parameter after values to write
 
             if(gdiEcho) {
               gdi_send_data_response("slave, addr and datasize are : ", newline_start);
@@ -1369,7 +1369,7 @@ void gdi_map_to_functions()
             }
             if(slave <= 16)
             { // Adresses 0 - 16 are actually on the MODBUS
-            result = DebugModbusWriteRegs(slave, addr, (u8 *)buffer.uint16, datasize);
+              result = DebugModbusWriteRegs(slave, addr, (u8 *)buffer.uint16, datasize);
             }
             else if(slave <= 20)
             { // Adresses 17 - 20 are mapped to cool and lid, addr is reg, datasize is reg count, buffer is wrong endian

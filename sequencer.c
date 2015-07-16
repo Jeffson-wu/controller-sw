@@ -1961,41 +1961,20 @@ void TubeSequencerTask( void * pvParameter)
           DEBUG_PRINTF("Tube[%ld]@%s TubeSeq[%s] Tube[%d]ADDR[%d]size[%d]STATUS[%s]",
             TubeId, tube_states[Tubeloop[TubeId-1].state], signals_txt[(unsigned char)msg->ucMessageID], wres->slave, wres->addr,
             wres->datasize, (wres->resultOk==NO_ERROR)?"PASS":"FAIL");
-#if 0
-          if(Tubeloop[TubeId-1].state == TUBE_INIT)         /*No errors on current tube, set it to IDLE so its ready for use*/
-          {
-            Tubeloop[TubeId-1].state = TUBE_IDLE;
-            bool Initialized = TRUE;
-            i = 0;
-            while(i<NTUBES)
-            {
-              if(Tubeloop[i].state != TUBE_IDLE)
-              {
-                Initialized = FALSE;
-                break;
-              }
-              i++;
-            }
-            if (Initialized == TRUE)
-            {
-              DEBUG_PRINTF("SequencerTask ready for operation!");
-            }
-          }
-#endif
           break;
 #ifdef USE_NEIGHBOUR_TUBE_TEMP_FEATURE
-          case DISABLE_NEIGHBOUR_TUBE_TEMP:
-            if( xTimerStop( NeighbourTubeTempTimer[0], 0 ) != pdPASS )
-            { // The timer could not be set into the Inactive state.
-              DEBUG_PRINTF("NeighbourTubeTempTimer could not be stopped!");
-            }
-            break;
-          case ENABLE_NEIGHBOUR_TUBE_TEMP:
-            if( xTimerStart( NeighbourTubeTempTimer[0], 0 ) != pdPASS )
-            { // The timer could not be set into the Active state.
-              DEBUG_PRINTF("NeighbourTubeTempTimer could not be started!");
-            }
-            break;
+        case DISABLE_NEIGHBOUR_TUBE_TEMP:
+          if( xTimerStop( NeighbourTubeTempTimer[0], 0 ) != pdPASS )
+          { // The timer could not be set into the Inactive state.
+            DEBUG_PRINTF("NeighbourTubeTempTimer could not be stopped!");
+          }
+          break;
+        case ENABLE_NEIGHBOUR_TUBE_TEMP:
+          if( xTimerStart( NeighbourTubeTempTimer[0], 0 ) != pdPASS )
+          { // The timer could not be set into the Active state.
+            DEBUG_PRINTF("NeighbourTubeTempTimer could not be started!");
+          }
+          break;
 #endif // USE_NEIGHBOUR_TUBE_TEMP_FEATURE
         default:
           DEBUG_SEQ_PRINTF("***UNHANDLED MESSAGE*** %s",
