@@ -43,6 +43,7 @@ char *get_tube_state(long TubeId, char *poutText);
 bool tubedataQueueAdd(u8 tubeId, u16 seq_num, char state, stageCmd_t *data);
 bool pause_tube_state(long TubeId);
 int getTubeHWReport(char *poutText, long TubeId);
+bool seqWriteRegs(u8 slave, u16 addr, u16 *data, u16 datasize);
 
 /*extern bool pause_tube_state(long TubeId);*/
 

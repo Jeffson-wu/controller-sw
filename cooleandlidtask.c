@@ -850,26 +850,6 @@ bool coolLidWriteRegs(u8 slave, u16 addr, u16 *data, u16 datasize)
           NVSwrite(sizeof(calib_data), calib_data);
           DEBUG_PRINTF("\r\nWrote calib.\r\n");
         }
-        else if(SET_IDLE_MODE == val)
-        {
-          xMessage *msgout;
-          msgout = pvPortMalloc(sizeof(xMessage));
-          if(msgout)
-          {
-            msgout->ucMessageID = DISABLE_NEIGHBOUR_TUBE_TEMP;
-            xQueueSend(TubeSequencerQueueHandle, &msgout, portMAX_DELAY);
-          }
-        }
-        else if(SET_AUTOMATIC_MODE == val)
-        {
-          xMessage *msgout;
-          msgout = pvPortMalloc(sizeof(xMessage));
-          if(msgout)
-          {
-            msgout->ucMessageID = ENABLE_NEIGHBOUR_TUBE_TEMP;
-            xQueueSend(TubeSequencerQueueHandle, &msgout, portMAX_DELAY);
-          }
-        }
         break;
       default:
         break;

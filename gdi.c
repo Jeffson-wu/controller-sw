@@ -1371,9 +1371,13 @@ void gdi_map_to_functions()
             { // Adresses 0 - 16 are actually on the MODBUS
               result = DebugModbusWriteRegs(slave, addr, (u8 *)buffer.uint16, datasize);
             }
-            else if(slave <= 20)
-            { // Adresses 17 - 20 are mapped to cool and lid, addr is reg, datasize is reg count, buffer is wrong endian
+            else if(slave <= 19)
+            { // Adresses 17 - 19 are mapped to cool and lid, addr is reg, datasize is reg count, buffer is wrong endian
               result = coolLidWriteRegs(slave, addr, (u16 *)buffer.uint16, datasize);
+            }
+            else if(slave <= 20)
+            { // Adresses 20 is mapped to sequencer, addr is reg, datasize is reg count, buffer is wrong endian
+              result = seqWriteRegs(slave, addr, (u16 *)buffer.uint16, datasize);
             }
             if(gdiEcho) {
               gdi_send_data_response("The return value is : ", newline_start);

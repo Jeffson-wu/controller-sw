@@ -59,7 +59,7 @@ void PWM_Init(uint32_t TIM3_pwm_freq, uint32_t TIM4_pwm_freq)
   ----------------------------------------------------------------------- */
   /* Compute the value to be set in ARR regiter to generate signal frequency at 500 Khz */
   TimerPeriod_TIM3 = (SystemCoreClock / TIM3_pwm_freq ) - 1;
-  TimerPeriod_TIM4 = (SystemCoreClock / TIM4_pwm_freq ) - 1;
+  TimerPeriod_TIM4 = ((SystemCoreClock / 11) / TIM4_pwm_freq ) - 1; // TIM_Prescaler = 10 => divide SCC by 11
 
   /* TIM3 and TIM4 clock enable */
   RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM3 , ENABLE);
@@ -74,6 +74,7 @@ void PWM_Init(uint32_t TIM3_pwm_freq, uint32_t TIM4_pwm_freq)
 
   TIM_TimeBaseInit(TIM3, &TIM_TimeBaseStructure);
   
+  TIM_TimeBaseStructure.TIM_Prescaler = 10;
   TIM_TimeBaseStructure.TIM_Period = TimerPeriod_TIM4;
   TIM_TimeBaseInit(TIM4, &TIM_TimeBaseStructure);
 

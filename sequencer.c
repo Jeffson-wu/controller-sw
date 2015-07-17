@@ -79,6 +79,8 @@ extern xQueueHandle CoolAndLidQueueHandle;
 
 #define STAGES_QUEUE_SIZE (4)                               /* 4 iterations over 3 stages + 1 end indicator stage */
 
+#define Swap2Bytes(val) ( (((val) >> 8) & 0x00FF) | (((val) << 8) & 0xFF00) )
+
 /* An array to hold handles to the created timers. */
 xTimerHandle xTimers[ NUM_TIMERS ];
 
@@ -468,6 +470,47 @@ void ExtIrqEnable(ExtiGpioTypeDef heater)
   /* Clear any pending interrupts */
   EXTI_ClearITPendingBit(gpio_EXTI_CNF[heater].EXTI_LINE);
   EXTI_Init(&EXTI_InitStructure);
+}
+
+/* ---------------------------------------------------------------------------*/
+/* "addr" is first reg, "datasize" is reg count, "data" is wrong endian       */
+bool seqWriteRegs(u8 slave, u16 addr, u16 *data, u16 datasize)
+{
+  int reg;
+  u16 val;
+  for (reg = 0; reg < datasize; reg++)
+  {
+    val = Swap2Bytes(*(data + reg)); // correct endianess
+    switch((heater_regs_t)(addr + reg))
+    {
+      case TUBE_COMMAND_REG:
+        /* Here the slave is irrelevant */
+        if(SET_IDLE_MODE == val)
+        {
+          xMessage *msgout;
+          msgout = pvPortMalloc(sizeof(xMessage));
+          if(msgout)
+          {
+            msgout->ucMessageID = DISABLE_NEIGHBOUR_TUBE_TEMP;
+            xQueueSend(TubeSequencerQueueHandle, &msgout, portMAX_DELAY);
+          }
+        }
+        else if(SET_AUTOMATIC_MODE == val)
+        {
+          xMessage *msgout;
+          msgout = pvPortMalloc(sizeof(xMessage));
+          if(msgout)
+          {
+            msgout->ucMessageID = ENABLE_NEIGHBOUR_TUBE_TEMP;
+            xQueueSend(TubeSequencerQueueHandle, &msgout, portMAX_DELAY);
+          }
+        }
+        break;
+      default:
+        break;
+    }
+  }
+  return FALSE;
 }
 
 /* ---------------------------------------------------------------------------*/
