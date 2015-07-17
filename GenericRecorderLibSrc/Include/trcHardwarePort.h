@@ -39,6 +39,12 @@
 #ifndef TRCPORT_H
 #define TRCPORT_H
 #include <stdint.h>
+#include "gdi.h"
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+
 
 /* If Win32 port */
 #ifdef WIN32
@@ -404,8 +410,10 @@
  * A wrapper for your system-specific console "printf" console output function.
  * This needs to be correctly defined to see status reports from the trace 
  * status monitor task (this is defined in trcUser.c).
- ******************************************************************************/         
-#define vTraceConsoleMessage(x)
+ ******************************************************************************/   
+#define DBUF_SIZE  100;
+char dbuf[100];
+#define vTraceConsoleMessage(fmt, args...)  snprintf(dbuf, 100, fmt, ## args);  gdi_send_msg_on_monitor(dbuf);
 
 /*******************************************************************************
  * vTracePortGetTimeStamp

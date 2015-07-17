@@ -22,6 +22,7 @@
 #include "serial.h"
 #include "util.h"
 #include "debug.h"
+#include "trcUser.h"
 
 extern xQueueHandle CoolAndLidQueueHandle;
 
@@ -43,18 +44,21 @@ extern xQueueHandle CoolAndLidQueueHandle;
 //#define DEBUG_QUEUE /*Debug of stage queue */
 
 
+//#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
 #ifdef DEBUG
 #define DEBUG_PRINTF(fmt, args...)      snprintf(dbgbuf, DEBUG_BUFFER_SIZE, fmt, ## args);  send_msg_on_monitor(dbgbuf);
 #else
 #define DEBUG_PRINTF(fmt, args...)                          /* Don't do anything in release builds */
 #endif
 
+//#define DEBUG_SEQ /*Debug of sequencer, to follow state of sequencer*/
 #ifdef DEBUG_SEQ
 #define DEBUG_SEQ_PRINTF(fmt, args...)      snprintf(dbgbuf, DEBUG_BUFFER_SIZE, fmt, ## args);  send_msg_on_monitor(dbgbuf);
 #else
 #define DEBUG_SEQ_PRINTF(fmt, args...)                      /* Don't do anything in release builds */
 #endif
 
+//#define DEBUG_IF /*Debug of external interfaces modbus, IRQ and serial */
 #ifdef DEBUG_IF
 #define DEBUG_IF_PRINTF(fmt, args...)      snprintf(dbgbuf, DEBUG_BUFFER_SIZE, fmt, ## args);  send_msg_on_monitor(dbgbuf);
 #else
@@ -713,6 +717,7 @@ void ReadTubeHeaterRegFromISR( void *pvParameter1, uint32_t ulParameter2 )
 void EXTI_Handler(void)
 {
   dbgTraceStoreISRBegin(TRACE_ISR_ID_EXTI);
+  vTraceStoreISRBegin(TRACE_ISR_ID_EXTI);
   BaseType_t xHigherPriorityTaskWoken = pdFALSE;
   ExtiGpioTypeDef ExtiGpio = Heater1;
   while(ExtiGpio < nExtiGpio)                               /*Alwlays starts at Heater1 */
@@ -729,6 +734,7 @@ void EXTI_Handler(void)
     ExtiGpio++;
   }
   dbgTraceStoreISREnd();
+  vTraceStoreISREnd();
   //portEND_SWITCHING_ISR( pdTRUE);
   portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
 }
@@ -1701,6 +1707,7 @@ void TubeStageHandler(long TubeId, xMessage *msg)
   u16 data_element[2];
   Tubeloop_t *pTubeloop = &Tubeloop[TubeId-1];
   stageCmd_t *TSeq = &pTubeloop->curr;
+  traceLabel tube_stage_event = xTraceOpenLabel("Tubes Stage");
 
   if(getseq(TubeId, TSeq) == TRUE) //Get next stage in sequence
   {
@@ -1713,9 +1720,11 @@ void TubeStageHandler(long TubeId, xMessage *msg)
         pTubeloop->state = TUBE_IDLE;
         DEBUG_SEQ_PRINTF("Tube[%ld]@%s TubeSeq[%s] END OF SEQUENCE FOR TUBE",
           TubeId,tube_states[pTubeloop->state],signals_txt[(unsigned char)msg->ucMessageID]);
+        vTracePrintF(tube_stage_event, "Tube[%d]@%s  END OF SEQUENC
         /*Set idle mode for tube to stop heating*/
         data = SET_IDLE_MODE;
         WriteTubeHeaterReg(TubeId, TUBE_COMMAND_REG, &data, sizeof(data)/2);
+        vTracePrintF(tube_stage_event, "Tube[%d]@%s  END OF SEQUENCE FOR TUBE", TubeId, tube_states[Tubeloop[TubeId].state]);
         { // If no tubes are running switch off light and top heater
           int sequences_done = TRUE;
           int i;
@@ -1766,6 +1775,7 @@ void TubeStageHandler(long TubeId, xMessage *msg)
           /*Set heater to automatic mode if a new sequence is started*/
           data = SET_AUTOMATIC_MODE;
           WriteTubeHeaterReg(TubeId, TUBE_COMMAND_REG, &data, sizeof(data)/2);
+          vTracePrintF(tube_stage_event, "Tube[%d]@%s START TUBE SEQUENCE ", TubeId, tube_states[Tubeloop[TubeId].state]);
         }
         else
         {
@@ -1815,15 +1825,18 @@ void TubeSequencerTask( void * pvParameter)
   /* event lines. The interrupts results in a read register request being     */
   /* queued up on the Modbus task so this cannot happen to early.             */
   heaterIrqInit();
+  tubeinitQueue();
+
+  /* Initialization code - create the channel label for a VTracePrintF*/
+  traceLabel tube_user_event = xTraceOpenLabel("Tubes");
+  vTraceUserEvent(tube_user_event);
+
   ExtIrqEnable(Heater1);
   ExtIrqEnable(Heater2);
   ExtIrqEnable(Heater3);
   ExtIrqEnable(Heater4);
 
   InitTubeTimers();
-  //vTaskDelay(1000);                                       /*Wait for heaters to boot*/
-
-  tubeinitQueue();
   
   #ifdef SIMULATE_HEATER
   send_msg_on_monitor("System is using SIMULATE_HEATER!!");

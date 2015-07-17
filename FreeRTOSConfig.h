@@ -86,7 +86,7 @@
 #define configTICK_RATE_HZ			( ( portTickType ) 1000 )
 #define configMAX_PRIORITIES		( 16 )
 #define configMINIMAL_STACK_SIZE	( ( unsigned short ) 64 )
-#define configTOTAL_HEAP_SIZE		( ( size_t ) ( 30 * 1024 ) ) // 32 when using dynamically allocated sequences, 16 is static
+#define configTOTAL_HEAP_SIZE		( ( size_t ) ( 18 * 1024 ) ) // 32 when using dynamically allocated sequences, 16 is static
 #define configMAX_TASK_NAME_LEN		( 16 )
 #define configUSE_16_BIT_TICKS		0
 #define configIDLE_SHOULD_YIELD		1
@@ -102,9 +102,9 @@
 #define configCHECK_FOR_STACK_OVERFLOW	2/*0 TFK DEBUG_RTOS*/
 #define configUSE_RECURSIVE_MUTEXES		1
 #define configQUEUE_REGISTRY_SIZE		20 /*0 TFK DEBUG_RTOS*/
-//#define configGENERATE_RUN_TIME_STATS	1 /*0 TFK DEBUG_RTOS*/
-//#define configUSE_MALLOC_FAILED_HOOK 1  /*0 TFK DEBUG_RTOS*/
-//#define configUSE_STATS_FORMATTING_FUNCTIONS 1 /*0 TFK DEBUG_RTOS*/
+#define configGENERATE_RUN_TIME_STATS	1 /*0 TFK DEBUG_RTOS*/
+#define configUSE_MALLOC_FAILED_HOOK 1  /*0 TFK DEBUG_RTOS*/
+#define configUSE_STATS_FORMATTING_FUNCTIONS 1 /*0 TFK DEBUG_RTOS*/
 //#define configASSERT 1 /*0 TFK DEBUG_RTOS*/
 void assert_failed(unsigned char* file, unsigned int line); //Implemented in debug.c
 #define configASSERT(expr) ((expr) ? (void)0 : assert_failed((unsigned char *)__FILE__, __LINE__))
