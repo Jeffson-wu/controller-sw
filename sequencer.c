@@ -33,6 +33,7 @@ extern xQueueHandle CoolAndLidQueueHandle;
 //#define USE_LID_DETECT_FEATURE
 #define DISABLE_ERROR_STATES
 //#define USE_M3_SET_PULSATING_LEDS_ON_START
+#define USE_M3_REBOOT_SURVIVAL_FEATURE
 
 /* Private debug define ------------------------------------------------------*/
 //#define SIMULATE_HEATER /*Disable communication to M0 CPU's return temperature reached when temp is requested*/
@@ -87,6 +88,9 @@ xTimerHandle xTimers[ NUM_TIMERS ];
 /* Destribution of neighbour tube temperatures */
 #ifdef USE_NEIGHBOUR_TUBE_TEMP_FEATURE
 xTimerHandle NeighbourTubeTempTimer[ 1 ];
+#endif
+#ifdef USE_M3_REBOOT_SURVIVAL_FEATURE
+xTimerHandle M3RebootSurvivalTimer[1];
 #endif
 
 /* An array to hold the tick count of times each timer started - used for progress. */
@@ -222,22 +226,10 @@ const char *  heater[] =
 
 const ExtiGpioTypeDef tube2heater[]=
 {
-  Heater1,
-  Heater1,
-  Heater1,
-  Heater1,
-  Heater2,
-  Heater2,
-  Heater2,
-  Heater2,
-  Heater3,
-  Heater3,
-  Heater3,
-  Heater3,
-  Heater4,
-  Heater4,
-  Heater4,
-  Heater4
+  Heater1, Heater1, Heater1, Heater1,
+  Heater2, Heater2, Heater2, Heater2,
+  Heater3, Heater3, Heater3, Heater3,
+  Heater4, Heater4, Heater4, Heater4
 };
 
 typedef struct
@@ -293,6 +285,7 @@ extern xQueueHandle LogQueueHandle;
 /* Private function prototypes -----------------------------------------------*/
 void vTimerCallback( xTimerHandle pxTimer );
 void NeighbourTubeTimerCallback( xTimerHandle pxTimer );
+void M3RebootSurvivalTimerCallback( xTimerHandle pxTimer );
 void ExtIrqDisable(ExtiGpioTypeDef heater);
 void ExtIrqEnable(ExtiGpioTypeDef heater);
 bool getseq(u8 tubeId,stageCmd_t * data);
@@ -340,6 +333,17 @@ void InitTubeTimers()
     }
   }
 #endif
+#ifdef USE_M3_REBOOT_SURVIVAL_FEATURE
+  { // 2 secounds after reboot check that reboot events has been recieved from all M0s.
+    M3RebootSurvivalTimer[0] = xTimerCreate("Timer", 2000, pdFALSE, (void*) 17, M3RebootSurvivalTimerCallback);
+    if( NULL != M3RebootSurvivalTimer[0] )
+    {
+      xTimerStart( M3RebootSurvivalTimer[0], 0 );
+    }
+    // if creation or starting of this timer fails it is ignored as this is a development feature. 
+  }
+#endif
+
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -1610,7 +1614,7 @@ void HeaterEventHandler (ReadModbusRegsRes *preg, xMessage *msg)
     ReadTubeHeaterReg(TubeId, HW_STATUS_REG, 1, TubeSequencerQueueHandle, FALSE);
   }
   
-  if(modbus_data[0] & M0_BOOT)
+  if(modbus_data[0] & M0_BOOT) 
   { // M0 booted
     if((Tubeloop[TubeId-1].state != TUBE_IDLE) && (Tubeloop[TubeId-1].state != TUBE_INIT))
     { // The boot is unexpected - a re-boot event. Reboot events on TUBE_IDLE wells are not reported.
@@ -1621,6 +1625,28 @@ void HeaterEventHandler (ReadModbusRegsRes *preg, xMessage *msg)
       extern void ErrorOn();
       ErrorOn();
     }
+#ifdef USE_M3_REBOOT_SURVIVAL_FEATURE
+    else if(modbus_data[0] & M0_PING ) 
+    // Send STOP to the four tubes on this M0 if any of them is not in IDLE or INIT
+    {
+      if( ((Tubeloop[TubeId-1].state != TUBE_IDLE) && (Tubeloop[TubeId-1].state != TUBE_INIT)) ||
+          ((Tubeloop[TubeId-0].state != TUBE_IDLE) && (Tubeloop[TubeId-0].state != TUBE_INIT)) ||
+          ((Tubeloop[TubeId+1].state != TUBE_IDLE) && (Tubeloop[TubeId+1].state != TUBE_INIT)) ||
+          ((Tubeloop[TubeId+2].state != TUBE_IDLE) && (Tubeloop[TubeId+2].state != TUBE_INIT)) )
+      { //TubeId -> 4 TubeIds for the M0
+        long TargetTubeId = tube2heater[TubeId-1];
+        u16 data = SET_IDLE_MODE;
+        WriteTubeHeaterReg(TargetTubeId + 1, TUBE_COMMAND_REG, &data, sizeof(data)/2);
+        data = SET_IDLE_MODE;
+        WriteTubeHeaterReg(TargetTubeId + 2, TUBE_COMMAND_REG, &data, sizeof(data)/2);
+        data = SET_IDLE_MODE;
+        WriteTubeHeaterReg(TargetTubeId + 3, TUBE_COMMAND_REG, &data, sizeof(data)/2);
+        data = SET_IDLE_MODE;
+        WriteTubeHeaterReg(TargetTubeId + 4, TUBE_COMMAND_REG, &data, sizeof(data)/2);
+        // Set tubes in TUBE_IDLE state id done below
+      }
+    }
+#endif
     else
     {
       DEBUG_PRINTF("%s booted T%ld state %d", heater[tube2heater[TubeId-1]], TubeId, Tubeloop[TubeId-1].state );
@@ -2064,6 +2090,30 @@ void NeighbourTubeTimerCallback( xTimerHandle pxTimer )
     ReadTubeHeaterReg(5,  TUBE1_TEMP_REG, 1, TubeSequencerQueueHandle, FALSE);
     ReadTubeHeaterReg(12, TUBE4_TEMP_REG, 1, TubeSequencerQueueHandle, FALSE);
     ReadTubeHeaterReg(13, TUBE1_TEMP_REG, 1, TubeSequencerQueueHandle, FALSE);
+  }
+#endif
+}
+
+/* ---------------------------------------------------------------------------*/
+/* 2 secounds after reboot check that reboot events has been recieved from    */
+/* all M0s. If not send ping requests to the heatercontrollers. The ping      */
+/* responses are then in turn treated as boot events thus bringing the tubes  */
+/* into TUBE_IDLE state */
+void M3RebootSurvivalTimerCallback( xTimerHandle pxTimer )
+{
+#ifdef USE_M3_REBOOT_SURVIVAL_FEATURE
+  if(NULL != pxTimer)
+  {
+    u8 heater_id;
+    for(heater_id = 0; heater_id < 4; heater_id++)
+    {
+      if( (TUBE_INIT == Tubeloop[heater_id+0].state) || (TUBE_INIT == Tubeloop[heater_id+1].state) ||
+          (TUBE_INIT == Tubeloop[heater_id+2].state) || (TUBE_INIT == Tubeloop[heater_id+3].state) )
+      { // If any tube on this M0 is still in idle ping the M0 to re-initialize 
+        u16 data = 0;
+        WriteTubeHeaterReg( (heater_id * 4) + 1, EVENT_REG, &data, 1); //Writing EVENT_REG is a ping request
+      }
+    }
   }
 #endif
 }

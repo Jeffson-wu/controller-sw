@@ -320,7 +320,7 @@ int main(void)
   HW_Rev_Id = readHwRevId(); // Obtain HW Revision ID ASAP
   HW_Init();
   UART_Init(USART3,noRecieve); /*Only for monitoring no RX*/
-  PWM_Init(20000,1000); // 20kHz/1kHz PWM : (TIM3(Fan, Aux), TIM4(Topheater1, Topheater2))
+  PWM_Init(20000,100); // 20kHz/100Hz PWM : (TIM3(Fan, Aux), TIM4(Topheater1, Topheater2))
   PRINTF("Monitor Port UP");
   PRINTF("HW Rev ID = %d", HW_Rev_Id);
   PRINTF("SW build = %s", buildDateStr);
