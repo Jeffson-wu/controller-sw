@@ -200,10 +200,10 @@ void adcTimerCallback(xTimerHandle xTimer)
 void adcGetLatest(int16_t * ch0value, int16_t * ch1value, int16_t * ch2value, int16_t * ch3value)
 {
   taskENTER_CRITICAL(); //push irq state
-  *ch0value = ADC_GetInjectedConversionValue(ADC1, ADC_InjectedChannel_1);
-  *ch1value = ADC_GetInjectedConversionValue(ADC1, ADC_InjectedChannel_2);
-  *ch2value = ADC_GetInjectedConversionValue(ADC1, ADC_InjectedChannel_3);
-  *ch3value = ADC_GetInjectedConversionValue(ADC1, ADC_InjectedChannel_4);
+  *ch3value = ADC_GetInjectedConversionValue(ADC1, ADC_InjectedChannel_1);
+  *ch0value = ADC_GetInjectedConversionValue(ADC1, ADC_InjectedChannel_2);
+  *ch1value = ADC_GetInjectedConversionValue(ADC1, ADC_InjectedChannel_3);
+  *ch2value = ADC_GetInjectedConversionValue(ADC1, ADC_InjectedChannel_4);
   taskEXIT_CRITICAL();
 }
 
