@@ -41,6 +41,7 @@ enum
   SET_PWM,
   SET_PWM_RES,
   SET_DAC,
+  CHECK_LID_PELTIER_TEMP,
   SET_DAC_RES,
   nofSIG
 };
@@ -116,6 +117,10 @@ typedef struct
   s16 idx;
 } SetDACReq;
 
+typedef struct
+{
+  s16 value;
+} SetCLStatusReq;
 
 #endif
 

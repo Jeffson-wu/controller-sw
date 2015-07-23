@@ -21,6 +21,7 @@
 #define USE_TWO_LEVEL_LID_POWER
 #define DISABLE_ERROR_REPOTING
 
+
 /* Private debug define ------------------------------------------------------*/
 //#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
 //#define DEBUG_COOL
@@ -69,6 +70,7 @@
 #endif
 
 #define PELT_EN_TOGGLE_TICKS  14400000  // 4 hours 4*60*60*(ticks/sec) 14400000ms : ( 500/*ms*/ / portTICK_PERIOD_MS )
+#define CL_STATUS_TICKS   300000  // 30 sec 0.5*60*(ticks/sec) 60000ms : ( 500/*ms*/ / portTICK_PERIOD_MS )
 #define LOCK_OUTPUT_PIN   GPIO_Pin_8
 #define LOCK_OUTPUT_PORT  GPIOA
 #define LID_DETECT_PIN    GPIO_Pin_5
@@ -89,13 +91,17 @@
 /* Private typedef -----------------------------------------------------------*/
 const char *cl_states[] =
 {
-  "clnok",    /* CL temperatures not reached - Not OK to start PCR            */
-  "clok",     /* CL temperatures reached     - OK to start PCR                */
+  "clnok",    		/* CL temperatures not reached - Not OK to start PCR            */
+  "clok",					/* CL temperatures reached     - OK to start PCR                */
+  "clliderr",			/* CL lid error     - Not ok to start PCR                */
+  "clcoolerr",		/* CL peltier error     - Not ok to start PCR                */
 };
 
 typedef enum CL_STATES_T {
   CL_STATE_CLNOK,
   CL_STATE_CLOK,
+  CL_STATE_CLLIDERROR,
+  CL_STATE_CLCOOLERROR,
   nCL_STATES
 } cl_states_t;
 
@@ -177,6 +183,7 @@ typedef struct CL_DATA_LOG_T {
 // command queue
 xQueueHandle CoolAndLidQueueHandle;
 TimerHandle_t BQ24600Timer;
+TimerHandle_t CLStatusTimer;
 extern xQueueHandle TubeSequencerQueueHandle;
 bool msgSent = FALSE;
 
@@ -185,6 +192,8 @@ static uint16_t cl_status = 0;
 static uint8_t clState = CL_STATE_CLNOK;
 static bool coolTempOK = FALSE;
 static bool lidTempOK = FALSE;
+static bool coolTempError = FALSE;
+static bool lidTempError = FALSE;
 
 // Parameters for ADC
 static int16_t adcCh[4] = {0, 0, 0, 0};
@@ -311,6 +320,28 @@ void togglePeltier() {
 }
 
 /* ---------------------------------------------------------------------------*/
+void CLStatus( xTimerHandle pxTimer )
+{
+	long lArrayIndex;
+	xMessage *msg;
+	long *p;
+
+  if(NULL != pxTimer)
+  {
+    /* Which timer expired? */
+    lArrayIndex = (long) pvTimerGetTimerID( pxTimer );
+
+  	msg = pvPortMalloc(sizeof(xMessage)+sizeof(long));
+    if(NULL == msg) { configASSERT(pdFALSE); } // This is a fatal error
+    msg->ucMessageID = CHECK_LID_PELTIER_TEMP;
+    p = (long *)msg->ucData;
+    *p = lArrayIndex+1;
+    PRINTF("LID and PELTIER TIMER_EXPIRED");
+    xQueueSend(CoolAndLidQueueHandle, &msg, portMAX_DELAY);
+  }
+}
+
+/* ---------------------------------------------------------------------------*/
 void initTogglePeltierTimer() {
   BQ24600Timer = xTimerCreate((char *)"BQ24600Timer",
             PELT_EN_TOGGLE_TICKS, // The timer period in ticks.
@@ -322,6 +353,21 @@ void initTogglePeltierTimer() {
     PRINTF("Peltier driver restart timer not created");
   } else {
     xTimerStart(BQ24600Timer, 0);
+  }
+}
+
+/* ---------------------------------------------------------------------------*/
+void initCLStatusTimer() {
+  CLStatusTimer = xTimerCreate((char *)"CLStatusTimer",
+  					CL_STATUS_TICKS, // The timer period in ticks.
+  					pdFALSE,               // no reload.
+            ( void * ) 0,         // id.
+            CLStatus         // callback.
+            );
+  if( CLStatusTimer == NULL ) {
+    PRINTF("CL Status restart timer not created");
+  } else {
+    xTimerStart(CLStatusTimer, 0);
   }
 }
 
@@ -699,7 +745,23 @@ int getClLog(char *poutText )
   
   *poutText = 0;
 
-  if( coolTempOK && lidTempOK ) { clState = CL_STATE_CLOK; } else { clState = CL_STATE_CLNOK; }
+  if( coolTempOK && lidTempOK )
+  {
+  	clState = CL_STATE_CLOK;
+  }
+  else if( coolTempError )
+  {
+  	clState = CL_STATE_CLCOOLERROR;
+  }
+  else if( lidTempError )
+  {
+  	clState = CL_STATE_CLLIDERROR;
+  }
+  else
+  {
+  	clState = CL_STATE_CLNOK;
+  }
+
   strcat(poutText,"state=");
 #ifdef DISABLE_ERROR_REPOTING
   strcat(poutText,cl_states[CL_STATE_CLOK]); // Juste say everything is OK
@@ -929,6 +991,7 @@ void CoolAndLidTask( void * pvParameters )
     PRINTF("\r\nUsing stored calib:\r\n");
   }
   initTogglePeltierTimer();
+  initCLStatusTimer();
   lidData[0].regulator.setPoint     = calib_data[0].c_1;
   peltierData[0].regulator.setPoint = calib_data[1].c_1;
   fanData[0].regulator.setPoint     = calib_data[2].c_1;
@@ -1180,6 +1243,29 @@ void CoolAndLidTask( void * pvParameters )
               default:
                 break;
             }
+          }
+        }
+        break;
+        case CHECK_LID_PELTIER_TEMP:
+        {
+        	int16_t setPointHyst = 1000;
+
+          if (*lidData[0].regulator.adcVal > (lidData[0].regulator.setPoint - setPointHyst))
+          {
+          	lidTempOK = TRUE;
+          }
+          else if (*lidData[0].regulator.adcVal < (lidData[0].regulator.setPoint - setPointHyst))
+          {
+          	lidTempError = TRUE;
+          }
+
+          if (*peltierData[0].regulator.adcVal < (peltierData[0].regulator.setPoint + setPointHyst))
+          {
+          	coolTempOK = TRUE;
+          }
+          else if (*peltierData[0].regulator.adcVal > (peltierData[0].regulator.setPoint + setPointHyst))
+          {
+          	coolTempError = TRUE;
           }
         }
         break;

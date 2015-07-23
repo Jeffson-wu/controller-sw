@@ -130,6 +130,7 @@ const char *  signals_txt[] =
   "START_LID_HEATING",
   "STOP_LID_HEATING",
   "SET_LID_PWM",
+  "CHECK_LID_PELTIER_TEMP",
 };
 
 typedef enum
@@ -285,6 +286,7 @@ extern xQueueHandle LogQueueHandle;
 /* Private function prototypes -----------------------------------------------*/
 void vTimerCallback( xTimerHandle pxTimer );
 void NeighbourTubeTimerCallback( xTimerHandle pxTimer );
+void CLStatusTimerCallback( xTimerHandle pxTimer );
 void M3RebootSurvivalTimerCallback( xTimerHandle pxTimer );
 void ExtIrqDisable(ExtiGpioTypeDef heater);
 void ExtIrqEnable(ExtiGpioTypeDef heater);
@@ -2093,6 +2095,7 @@ void NeighbourTubeTimerCallback( xTimerHandle pxTimer )
   }
 #endif
 }
+
 
 /* ---------------------------------------------------------------------------*/
 /* 2 secounds after reboot check that reboot events has been recieved from    */
