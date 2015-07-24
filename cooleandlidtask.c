@@ -93,8 +93,9 @@ const char *cl_states[] =
 {
   "clnok",    		/* CL temperatures not reached - Not OK to start PCR            */
   "clok",					/* CL temperatures reached     - OK to start PCR                */
-  "clliderr",			/* CL lid error     - Not ok to start PCR                */
-  "clcoolerr",		/* CL peltier error     - Not ok to start PCR                */
+  "clliderr",			/* CL lid error                - Not ok to start PCR            */
+  "clcoolerr",		/* CL peltier error            - Not ok to start PCR            */
+  "clcoolliderr", /* CL peltier & lid error      - Not ok to start PCR            */
 };
 
 typedef enum CL_STATES_T {
@@ -102,6 +103,7 @@ typedef enum CL_STATES_T {
   CL_STATE_CLOK,
   CL_STATE_CLLIDERROR,
   CL_STATE_CLCOOLERROR,
+  CL_STATE_CLCOOLLIDERROR,
   nCL_STATES
 } cl_states_t;
 
@@ -207,45 +209,40 @@ static uint16_t pwmCh[6] = {0, 0, 0, 0, 0, 0};
 // Parameters for DAC
 static uint16_t dacCh[1] = {0};
 
-/*                      GPIO                         On PCB Rev2      On PCB Rev3
- * pwmCh[0], TIM4,CH3 - PB8 -  J175 : PWM0_TIM4CH3 - TopHeater1Ctrl   TopHeater1Ctrl
- * pwmCh[1], TIM4,CH4 - PB9 -  J26  : PWM1_TIM4CH4 - FAN control      TopHeater2Ctrl
- * pwmCh[2], TIM3,CH1 - PC6 -  J33  : PWM2_TIM3CH1 - Peltier PWM 1    -
- * pwmCh[3], TIM3,CH2 - PC7 -  J176 : PWM3_TIM3CH2 - TopHeater2Ctrl   FAN control
- * pwmCh[4], TIM3,CH3 - PC8 -  J35  : PWM4_TIM3CH3 - AUX PWM          AUX PWM
- * pwmCh[5],                                                          dummy PWM
+/*                      GPIO           On PCB Rev3
+ * pwmCh[0], TIM4,CH3 - PB8 -  J175 :  TopHeater1Ctrl
+ * pwmCh[1], TIM4,CH4 - PB9 -  J26  :  TopHeater2Ctrl
+ * pwmCh[2], TIM3,CH1 - PC6 -  J33  :  -
+ * pwmCh[3], TIM3,CH2 - PC7 -  J176 :  FAN control
+ * pwmCh[4], TIM3,CH3 - PC8 -  J35  :  AUX PWM
+ * pwmCh[5],                           dummy PWM
  * DAC_OUT1     PA4
  * DAC_OUT2     PA5
- * ADC PCB Rev2:                       
- * adcCh[0], ADC CH0 -         J177 : RTD1         - Peltier_sens1  (Cold side)
- * adcCh[1], ADC CH1 -         J173 : RTD2         - TopHeaterSens1
- * adcCh[2], ADC CH2 -         J174 : RTD3         - TopHeaterSens2 (Ambient Air)
- * adcCh[3], ADC CH3 -         J178 : RTD4         - Peltier_sens2  (Hot side)
  * ADC PCB Rev3: 
- * adcCh[0], ADC12_IN0 -       J??? :              - Peltier_sens1  (Cold side)
- * adcCh[1], ADC12_IN5 -       J??? :              - TopHeaterSens1
- * adcCh[2], ADC12_IN6 -       J??? :              - TopHeaterSens2 (Ambient Air)
- * adcCh[3], ADC12_IN7 -       J??? :              - Peltier_sens2  (Hot side)
+ * adcCh[0], ADC12_IN5 - PA5 - J177 :  Peltier_sens1  (Cold side)
+ * adcCh[1], ADC12_IN6 - PA6 - J173 :  TopHeaterSens
+ * adcCh[2], ADC12_IN7 - PA7 - J182 :  Ambient Air
+ * adcCh[3], ADC12_IN0 - PA0 - J181 :  Temp_sens4  (Hot side)
 
    NTC_ADC_IN0        a PA0/ADC12_IN0
-   Peltier_DAC        a PA4/DAC_OUT1 (/ADC12_IN4)
+   Peltier_DAC        a PA4/DAC_OUT1  (/ADC12_IN4)
    NTC_ADC_IN5        a PA5/ADC12_IN5 (/DAC_OUT2)
    NTC_ADC_IN6        a PA6/ADC12_IN6
    NTC_ADC_IN7        a PA7/ADC12_IN7
-   LockCtrlOut        d PA8/TIM1_CH1 (/MCO)
+   LockCtrlOut        d PA8/TIM1_CH1  (/MCO)
 
    LID_DETECT         d PB5
    I2C1_SCL           d PB6/I2C1_SCL/TIM4_CH1
    I2C1_SDA           d PB7/I2C1_SDA/TIM4_CH2
    TopHeater1CtrlPWM  p PB8/TIM4_CH3
    TopHeater2CtrlPWM  p PB9/TIM4_CH4
-   TopHeaterMainPWM   p PB10/TIM2_CH3   TP?
+   TopHeaterMainPWM   p PB10/TIM2_CH3   TP7
 
    ADC10_VMON         a PC0/ADC12_IN10
    HW_ID              a PC1/ADC12_IN11
    PeltierCtrl_EN     d PC6/TIM3_CH1
    FANctrlPWM         p PC7/TIM3_CH2
-   AuxCtrlPWM         p PC8/TIM3_CH3    TP?
+   AuxCtrlPWM         p PC8/TIM3_CH3    TP8
    HeartBeatLED       d PC9/TIM3_CH4
  */ 
 
@@ -440,6 +437,34 @@ int getAdc(char *poutText)
   strcat(poutText,str);
   strcat(poutText, ","); 
   Itoa(adcData[3], str);
+  strcat(poutText,str);
+  strcat(poutText, "}");
+  return 0;
+}
+
+/* ---------------------------------------------------------------------------*/
+/* Read out latest running variables                                          */
+/* This function is called from gdi and thus is executed in gdi context.      */
+/* <uid>,coolandlid_monitor={th_pwm,th_mode,fan_pwm,peltier_dac,peltier_voltage } */
+/* ---------------------------------------------------------------------------*/
+int getCLMonitor(char *poutText)
+{
+  char str[20];
+  *poutText = 0;  //add string termination
+  strcat(poutText,"coolandlid_monitor={");
+  Itoa(*lidData[0].regulator.pwmVal, str);      // th_pwm
+  strcat(poutText,str);
+  strcat(poutText, ","); 
+  Itoa(0, str);    // TODO: Add mode  // th_mode
+  strcat(poutText,str);
+  strcat(poutText, ","); 
+  Itoa(*fanData[0].regulator.pwmVal, str);      // fan_pwm
+  strcat(poutText,str);
+  strcat(poutText, ","); 
+  Itoa(*peltierData[0].regulator.pwmVal, str);  // peltier_dac
+  strcat(poutText,str);
+  strcat(poutText, ","); 
+  Itoa(readADC(ADC_VMON_MUX_CH), str);          // peltier_voltage
   strcat(poutText,str);
   strcat(poutText, "}");
   return 0;
@@ -866,6 +891,24 @@ bool coolLidReadRegs(u8 slave, u16 addr, u16 datasize, u16 *buffer)
           default:
             break;
         }
+        break;
+      //if( (17 <= slave) && (19 >= slave) ) // slave 17 - 19 maps to coolandlid
+      case PWM_1_REG:
+        //if(NoWell == mode) {  // Preheat state
+        val = 2 * (*lidData[0].regulator.pwmVal); //Top heater mode full power
+        // } else {
+        val = *lidData[0].regulator.pwmVal; //Top heater mode half power
+        // }
+        break;
+      case PWM_2_REG:
+        val = *peltierData[0].regulator.pwmVal;
+        break;
+      case PWM_3_REG:
+        val = *fanData[0].regulator.pwmVal;
+        break;
+      case PWM_4_REG:
+        val = readADC(ADC_VMON_MUX_CH); // Peltire voltage
+        break;
       default:
         break;
     }

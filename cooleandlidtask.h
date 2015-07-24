@@ -37,6 +37,7 @@ bool coolLidReadRegs(u8 slave, u16 addr, u16 datasize, u16 *buffer);
 bool coolLidWriteRegs(u8 slave, u16 addr, u16 *data, u16 datasize);
 int getCoolandlidHWReport(char *poutText);
 int getAdc(char *poutText);
+int getCLMonitor(char *poutText);
 
 #endif /* __COOLERANDLIDTASK_H */
 
