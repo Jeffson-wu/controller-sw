@@ -1507,18 +1507,21 @@ void HW_EventHandler(ReadModbusRegsRes *preg, xMessage *msg){
 /* ---------------------------------------------------------------------------*/
 void TubeEventHandler (long TubeId, int event, xMessage *msg)
 {
-  ReadModbusRegsRes *preg;
   u16 modbus_id;
+	#ifdef DEBUG
   u16 modbus_data[EVENT_DATA_SIZE];
   long i=0;
-
+  ReadModbusRegsRes *preg;
   preg = (ReadModbusRegsRes *)msg->ucData;
+  #endif
+
   Tubeloop_t *pTubeloop = &Tubeloop[TubeId-1];
+	#ifdef DEBUG
   for(i = 0; i < (preg->datasize); i++)
   {
     modbus_data[i] =(((u16)(preg->data[i*2])<<8) | (preg->data[(i*2)+1]));
   }
-  #ifdef DEBUG
+
   // If not logging event output debug data
   if(((event & LOGGING_READY)==FALSE))
   {
