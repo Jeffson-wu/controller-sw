@@ -38,6 +38,9 @@ SOURCES = \
     adc.c \
     sequencer.c \
     cooleandlidtask.c \
+    fan.c\
+    lidheater.c\
+    peltier.c\
     logtask.c \
     pid.c \
     nvs.c \
