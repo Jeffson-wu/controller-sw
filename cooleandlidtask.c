@@ -47,7 +47,10 @@
 #else
 #include "ads1148.h"
 #endif
-#include "pid.h"
+//#include "pid.h"
+#include "fan.h"
+#include "lidheater.h"
+#include "peltier.h"
 #include "pwm.h"
 #include "gdi.h"
 #include "util.h"
@@ -79,7 +82,6 @@
 #define PELTIER_EN_PORT   GPIOC
 #define PELTIER_DAC_PIN   GPIO_Pin_4
 #define PELTIER_DAC_PORT  GPIOA
-#define DAC_UPPER_LIMIT   3725
 
 #ifdef USE_CL_DATA_LOGGING
   #define CL_SAMPLES_PER_LOG  10    //Each log is the avarage over this number of samples
@@ -104,57 +106,6 @@ typedef enum CL_STATES_T {
   CL_STATE_CLCOOLERROR,
   nCL_STATES
 } cl_states_t;
-
-typedef enum {
-  STOP_STATE,
-  MANUAL_STATE,
-  CTRL_OPEN_LOOP_STATE,
-  CTRL_CLOSED_LOOP_STATE,
-  nCTRL_STATES
-} controllerState_t;
-
-typedef enum {
-  PELTIER_1,
-  //PELTIER_2,
-  nPELTIER
-} peltierID_t;
-
-typedef enum {
-  FAN_1,
-  //FAN_2,
-  nFAN
-} fanID_t;
-
-typedef enum {
-  LID_HEATER_1,
-  //LID_HEATER_2,
-  nLID_HEATER
-} lidHeaterID_t;
-
-typedef struct {
-  controllerState_t state;
-  int16_t           setPoint;
-  uint16_t          *pwmVal;
-  int16_t           *adcVal;
-  int16_t           setPointLL;
-  int16_t           setPointHL;
-  int8_t            hysteresisActiveFlag;
-} regulatorData_t;
-
-typedef struct FAN_DATA{
-  fanID_t         fanID;
-  regulatorData_t regulator;
-} fanData_t;
-
-typedef struct PELTIER_DATA{
-  peltierID_t     peltierID;
-  regulatorData_t regulator;
-} peltierData_t;
-
-typedef struct LID_DATA{
-  lidHeaterID_t   lidHeaterID;
-  regulatorData_t regulator;
-} lidData_t;
 
 typedef struct CALIB_DATA_T {
   int16_t c_1;
@@ -250,20 +201,20 @@ static uint16_t dacCh[1] = {0};
  */ 
 
 // Fan controll is based on the temp diff: adcDiff[0] =  Fin temp - Ambient temp
-static int16_t *adcDiffSource[2] = {&adcCh[4], &adcCh[2]}; 
+static int16_t *adcDiffSource[2] = {&adcCh[3], &adcCh[2]};
 
-static peltierData_t peltierData[nPELTIER] = {
-  {PELTIER_1, {STOP_STATE, -26213, &dacCh[0], &adcCh[3]}}
+static peltier_t peltier[nPELTIER] = {
+  {PELTIER_1, STOP_STATE, { &dacCh[0], &adcCh[0]}} //, {-26213}
 };
 
-static lidData_t lidData[nLID_HEATER] = {
-  {LID_HEATER_1, {STOP_STATE, -26213, &pwmCh[5], &adcCh[2]}}
+static lidHeater_t lidHeater[nLID_HEATER] = {
+  {LID_HEATER_1, STOP_STATE, {&pwmCh[5], &adcCh[1]}} //-26213,
 };
 
 static uint16_t *pwmChMirror[2] = {&pwmCh[0], &pwmCh[1]};
 
-static fanData_t fanData[nFAN] = {
-  {FAN_1, {STOP_STATE, 0, &pwmCh[3], /*&adcDiff[0]*/ &adcCh[0]}}
+static fan_t fan[nFAN] = {
+  {FAN_1, STOP_STATE, {&pwmCh[3], /*&adcDiff[0]*/ &adcCh[3]}} //0
 };
 
 calib_data_t __attribute__ ((aligned (2))) calib_data[3] = {
@@ -375,9 +326,9 @@ void initCLStatusTimer() {
 void stopPeltier()
 {
   GPIO_ResetBits(PELTIER_EN_PORT, PELTIER_EN_PIN);
-  *peltierData[0].regulator.pwmVal = 0;
+  *peltier[0].io.ctrVal = 0;
   //*peltierData[1].regulator.pwmVal = 0;
-  peltierData[0].regulator.state = STOP_STATE;
+  peltier[0].state = STOP_STATE;
   //peltierData[1].regulator.state = STOP_STATE;
 }
 
@@ -385,11 +336,11 @@ void stopPeltier()
 void standAlone() //These settings should be made from the Linux Box
 {
 
-  *peltierData[0].regulator.pwmVal = 8000;
-  *fanData[0].regulator.pwmVal = 20000; //40% of 32767
+  *peltier[0].io.ctrVal = 8000;
+  *fan[0].io.ctrVal = 20000; //40% of 32767
 
-  *lidData[0].regulator.pwmVal = 25000;
-  *lidData[1].regulator.pwmVal = 0;
+  *lidHeater[0].io.ctrVal = 25000;
+  *lidHeater[1].io.ctrVal = 0;
   pwmCh[3] = 12000; ///###JRJ DEBUG 10% on Aux
   coolTempOK = TRUE;
   lidTempOK  = TRUE;
@@ -443,173 +394,6 @@ int getAdc(char *poutText)
   strcat(poutText,str);
   strcat(poutText, "}");
   return 0;
-}
-
-/* ---------------------------------------------------------------------------*/
-/* Fan handling */
-/* ---------------------------------------------------------------------------*/
-void fan(fanData_t *fanData){
-  regulatorData_t *reg;
-  reg = &fanData->regulator;
-  reg->setPoint = 2600; //40oC
-  int64_t out = 0;
-  int16_t Kp = -10;
-
-  switch (reg->state) {
-    case STOP_STATE:
-    {
-      *reg->pwmVal = 0;
-      reg->state = CTRL_CLOSED_LOOP_STATE; //Starts when power on
-    }
-    break;
-    case MANUAL_STATE:
-    {
-      return; // No action in manuel state
-    } 
-    break;
-    case CTRL_OPEN_LOOP_STATE:
-    {
-      reg->state = CTRL_CLOSED_LOOP_STATE;
-    } 
-    break;
-    case CTRL_CLOSED_LOOP_STATE:
-    {
-      out = Kp*(reg->setPoint - *reg->adcVal);
-    }
-    break;
-    default:
-    break;
-
-  }
-
-  if (out > 32767)
-    { out = 32767; }
-  if (out < 12000)
-    { out = 12000; }
-  //*reg->pwmVal = out;
-  *reg->pwmVal = 17000; // ToDo: remove hard coded value
-}
-
-/* ---------------------------------------------------------------------------*/
-/* Peltier handling */
-/* ---------------------------------------------------------------------------*/
-// TODO: JRJ implement reset for current source at least once every 4 hours
-void peltier(peltierData_t *peltierData){
-  regulatorData_t *reg;
-  reg = &peltierData->regulator;
-  reg->setPoint = 1600; //??oC
-  //reg->setPointLL = reg->setPoint - 20;
-  //reg->setPointHL = reg->setPoint + 20;
-  int64_t out = 0;
-  int16_t Kp = -2;
-
-  switch (reg->state) {
-    case STOP_STATE:
-    {
-      *reg->pwmVal = 0;
-      GPIO_ResetBits(PELTIER_EN_PORT, PELTIER_EN_PIN);  //Disable Peltier
-      reg->state = CTRL_CLOSED_LOOP_STATE; //Starts when power on
-    }
-    break;
-    case MANUAL_STATE:
-    {
-      return; // No action in manuel state
-    } 
-    break;
-    case CTRL_OPEN_LOOP_STATE:
-    {
-      GPIO_SetBits(PELTIER_EN_PORT, PELTIER_EN_PIN); //Enable peltier
-      reg->state = CTRL_CLOSED_LOOP_STATE;
-    } 
-    break;
-    case CTRL_CLOSED_LOOP_STATE:
-    {
-      GPIO_SetBits(PELTIER_EN_PORT, PELTIER_EN_PIN); //Enable peltier
-      out = Kp*(reg->setPoint - *reg->adcVal);
-    }
-    break;
-    default:
-    break;
-  }
-  if( abs(reg->setPoint - *reg->adcVal) < 10 ) { coolTempOK = TRUE; }
-  if (out > DAC_UPPER_LIMIT)
-    { out = DAC_UPPER_LIMIT; }
-  if (out < 0)
-    { out = 0; }
-//    *reg->pwmVal = out;
-
-  *reg->pwmVal = 1100; //ToDo: remove.
-
-
-}
-
-/* ---------------------------------------------------------------------------*/
-/* Lid handling */
-/* ---------------------------------------------------------------------------*/
-void lid(lidData_t *lidData)
-{
-  regulatorData_t *reg;
-  reg = &lidData->regulator;
-  reg->setPoint = 2700; //???oC
-  //reg->setPointLL = reg->setPoint - 200;
-  //reg->setPointHL = reg->setPoint + 200;
-  int64_t out = 0;
-  int16_t Kp = 45; //1.5;
-
-  switch (reg->state) {
-    case STOP_STATE:
-    {
-      *reg->pwmVal = 0;
-      reg->hysteresisActiveFlag = 0;
-      //reg->state = CTRL_OPEN_LOOP_STATE;
-      reg->state = CTRL_CLOSED_LOOP_STATE; // << remove
-    } 
-    break;
-    case MANUAL_STATE:
-    {
-      return; // No action in manuel state
-    } 
-    break;
-    case CTRL_OPEN_LOOP_STATE:
-    {
-      out = 32767;
-
-      if (*reg->adcVal > (reg->setPoint-40)) //ca -10oC
-        reg->state = CTRL_CLOSED_LOOP_STATE;
-    }
-    break;
-    case CTRL_CLOSED_LOOP_STATE:
-    {
-      out = Kp*(reg->setPoint - *reg->adcVal);
-
-      //if (*reg->adcVal < reg->setPoint-100) // << incomment
-      //  reg->state = CTRL_OPEN_LOOP_STATE;
-    }
-    break;
-    default:
-    break;
-  }
-  if( abs(reg->setPoint - *reg->adcVal) < 10 ) { lidTempOK = TRUE; }
-  if (out > 32767)
-    { out = 32767; }
-  if (out < 0)
-    { out = 0; }
-  *reg->pwmVal = out;
-
-/*
-#ifdef DEBUG_COOL
-  static int8_t cnt = 0;
-#endif
-
-#ifdef DEBUG_COOL
-    if (cnt == 50)
-    {
-      DEBUG_PRINTF("LID_Err:%d", (reg->setPoint - *reg->adcVal));
-      cnt = 0;
-    }
-    cnt++;
-#endif
-*/
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -855,13 +639,13 @@ bool coolLidReadRegs(u8 slave, u16 addr, u16 datasize, u16 *buffer)
         switch(slave)
         {
           case LID_ADDR:
-            val = lidData[0].regulator.setPoint;
+            val = lidHeater[0].controller.setPoint;
             break;
           case PELTIER_ADDR:
-            val = peltierData[0].regulator.setPoint;
+            val = peltier[0].controller.setPoint;
             break;
           case FAN_ADDR:
-            val = fanData[0].regulator.setPoint;
+            val = fan[0].controller.setPoint;
             break;
           default:
             break;
@@ -889,15 +673,15 @@ bool coolLidWriteRegs(u8 slave, u16 addr, u16 *data, u16 datasize)
         switch(slave)
         {
           case LID_ADDR:
-            lidData[0].regulator.setPoint = val;
+            lidHeater[0].controller.setPoint = val;
             lidTempOK = FALSE;
             break;
           case PELTIER_ADDR:
-            peltierData[0].regulator.setPoint = val;
+            peltier[0].controller.setPoint = val;
             coolTempOK = FALSE;
             break;
           case FAN_ADDR:
-            fanData[0].regulator.setPoint = val;
+            fan[0].controller.setPoint = val;
             break;
           default:
             break;
@@ -906,9 +690,9 @@ bool coolLidWriteRegs(u8 slave, u16 addr, u16 *data, u16 datasize)
       case TUBE_COMMAND_REG:
         /* Here the slave is irrelevant */
         if (WRITE_CAL_DATA == val) {
-          calib_data[0].c_1 = lidData[0].regulator.setPoint;
-          calib_data[1].c_1 = peltierData[0].regulator.setPoint;
-          calib_data[2].c_1 = fanData[0].regulator.setPoint;
+          calib_data[0].c_1 = lidHeater[0].controller.setPoint;
+          calib_data[1].c_1 = peltier[0].controller.setPoint;
+          calib_data[2].c_1 = fan[0].controller.setPoint;
           NVSwrite(sizeof(calib_data), calib_data);
           DEBUG_PRINTF("\r\nWrote calib.\r\n");
         }
@@ -992,17 +776,22 @@ void CoolAndLidTask( void * pvParameters )
   }
   initTogglePeltierTimer();
   initCLStatusTimer();
-  lidData[0].regulator.setPoint     = calib_data[0].c_1;
-  peltierData[0].regulator.setPoint = calib_data[1].c_1;
-  fanData[0].regulator.setPoint     = calib_data[2].c_1;
+
+  lidHeater[0].controller.setPoint = calib_data[0].c_1;
+  peltier[0].controller.setPoint = calib_data[1].c_1;
+  fan[0].controller.setPoint     = calib_data[2].c_1;
+
+  init_peltier(&peltier[0]);
+  init_fan(&fan[0]);
+  init_lid_heater(&lidHeater[0]);
 
   while(1)
   {
   #ifdef DEBUG_COOL
-    if (cnt == 40)
+    if (cnt == 30)
     {
       static int toggle = 0;
-      DEBUG_PRINTF("PEL_PWM:%d, PEL:%ld, FAN_PWM:%d, FAN:%ld, LID_PWM:%d, LID:%ld", pwmCh[0], dac_2_temp(adcCh[0]), pwmCh[3], dac_2_temp(adcCh[3]), pwmCh[4], dac_2_temp(adcCh[1]));
+      PRINTF("PEL_OUT:%d, PEL_IN:%d, FAN_OUT:%d, FAN_IN:%d, LID_OUT:%d, LID_IN:%d", dacCh[0], adcCh[0], pwmCh[3], adcCh[3], pwmCh[5], adcCh[1]);
       //DEBUG_PRINTF("Adc:%4d, %4d, %4d, %4d", adcCh[0], adcCh[1], adcCh[2], adcCh[3]);
       cnt = 0;
       if(toggle) {
@@ -1029,17 +818,44 @@ void CoolAndLidTask( void * pvParameters )
 #endif
     adcDiff[0] =  adc_2_temp(*adcDiffSource[1]) - adc_2_temp(*adcDiffSource[0]); // Fan controll is based on the temp diff
 #ifndef STANDALONE
-    peltier(&peltierData[0]);
-    fan(&fanData[0]);
-    lid(&lidData[0]);
-    //lid(&lidData[1]);
+
+
+    peltier_controller(&peltier[0]);
+    fan_controller(&fan[0]);
+    lid_heater_controller(&lidHeater[0]);
+
+
+
+    switch (peltier->state) {
+      case STOP_STATE:
+      {
+        GPIO_ResetBits(PELTIER_EN_PORT, PELTIER_EN_PIN);  //Disable Peltier
+      }
+      break;
+      case CTRL_OPEN_LOOP_STATE:
+      {
+        GPIO_SetBits(PELTIER_EN_PORT, PELTIER_EN_PIN); //Enable peltier
+      }
+      break;
+      case CTRL_CLOSED_LOOP_STATE:
+      {
+        GPIO_SetBits(PELTIER_EN_PORT, PELTIER_EN_PIN); //Enable peltier
+      }
+      break;
+      default:
+      break;
+    }
+
+    if( abs(peltier->controller.setPoint - *peltier->io.adcVal) < 10 ) { coolTempOK = TRUE; }
+    if( abs(lidHeater->controller.setPoint - *lidHeater->io.adcVal) < 10 ) { lidTempOK = TRUE; }
+
 #endif
 
 #ifdef USE_TWO_LEVEL_LID_POWER
     if(1) { //(NoWell == mode) {
       // Bottom heaters disabled : full power on top heater
-      if(MANUAL_STATE != lidData[0].regulator.state) {
-        *pwmChMirror[0] = *pwmChMirror[1] = *(lidData[0].regulator.pwmVal);
+      if(MANUAL_STATE != lidHeater[0].state) {
+        *pwmChMirror[0] = *pwmChMirror[1] = *(lidHeater[0].io.ctrVal);
       }
     }
     else
@@ -1048,13 +864,13 @@ void CoolAndLidTask( void * pvParameters )
       static char toggle = 0;
       if(0 == toggle)
       {
-        *pwmChMirror[1] = *(lidData[0].regulator.pwmVal);
+        *pwmChMirror[1] = *(lidHeater[0].io.ctrVal);
         *pwmChMirror[0] = 0;
         toggle = 1;
       }
       else
       {
-        *pwmChMirror[0] = *(lidData[0].regulator.pwmVal);
+        *pwmChMirror[0] = *(lidHeater[0].io.ctrVal);
         *pwmChMirror[1] = 0;
         toggle = 0;
       }
@@ -1085,16 +901,16 @@ void CoolAndLidTask( void * pvParameters )
         {
           long p;
           p = *((uint16_t *)(msg->ucData));
-          *fanData[0].regulator.pwmVal = p * 32768/100;
-          fanData[0].regulator.state = CTRL_CLOSED_LOOP_STATE;
+          *fan[0].io.ctrVal = p * 32768/100;
+          fan[0].state = CTRL_CLOSED_LOOP_STATE;
         }
         break;
         case SET_COOL_TEMP:
         {
           SetCooleAndLidReq *p;
           p=(SetCooleAndLidReq *)(msg->ucData);
-          peltierData[0].regulator.setPoint = temp_2_adc(p->value);
-          peltierData[0].regulator.state = CTRL_CLOSED_LOOP_STATE;
+          peltier[0].controller.setPoint = temp_2_adc(p->value);
+          peltier[0].state = CTRL_CLOSED_LOOP_STATE;
           coolTempOK = FALSE;
         }
         break;
@@ -1103,8 +919,8 @@ void CoolAndLidTask( void * pvParameters )
           SetCooleAndLidReq *p;
           p=(SetCooleAndLidReq *)(msg->ucData);
           if(p->idx-1 < nLID_HEATER) {
-            lidData[p->idx-1].regulator.setPoint = temp_2_adc(p->value);
-            lidData[p->idx-1].regulator.state = CTRL_CLOSED_LOOP_STATE;
+            lidHeater[p->idx-1].controller.setPoint = temp_2_adc(p->value);
+            lidHeater[p->idx-1].state = CTRL_CLOSED_LOOP_STATE;
             //lidData[1].regulator.state = CTRL_CLOSED_LOOP_STATE;
           }
         }
@@ -1113,13 +929,13 @@ void CoolAndLidTask( void * pvParameters )
         {
           SetCooleAndLidReq *p;
           p=(SetCooleAndLidReq *)(msg->ucData);
-          *(lidData[p->idx-1].regulator.pwmVal) = (p->value);
-          lidData[p->idx-1].regulator.state = MANUAL_STATE;
+          *(lidHeater[p->idx-1].io.ctrVal) = (p->value);
+          lidHeater[p->idx-1].state = MANUAL_STATE;
         }
         break;
         case START_LID_HEATING:
         {
-          lidData[0].regulator.state = CTRL_CLOSED_LOOP_STATE;
+          lidHeater[0].state = CTRL_CLOSED_LOOP_STATE;
           //lidData[1].regulator.state = CTRL_CLOSED_LOOP_STATE;
           coolTempOK = FALSE;
           lidTempOK = FALSE;
@@ -1127,7 +943,7 @@ void CoolAndLidTask( void * pvParameters )
         break;
         case STOP_LID_HEATING:
         {
-          lidData[0].regulator.state = STOP_STATE;
+          lidHeater[0].state = STOP_STATE;
           //setCLStatusReg(0xf00f); //Set flag for stopped lid heating ####JRJ
           //lidData[1].regulator.state = STOP_STATE;
         }
@@ -1146,11 +962,11 @@ void CoolAndLidTask( void * pvParameters )
           p=(SetCooleAndLidReq *)(msg->ucData);
           switch(p->idx) {
             case 0:
-              peltierData[0].regulator.setPoint = temp_2_adc(p->value);
+              peltier[0].controller.setPoint = temp_2_adc(p->value);
               coolTempOK = FALSE;
               break;
             case 1:
-              lidData[0].regulator.setPoint = temp_2_adc(p->value);
+              lidHeater[0].controller.setPoint = temp_2_adc(p->value);
               lidTempOK = FALSE;
               break;
             case 2:
@@ -1158,8 +974,8 @@ void CoolAndLidTask( void * pvParameters )
             case 3:
               break;
             case 4: //Fan ctrl
-              *fanData[0].regulator.pwmVal = p->value * 32768/100;
-              PWM_Set(*fanData[0].regulator.pwmVal, PWM1_TIM4CH4);
+              *fan[0].io.ctrVal = p->value * 32768/100;
+              PWM_Set(*fan[0].io.ctrVal, PWM1_TIM4CH4);
               break;
             case 5:
               DEBUG_PRINTF("Set LidLock @ %d", p->value);
@@ -1185,34 +1001,34 @@ void CoolAndLidTask( void * pvParameters )
             case 0:
               /* pwmCh[0], TIM4,CH3 - PB8 - J175 : PWM0_TIM4CH3 - TopHeater1Ctrl */
               if(0 == pPWMReq->value) {
-                lidData[0].regulator.state = STOP_STATE;
+                lidHeater[0].state = STOP_STATE;
               } else {
-                lidData[0].regulator.state = MANUAL_STATE;
+                lidHeater[0].state = MANUAL_STATE;
               }
               break;
             case 1:
               /* pwmCh[1], TIM4,CH4 - PB9 - J26  : PWM1_TIM4CH4 - FAN control */
               if(0 == pPWMReq->value) {
-                fanData[0].regulator.state = STOP_STATE;
+                fan[0].state = STOP_STATE;
               } else {
-                fanData[0].regulator.state = MANUAL_STATE;
+                fan[0].state = MANUAL_STATE;
               }
               break;
             case 2:
               /* pwmCh[2], TIM3,CH1 - PC6 - J33  : PWM2_TIM3CH1 - Peltier PWM 1 */
               if(0 == pPWMReq->value) {
-                peltierData[0].regulator.state = STOP_STATE;
+                peltier[0].state = STOP_STATE;
               } else {
-                peltierData[0].regulator.state = MANUAL_STATE;
+                peltier[0].state = MANUAL_STATE;
               }
               break;
             case 3:
               /* pwmCh[3], TIM3,CH2 - PC7 - J176 : PWM3_TIM3CH2 - TopHeater2Ctrl */
-              //lidData[1].regulator.state = MANUAL_STATE;
+              //lid[1].state = MANUAL_STATE;
               break;
             case 4:
               /* pwmCh[4], TIM3,CH3 - PC8 - J35  : PWM4_TIM3CH3 - Peltier PWM 2 */
-              // peltierData[1].regulator.state = MANUAL_STATE;
+              // peltier[1].state = MANUAL_STATE;
               break;
             default:
             break;
@@ -1235,7 +1051,7 @@ void CoolAndLidTask( void * pvParameters )
                 } else { 
                   GPIO_SetBits(PELTIER_EN_PORT, PELTIER_EN_PIN);
                 }
-                peltierData[0].regulator.state = MANUAL_STATE;
+                peltier[0].state = MANUAL_STATE;
                 break;
               case 1:
                 //??[?].regulator.state = MANUAL_STATE;
@@ -1250,20 +1066,20 @@ void CoolAndLidTask( void * pvParameters )
         {
         	int16_t setPointHyst = 1000;
 
-          if (*lidData[0].regulator.adcVal > (lidData[0].regulator.setPoint - setPointHyst))
+          if (*lidHeater[0].io.adcVal > (lidHeater[0].controller.setPoint - setPointHyst))
           {
           	lidTempOK = TRUE;
           }
-          else if (*lidData[0].regulator.adcVal < (lidData[0].regulator.setPoint - setPointHyst))
+          else if (*lidHeater[0].io.adcVal < (lidHeater[0].controller.setPoint - setPointHyst))
           {
           	lidTempError = TRUE;
           }
 
-          if (*peltierData[0].regulator.adcVal < (peltierData[0].regulator.setPoint + setPointHyst))
+          if (*peltier[0].io.adcVal < (peltier[0].controller.setPoint + setPointHyst))
           {
           	coolTempOK = TRUE;
           }
-          else if (*peltierData[0].regulator.adcVal > (peltierData[0].regulator.setPoint + setPointHyst))
+          else if (*peltier[0].io.adcVal > (peltier[0].controller.setPoint + setPointHyst))
           {
           	coolTempError = TRUE;
           }
@@ -1278,4 +1094,3 @@ void CoolAndLidTask( void * pvParameters )
   // We are not supposed to end, but if so kill this task.
   vTaskDelete(NULL);
 }
-
