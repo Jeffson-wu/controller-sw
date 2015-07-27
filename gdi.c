@@ -109,6 +109,7 @@ enum gdi_func_type
   setpwm,
   setdac,
   getadc,
+  getclmonitor,
   crash_cmd,
   bu_cmd,     // Crash cmd - used after crashes - see debug.c
   invalid_command
@@ -154,6 +155,7 @@ gdi_func_table_type gdi_func_info_table[] =
   {"setpwm",            " Set PWM [%]",               "at@gdi:setpwm(mcu, idx, pwm)", setpwm },
   {"setdac",            " Set DAC [%]",               "at@gdi:setdac(idx, dac)",    setdac },
   {"getadc",            " Get latest ADC values",     "at@gdi:getadc()",            getadc },
+  {"getclmonitor",      " Get CL running variables",  "at@gdi:getclmonitor",        getclmonitor },
   {"crash",             " Force crash",               "at@gdi:crash(key)",          crash_cmd },
   {"bu",                "",                           "",                           bu_cmd }, // cmd used only after a crash - see debug.c
   { NULL, NULL, NULL, 0 }
@@ -1050,6 +1052,14 @@ void gdi_map_to_functions()
         getAdc(str);
         gdi_send_data_response(str, newline_end);
       }
+      break;
+
+    case getclmonitor:
+      if(!gdiEcho) {
+        uid = (u16) strtol(*(gdi_req_func_info.parameters), (char **)NULL, 10);
+      }
+      getCLMonitor(str);
+      gdi_send_data_response(str, newline_end);
       break;
 
     /***************************************************************/
