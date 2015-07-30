@@ -706,7 +706,7 @@ bool coolLidReadRegs(u8 slave, u16 addr, u16 datasize, u16 *buffer)
 bool coolLidWriteRegs(u8 slave, u16 addr, u16 *data, u16 datasize)
 {
   int reg;
-  u16 val;
+  uint16_t val;
   for (reg = 0; reg < datasize; reg++)
   {
     val = Swap2Bytes(*(data + reg)); // correct endianess
@@ -731,17 +731,123 @@ bool coolLidWriteRegs(u8 slave, u16 addr, u16 *data, u16 datasize)
         }
         break;
       case TUBE_COMMAND_REG:
-        /* Here the slave is irrelevant */
-        if (WRITE_CAL_DATA == val) {
-          calib_data[0].c_1 = lidHeater[0].controller.setPoint;
-          calib_data[1].c_1 = peltier[0].controller.setPoint;
-          calib_data[2].c_1 = fan[0].controller.setPoint;
-          NVSwrite(sizeof(calib_data), calib_data);
-          DEBUG_PRINTF("\r\nWrote calib.\r\n");
+        switch(val)
+        {
+          case WRITE_CAL_DATA:
+            /* Here the slave is irrelevant */
+            calib_data[0].c_1 = lidHeater[0].controller.setPoint;
+            calib_data[1].c_1 = peltier[0].controller.setPoint;
+            calib_data[2].c_1 = fan[0].controller.setPoint;
+            NVSwrite(sizeof(calib_data), calib_data);
+            DEBUG_PRINTF("\r\nWrote calib.\r\n");
+            break;
+          case SET_IDLE_MODE:
+            switch(slave)
+            {
+              case LID_ADDR:
+                lidHeater[0].state = STOP_STATE;
+                break;
+              case PELTIER_ADDR:
+                peltier[0].state = STOP_STATE;
+                break;
+              case FAN_ADDR:
+                fan[0].state = STOP_STATE;
+                break;
+              default:
+                break;
+            }
+            break;
+          case SET_AUTOMATIC_MODE:
+            switch(slave)
+            {
+              case LID_ADDR:
+                lidHeater[0].state = CTRL_CLOSED_LOOP_STATE;
+                lidTempOK = FALSE;
+                break;
+              case PELTIER_ADDR:
+                peltier[0].state = CTRL_CLOSED_LOOP_STATE;
+                coolTempOK = FALSE;
+                break;
+              case FAN_ADDR:
+                fan[0].state = CTRL_CLOSED_LOOP_STATE;
+                break;
+              default:
+                break;
+            }
+            break;
+          case SET_MANUEL_MODE:
+            switch(slave)
+            {
+              case LID_ADDR:
+                lidHeater[0].state = MANUAL_STATE;
+                lidTempOK = FALSE;
+                break;
+              case PELTIER_ADDR:
+                peltier[0].state = MANUAL_STATE;
+                coolTempOK = FALSE;
+                break;
+              case FAN_ADDR:
+                fan[0].state = MANUAL_STATE;
+                break;
+              default:
+                break;
+            }
+            break;
+          case SET_MANUEL_STOP:
+            switch(slave)
+            {
+              case LID_ADDR:
+                lidHeater[0].state = STOP_STATE;
+                break;
+              case PELTIER_ADDR:
+                peltier[0].state = STOP_STATE;
+                break;
+              case FAN_ADDR:
+                fan[0].state = STOP_STATE;
+                break;
+              default:
+                break;
+            }
+            break;
+          case SET_CTR_OPEN_LOOP:
+            switch(slave)
+            {
+              case LID_ADDR:
+                lidHeater[0].state = CTRL_OPEN_LOOP_STATE;
+                lidTempOK = FALSE;
+                break;
+              case PELTIER_ADDR:
+                peltier[0].state = CTRL_OPEN_LOOP_STATE;
+                coolTempOK = FALSE;
+                break;
+              case FAN_ADDR:
+                fan[0].state = CTRL_OPEN_LOOP_STATE;
+                break;
+              default:
+                break;
+            }
+            break;
+          case SET_CTR_CLOSED_LOOP:
+            switch(slave)
+            {
+              case LID_ADDR:
+                lidHeater[0].state = CTRL_CLOSED_LOOP_STATE;
+                break;
+              case PELTIER_ADDR:
+                peltier[0].state = CTRL_CLOSED_LOOP_STATE;
+                break;
+              case FAN_ADDR:
+                fan[0].state = CTRL_CLOSED_LOOP_STATE;
+                break;
+              default:
+                break;
+            }
+            break;
+          default:
+            break;
         }
-        break;
-      default:
-        break;
+        default:
+          break;
     }
   }
   return FALSE;
