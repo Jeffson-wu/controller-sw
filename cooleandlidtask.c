@@ -18,7 +18,7 @@
 //#define USE_ADS1148 : discontiniued, now using internal ADC
 #define USE_CL_DATA_LOGGING
 #define USE_ANALOG_WATCH_DOG
-#define USE_TWO_LEVEL_LID_POWER
+//#define USE_TWO_LEVEL_LID_POWER
 #define DISABLE_ERROR_REPOTING
 
 
@@ -169,11 +169,11 @@ static uint16_t dacCh[1] = {0};
  * pwmCh[5],                           dummy PWM
  * DAC_OUT1     PA4
  * DAC_OUT2     PA5
- * ADC PCB Rev3: 
- * adcCh[0], ADC12_IN5 - PA5 - J177 :  Peltier_sens1  (Cold side)
- * adcCh[1], ADC12_IN6 - PA6 - J173 :  TopHeaterSens
- * adcCh[2], ADC12_IN7 - PA7 - J182 :  Ambient Air
- * adcCh[3], ADC12_IN0 - PA0 - J181 :  Temp_sens4  (Hot side)
+ * ADC PCB Rev3:                       Usage            Text on PCB 
+ * adcCh[0], ADC12_IN5 - PA5 - J177 :  Ambient Air      Top heater 1
+ * adcCh[1], ADC12_IN6 - PA6 - J173 :  TopHeaterSens    Top heater PCB connector
+ * adcCh[2], ADC12_IN7 - PA7 - J182 :  Cold side        Temp sensor 3
+ * adcCh[3], ADC12_IN0 - PA0 - J181 :  Hot side         Temp sensor 4
 
    NTC_ADC_IN0        a PA0/ADC12_IN0
    Peltier_DAC        a PA4/DAC_OUT1  (/ADC12_IN4)
@@ -403,19 +403,19 @@ int getCLMonitor(char *poutText)
   char str[20];
   *poutText = 0;  //add string termination
   strcat(poutText,"coolandlid_monitor={");
-  Itoa(*lidHeater[0].io.ctrVal, str);      // th_pwm
+  Itoa(*lidHeater[0].io.ctrVal, str);   // th_pwm
   strcat(poutText,str);
   strcat(poutText, ","); 
-  Itoa(0, str);    // TODO: Add mode  // th_mode
+  Itoa(clState, str);                   // clState
   strcat(poutText,str);
   strcat(poutText, ","); 
-  Itoa(*fan[0].io.ctrVal, str);      // fan_pwm
+  Itoa(*fan[0].io.ctrVal, str);         // fan_pwm
   strcat(poutText,str);
   strcat(poutText, ","); 
-  Itoa(*peltier[0].io.ctrVal, str);  // peltier_dac
+  Itoa(*peltier[0].io.ctrVal, str);     // peltier_dac
   strcat(poutText,str);
   strcat(poutText, ","); 
-  Itoa(readADC(ADC_VMON_MUX_CH), str);          // peltier_voltage
+  Itoa(readADC(ADC_VMON_MUX_CH), str);  // peltier_voltage
   strcat(poutText,str);
   strcat(poutText, "}");
   return 0;
@@ -895,7 +895,8 @@ void CoolAndLidTask( void * pvParameters )
 #endif
 
 #ifdef USE_TWO_LEVEL_LID_POWER
-    if(1) { //(NoWell == mode) {
+    // TODO: Reset controller when changing TH power state
+    if(CL_STATE_CLNOK == clState) {
       // Bottom heaters disabled : full power on top heater
       if(MANUAL_STATE != lidHeater[0].state) {
         *pwmChMirror[0] = *pwmChMirror[1] = *(lidHeater[0].io.ctrVal);
@@ -904,27 +905,30 @@ void CoolAndLidTask( void * pvParameters )
     else
     {
       // Bottom heaters enabled : reduced power on top heater
-      static char toggle = 0;
-      if(0 == toggle)
+      static char th_pwr_toggle = 0;
+      if(0 == th_pwr_toggle)
       {
         *pwmChMirror[1] = *(lidHeater[0].io.ctrVal);
         *pwmChMirror[0] = 0;
-        toggle = 1;
+        th_pwr_toggle = 1;
       }
       else
       {
         *pwmChMirror[0] = *(lidHeater[0].io.ctrVal);
         *pwmChMirror[1] = 0;
-        toggle = 0;
+        th_pwr_toggle = 0;
       }
+    }
+#else
+    // Full power on top heater
+    if(MANUAL_STATE != lidHeater[0].state) {
+      *pwmChMirror[0] = *pwmChMirror[1] = *(lidHeater[0].io.ctrVal);
     }
 #endif
 
-    PWM_Set(pwmCh[0], PWM0_TIM4CH3);
-    PWM_Set(pwmCh[1], PWM1_TIM4CH4);
-    //PC6 is now Peltier_EN  PWM_Set(pwmCh[2], PWM2_TIM3CH1);
-    PWM_Set(pwmCh[3], PWM3_TIM3CH2);
-    PWM_Set(pwmCh[4], PWM4_TIM3CH3);
+    PWM_Set(pwmCh[0], PWM0_TIM4CH3);  /* pwmCh[0], TIM4,CH3 - PB8 -  J175 :  TopHeater1Ctrl */
+    PWM_Set(pwmCh[1], PWM1_TIM4CH4);  /* pwmCh[1], TIM4,CH4 - PB9 -  J26  :  TopHeater2Ctrl */
+    PWM_Set(pwmCh[3], PWM3_TIM3CH2);  /* pwmCh[3], TIM3,CH2 - PC7 -  J176 :  FAN control    */
     
     if (dacCh[0] > DAC_UPPER_LIMIT) { dacCh[0] = DAC_UPPER_LIMIT; }
     DAC_SetChannel1Data(DAC_Align_12b_R, dacCh[0]);

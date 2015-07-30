@@ -38,7 +38,7 @@ void lid_heater_init_feedback_ctr(controller_t * controller)
 
 void lid_heater_controller(lidHeater_t *lidHeater)
 {
-	lidHeater->controller.setPoint = 2700; //???oC  //<< ToDo: read from calib
+  lidHeater->controller.setPoint = 1647; // 470ohm series resistor this should be 100oC  //<< ToDo: read from calib
   int64_t ctr_out = 0;
 #ifdef TEMPORARY
   int16_t Kp = 45; //1.5;
