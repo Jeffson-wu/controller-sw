@@ -198,10 +198,10 @@ static uint16_t dacCh[1] = {0};
  */ 
 
 // Fan controll is based on the temp diff: adcDiff[0] =  Fin temp - Ambient temp
-static int16_t *adcDiffSource[2] = {&adcCh[3], &adcCh[2]};
+static int16_t *adcDiffSource[2] = {&adcCh[3], &adcCh[0]};
 
 static peltier_t peltier[nPELTIER] = {
-  {PELTIER_1, STOP_STATE, { &dacCh[0], &adcCh[0]}} //, {-26213}
+  {PELTIER_1, STOP_STATE, { &dacCh[0], &adcCh[2]}} //, {-26213}
 };
 
 static lidHeater_t lidHeater[nLID_HEATER] = {
