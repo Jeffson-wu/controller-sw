@@ -964,7 +964,6 @@ void CoolAndLidTask( void * pvParameters )
     xSemaphoreTake(xADCSemaphore, portMAX_DELAY);
     /* The semaphore is given when the ADC is done */
     /* Read lastest ADC samples into buffer */
-    configASSERT(peltier[0].io.adcVal == &adcCh[2]);
 
     #ifdef USE_M3_ADC
     adcGetLatest(&adcCh[0], &adcCh[1], &adcCh[2], &adcCh[3]);
@@ -974,15 +973,9 @@ void CoolAndLidTask( void * pvParameters )
     adcDiff[0] =  adc_2_temp(*adcDiffSource[1]) - adc_2_temp(*adcDiffSource[0]); // Fan controll is based on the temp diff
 #ifndef STANDALONE
 
-    configASSERT(peltier[0].io.adcVal == &adcCh[2]);
     peltier_controller(&peltier[0]);
-    configASSERT(peltier[0].io.adcVal == &adcCh[2]);
     fan_controller(&fan[0]);
-    configASSERT(peltier[0].io.adcVal == &adcCh[2]);
     lid_heater_controller(&lidHeater[0]);
-    configASSERT(peltier[0].io.adcVal == &adcCh[2]);
-
-
 
     switch (peltier->state) {
       case CTR_STOP_STATE:
@@ -1040,7 +1033,6 @@ void CoolAndLidTask( void * pvParameters )
       *pwmChMirror[0] = *pwmChMirror[1] = *(lidHeater[0].io.ctrVal);
     }
 #endif
-    configASSERT(peltier[0].io.adcVal == &adcCh[2]);
 
     PWM_Set(pwmCh[0], PWM0_TIM4CH3);  /* pwmCh[0], TIM4,CH3 - PB8 -  J175 :  TopHeater1Ctrl */
     PWM_Set(pwmCh[1], PWM1_TIM4CH4);  /* pwmCh[1], TIM4,CH4 - PB9 -  J26  :  TopHeater2Ctrl */
@@ -1049,7 +1041,6 @@ void CoolAndLidTask( void * pvParameters )
     if (dacCh[0] > DAC_UPPER_LIMIT) { dacCh[0] = DAC_UPPER_LIMIT; }
     DAC_SetChannel1Data(DAC_Align_12b_R, dacCh[0]);
     //DAC_SetChannel2Data(DAC_Align_12b_R, dacCh[1]);
-    configASSERT(peltier[0].io.adcVal == &adcCh[2]);
 
     /* Add to log */
 #ifdef USE_CL_DATA_LOGGING
@@ -1083,11 +1074,8 @@ void CoolAndLidTask( void * pvParameters )
         {
           SetCooleAndLidReq *p;
           p=(SetCooleAndLidReq *)(msg->ucData);
-          if(p->idx-1 < nLID_HEATER) {
-            lidHeater[p->idx-1].controller.setPoint = temp_2_adc(p->value);
-            lidHeater[p->idx-1].state = CTR_CLOSED_LOOP_STATE;
-            //lidData[1].regulator.state = CTRL_CLOSED_LOOP_STATE;
-          }
+          lidHeater[0].controller.setPoint = temp_2_adc(p->value);
+          lidHeater[0].state = CTR_CLOSED_LOOP_STATE;
         }
         break;
         case SET_LID_PWM:
