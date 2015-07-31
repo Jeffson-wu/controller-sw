@@ -279,10 +279,6 @@ Tubeloop_t Tubeloop[NTUBES] = {
   { TUBE_INIT, TUBE_P_NORM,0,0,0,0,0,0,0, {}, {0,0,End,0} }
 };
 
-extern xQueueHandle ModbusQueueHandle;
-extern xQueueHandle TubeSequencerQueueHandle;
-extern xQueueHandle LogQueueHandle;
-
 /* Private function prototypes -----------------------------------------------*/
 void vTimerCallback( xTimerHandle pxTimer );
 void NeighbourTubeTimerCallback( xTimerHandle pxTimer );
@@ -2050,6 +2046,14 @@ void TubeSequencerTask( void * pvParameter)
           }
           break;
 #endif // USE_NEIGHBOUR_TUBE_TEMP_FEATURE
+        case WRITE_MODBUS_REGS:
+          {
+            WriteModbusRegsReq *p;
+            p=(WriteModbusRegsReq *)(msg->ucData);
+            /* "addr" is first reg, "datasize" is reg count, "data" is wrong endian       */
+            seqWriteRegs(p->slave, p->addr, (u16*)p->data, p->datasize);
+          }
+          break;
         default:
           DEBUG_SEQ_PRINTF("***UNHANDLED MESSAGE*** %s",
             signals_txt[(unsigned char)msg->ucMessageID]);

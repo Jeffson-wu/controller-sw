@@ -696,7 +696,8 @@ bool coolLidReadRegs(u8 slave, u16 addr, u16 datasize, u16 *buffer)
       default:
         break;
     }
-    *(buffer + reg) = Swap2Bytes(val); // correct endianess
+    //DEBUG_PRINTF("coolLidReadRegs s:%d, r:%d, d:%d", slave, addr + reg, val);
+    if(0 != buffer) { *(buffer + reg) = Swap2Bytes(val); } // correct endianess
   }
   return FALSE;
 }
@@ -710,6 +711,7 @@ bool coolLidWriteRegs(u8 slave, u16 addr, u16 *data, u16 datasize)
   for (reg = 0; reg < datasize; reg++)
   {
     val = Swap2Bytes(*(data + reg)); // correct endianess
+    //DEBUG_PRINTF("coolLidWriteRegs s:%d, r:%d, d:%d", slave, addr + reg, val);
     switch((heater_regs_t)(addr + reg))
     {
       case SETPOINT_REG:
@@ -1238,6 +1240,42 @@ void CoolAndLidTask( void * pvParameters )
           }
         }
         break;
+        case WRITE_MODBUS_REGS:
+          {
+            WriteModbusRegsReq *p;
+            p=(WriteModbusRegsReq *)(msg->ucData);
+            /* "addr" is first reg, "datasize" is reg count, "data" is wrong endian       */
+            coolLidWriteRegs(p->slave, p->addr, (u16 *)p->data, p->datasize);
+          }
+          break;
+        case READ_MODBUS_REGS:
+          {
+            xMessage *msgout;
+            ReadModbusRegsReq *p;
+            ReadModbusRegsRes *po;
+            p=(ReadModbusRegsReq *)(msg->ucData);
+            if(p->reply)
+            {
+              msgout=pvPortMalloc(sizeof(xMessage)+sizeof(ReadModbusRegsRes)+p->datasize*sizeof(u16));
+              if(msgout)
+              {
+                po=(ReadModbusRegsRes *)(msgout->ucData);
+                msgout->ucMessageID=READ_MODBUS_REGS_RES;
+                po->slave=p->slave;
+                po->addr=p->addr;
+                po->datasize=p->datasize;
+                po->resultOk=FALSE;
+                //bool coolLidReadRegs(u8 slave, u16 addr, u16 datasize, u16 *buffer)
+                coolLidReadRegs(p->slave, p->addr, p->datasize, (u16*)po->data);
+                po->resultOk=NO_ERROR;
+                xQueueSend(p->reply, &msgout, portMAX_DELAY);
+              }
+            }
+            else
+            {
+              coolLidReadRegs(p->slave, p->addr, p->datasize, 0);
+            }
+          }
         default:
           break; //ignore message
       }      

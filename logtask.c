@@ -42,7 +42,6 @@
 
 /* Private debug define ------------------------------------------------------*/
 
-extern xQueueHandle ModbusQueueHandle;
 xQueueHandle LogQueueHandle;
 
 void LogOn(int log_time);

@@ -69,15 +69,13 @@ static u8 gdiEcho = FALSE;
 
 xSemaphoreHandle GDI_RXSemaphore = NULL;
 
-extern xQueueHandle ModbusQueueHandle;
-extern xQueueHandle CoolAndLidQueueHandle;
-extern xQueueHandle GDIQueueHandle;
-
 USART_TypeDef *uart = USART1;
 u32 test_variable= 9876543;
 
 u8 DebugModbusReadRegs(u8 slave, u16 addr, u16 register_count, u8 *buffer);
+u8 DebugReadRegs(xQueueHandle destQueue, u8 slave, u16 addr, u16 register_count, u8 *buffer);
 bool DebugModbusWriteRegs(u8 slave, u16 addr, u8 *data, u16 register_count);
+bool DebugWriteRegs(xQueueHandle destQueue, u8 slave, u16 addr, u8 *data, u16 register_count);
 
 enum gdi_response_type
 {
@@ -1313,7 +1311,8 @@ void gdi_map_to_functions()
             }
             else if(slave <= 20)
             { // Adresses 17 - 20 are mapped to cool and lid, addr is reg, datasize is reg count, buffer is wrong endian
-              result = coolLidReadRegs(slave, addr, datasize, (u16 *)buffer.uint16);
+              //result = coolLidReadRegs(slave, addr, datasize, (u16 *)buffer.uint16);
+              result = DebugReadRegs(CoolAndLidQueueHandle, slave, addr, datasize, (u8 *)buffer.uint16);
             }
             else
             {
@@ -1383,18 +1382,20 @@ void gdi_map_to_functions()
             }
             else if(slave <= 19)
             { // Adresses 17 - 19 are mapped to cool and lid, addr is reg, datasize is reg count, buffer is wrong endian
-              result = coolLidWriteRegs(slave, addr, (u16 *)buffer.uint16, datasize);
+              //result = coolLidWriteRegs(slave, addr, (u16 *)buffer.uint16, datasize);
+              result = DebugWriteRegs(CoolAndLidQueueHandle, slave, addr, (u8 *)buffer.uint16, datasize);
             }
             else if(slave <= 20)
             { // Adresses 20 is mapped to sequencer, addr is reg, datasize is reg count, buffer is wrong endian
-              result = seqWriteRegs(slave, addr, (u16 *)buffer.uint16, datasize);
+              //result = seqWriteRegs(slave, addr, (u16 *)buffer.uint16, datasize);
+              result = DebugWriteRegs(TubeSequencerQueueHandle, slave, addr, (u8 *)buffer.uint16, datasize);
             }
             if(gdiEcho) {
               gdi_send_data_response("The return value is : ", newline_start);
               gdi_print_number(result, newline_end);
             }
             if (result != NO_ERROR) {
-              gdi_send_data_response("Register Write Failed!", newline_end);
+              gdi_send_data_response("NOK Register Write Failed!", newline_end);
             } else {
               gdi_send_data_response("OK", newline_end);
             }
@@ -1642,6 +1643,7 @@ void gdi_task(void *pvParameters)
   vTaskDelete(NULL);
 }
 
+/* ---------------------------------------------------------------------------*/
 u8 DebugModbusReadRegs(u8 slave, u16 addr, u16 register_count, u8 *buffer)
 {
   xMessage *msgin;
@@ -1688,6 +1690,7 @@ u8 DebugModbusReadRegs(u8 slave, u16 addr, u16 register_count, u8 *buffer)
   return 0;
 }
 
+/* ---------------------------------------------------------------------------*/
 bool DebugModbusWriteRegs(u8 slave, u16 addr, u8 *data, u16 register_count)
 {
   xMessage *msgout;
@@ -1711,5 +1714,81 @@ bool DebugModbusWriteRegs(u8 slave, u16 addr, u8 *data, u16 register_count)
   }
   return 0;
 }
+
+/* ---------------------------------------------------------------------------*/
+u8 DebugReadRegs(xQueueHandle destQueue, u8 slave, u16 addr, u16 register_count, u8 *buffer)
+{
+  xMessage *msgin;
+  xMessage *msgout;
+  ReadModbusRegsReq *pReq;
+  msgout=pvPortMalloc(sizeof(xMessage)+sizeof(ReadModbusRegsReq));
+  if(NULL == msgout)
+  {
+    GDI_PRINTF("Malloc failed! DebugReadRegs: Slave %d, Reg %d",slave,addr);
+    return -1;
+  }
+  else
+  {
+    //GDI_PRINTF("DebugReadRegs: Slave %d, Reg %d",slave,addr);
+    msgout->ucMessageID = READ_MODBUS_REGS;
+    pReq = (ReadModbusRegsReq *)msgout->ucData;
+    pReq->slave = slave;
+    pReq->addr = addr;
+    pReq->datasize = register_count;
+    pReq->reply = GDIQueueHandle;
+    assert_param(xQueueSend(destQueue, &msgout, portMAX_DELAY)== pdPASS);
+    if( xQueueReceive(GDIQueueHandle , &msgin, (TickType_t)0 ) == pdPASS ) // Empty the queue. do not wait if the queue is empty
+    {
+       vPortFree(msgin);
+    }
+    /* wait for queue msg */
+    if( xQueueReceive( GDIQueueHandle, &msgin, (TickType_t)500 ) == pdPASS ) // How long to wait. MB queue size is 10, MB timeout is 100ms -> more than a sec??
+    {
+      ReadModbusRegsRes *preg;
+      u16 *modbus_data = (u16*)buffer;
+      int i=0;
+      
+      preg = (ReadModbusRegsRes *)msgin->ucData;
+      for(i = 0; i < (preg->datasize); i++)
+      {
+        modbus_data[i] =(((u16)(preg->data[i*2])) | (preg->data[(i*2)+1]<<8));
+      }
+      vPortFree(msgin);
+    }
+    else
+    {
+      return -2;
+    }
+  }
+  return 0;
+}
+
+/* ---------------------------------------------------------------------------*/
+bool DebugWriteRegs(xQueueHandle destQueue, u8 slave, u16 addr, u8 *data, u16 register_count)
+{
+  xMessage *msgout;
+  WriteModbusRegsReq *pReq;
+  msgout=pvPortMalloc(sizeof(xMessage)+sizeof(ReadModbusRegsReq));
+  if(NULL == msgout)
+  {
+    GDI_PRINTF("Malloc failed! DebugWriteRegs Slave %d, Reg %d",slave,addr);
+    return -1;
+  }
+  else
+  {
+    //GDI_PRINTF("DebugWriteRegs Slave %d, Reg %d",slave,addr);
+    msgout->ucMessageID = WRITE_MODBUS_REGS;
+    pReq = (WriteModbusRegsReq *)msgout->ucData;
+    pReq->slave = slave;
+    pReq->addr = addr;
+    pReq->datasize = register_count;
+    pReq->reply = NULL; //we do not want the reply
+    memcpy(pReq->data, data, register_count*sizeof(u16));
+    assert_param(xQueueSend(destQueue, &msgout, portMAX_DELAY)== pdPASS);
+  }
+  return 0;
+}
+
+/* ---------------------------------------------------------------------------*/
 
 

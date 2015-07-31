@@ -122,5 +122,11 @@ typedef struct
   s16 value;
 } SetCLStatusReq;
 
-#endif
+extern xQueueHandle ModbusQueueHandle;
+extern xQueueHandle TubeSequencerQueueHandle;
+extern xQueueHandle LogQueueHandle;
+extern xQueueHandle GDIQueueHandle;
+extern xQueueHandle CoolAndLidQueueHandle;
+
+#endif /* __SIGNALS_H */
 

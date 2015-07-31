@@ -63,11 +63,8 @@
 
 /* ---------------------------------------------------------------------------*/
 /* Task Message Queues -------------------------------------------------------*/
-extern xQueueHandle ModbusQueueHandle;
 xQueueHandle TubeSequencerQueueHandle;
-extern xQueueHandle LogQueueHandle;
 xQueueHandle GDIQueueHandle;
-extern xQueueHandle CoolAndLidQueueHandle;
 
 /* ---------------------------------------------------------------------------*/
 /* Task Handles ---------------------------------------------------------------*/
