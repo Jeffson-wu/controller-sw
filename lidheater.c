@@ -83,7 +83,7 @@ void lid_heater_controller(lidHeater_t *lidHeater)
     { ctr_out = 0; }
   *lidHeater->io.ctrVal = ctr_out;
 
-#ifdef const_ctr_val
+#ifdef TEMPORARY
   *lidHeater->io.ctrVal = 1100; //ToDo: remove.
 #endif
 }
