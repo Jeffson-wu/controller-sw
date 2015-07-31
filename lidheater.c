@@ -19,8 +19,6 @@
 /* Includes ------------------------------------------------------------------*/
 #include "lidheater.h"
 
-#define TEMPORARY
-
 /* ---------------------------------------------------------------------------*/
 /* Lid handling */
 /* ---------------------------------------------------------------------------*/
@@ -38,34 +36,31 @@ void lid_heater_init_feedback_ctr(controller_t * controller)
 
 void lid_heater_controller(lidHeater_t *lidHeater)
 {
-  lidHeater->controller.setPoint = 1647; // 470ohm series resistor this should be 100oC  //<< ToDo: read from calib
   int64_t ctr_out = 0;
 #ifdef TEMPORARY
   int16_t Kp = 45; //1.5;
 #endif
 
   switch (lidHeater->state) {
-    case STOP_STATE:
+    case CTR_STOP_STATE:
     {
       *lidHeater->io.ctrVal = 0;
-      lidHeater->state = CTRL_CLOSED_LOOP_STATE; // << remove
+      lidHeater->state = CTR_CLOSED_LOOP_STATE; // << remove
     } 
     break;
-    case MANUAL_STATE:
+    case CTR_MANUAL_STATE:
     {
       return; // No action in manuel state
     } 
     break;
-    case CTRL_OPEN_LOOP_STATE:
+    case CTR_OPEN_LOOP_STATE:
     {
-      ctr_out = 32767;
-
-      if (*lidHeater->io.adcVal > (lidHeater->controller.setPoint-40)) //ca -10oC
-      	lidHeater->state = CTRL_CLOSED_LOOP_STATE;
+    	ctr_out = (double)lidHeater->controller.setPoint;
     }
     break;
-    case CTRL_CLOSED_LOOP_STATE:
+    case CTR_CLOSED_LOOP_STATE:
     {
+    	lidHeater->controller.setPoint = 1647; // 470ohm series resistor this should be 100oC  //<< ToDo: read from calib
 #ifdef TEMPORARY
     	ctr_out = Kp*(lidHeater->controller.setPoint - *lidHeater->io.adcVal);
 #else
@@ -82,8 +77,4 @@ void lid_heater_controller(lidHeater_t *lidHeater)
   if (ctr_out)
     { ctr_out = 0; }
   *lidHeater->io.ctrVal = ctr_out;
-
-#ifdef TEMPORARY
-  *lidHeater->io.ctrVal = 1100; //ToDo: remove.
-#endif
 }

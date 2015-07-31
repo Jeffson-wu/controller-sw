@@ -33,6 +33,7 @@ typedef struct PELTIER {
   io_t								io;
   controller_t        controller;
   rateLimiter_t       rateLimiter;
+  int16_t             setPoint;
 } peltier_t;
 
 

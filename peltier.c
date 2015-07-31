@@ -19,7 +19,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "peltier.h"
 
-#define TEMPORARY
+//#define TEMPORARY
 
 /* ---------------------------------------------------------------------------*/
 /* Peltier handling */
@@ -38,40 +38,44 @@ void peltier_init_feedback_ctr(controller_t * controller)
 
 void peltier_controller(peltier_t *peltier)
 {
-  peltier->controller.setPoint = 1600; //??oC  //<< ToDo: read from calib
+
   int64_t ctr_out = 0;
 
   switch (peltier->state) {
-    case STOP_STATE:
+    case CTR_STOP_STATE:
     {
       *peltier->io.ctrVal = 0;
-      peltier->state = CTRL_CLOSED_LOOP_STATE; //Starts when power on
+      peltier->state = CTR_CLOSED_LOOP_STATE; //Starts when power on
+      //peltier->controller.diff_eq.input = 0;
     }
     break;
-    case MANUAL_STATE:
+    case CTR_MANUAL_STATE:
     {
       return; // No action in manuel state
     } 
     break;
-    case CTRL_OPEN_LOOP_STATE:
+    case CTR_OPEN_LOOP_STATE:
     {
-      peltier->state = CTRL_CLOSED_LOOP_STATE;
+    	ctr_out = (double)peltier->setPoint;
     } 
     break;
-    case CTRL_CLOSED_LOOP_STATE:
+    case CTR_CLOSED_LOOP_STATE:
     {
+    	peltier->setPoint = 1600; // move!!
+      peltier->controller.setPoint = rate_limiter(&peltier->rateLimiter, (double)peltier->setPoint);
+      
       ctr_out = feedback_controller(&peltier->controller, *peltier->io.adcVal);
     }
     break;
     default:
     break;
   }
-
+#if 1
   if (ctr_out > DAC_UPPER_LIMIT)
     { ctr_out = DAC_UPPER_LIMIT; }
   if (ctr_out < 0)
     { ctr_out = 0; }
-
+#endif
   *peltier->io.ctrVal = ctr_out;
 
 #ifdef TEMPORARY

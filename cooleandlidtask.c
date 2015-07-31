@@ -24,7 +24,7 @@
 
 /* Private debug define ------------------------------------------------------*/
 //#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
-//#define DEBUG_COOL
+#define DEBUG_COOL
 //#define DEBUG_LOGGING
 //#define STANDALONE /*Defines if the M3 Runs with or without Linux box*/
 
@@ -201,22 +201,22 @@ static uint16_t dacCh[1] = {0};
 static int16_t *adcDiffSource[2] = {&adcCh[3], &adcCh[0]};
 
 static peltier_t peltier[nPELTIER] = {
-  {PELTIER_1, STOP_STATE, { &dacCh[0], &adcCh[2]}} //, {-26213}
+  {PELTIER_1, CTR_STOP_STATE, { &dacCh[0], &adcCh[2]}} //, {-26213}
 };
 
 static lidHeater_t lidHeater[nLID_HEATER] = {
-  {LID_HEATER_1, STOP_STATE, {&pwmCh[5], &adcCh[1]}} //-26213,
+  {LID_HEATER_1, CTR_STOP_STATE, {&pwmCh[5], &adcCh[1]}} //-26213,
 };
 
 static uint16_t *pwmChMirror[2] = {&pwmCh[0], &pwmCh[1]};
 
 static fan_t fan[nFAN] = {
-  {FAN_1, STOP_STATE, {&pwmCh[3], /*&adcDiff[0]*/ &adcCh[3]}} //0
+  {FAN_1, CTR_STOP_STATE, {&pwmCh[3], /*&adcDiff[0]*/ &adcCh[3]}} //0
 };
 
 calib_data_t __attribute__ ((aligned (2))) calib_data[3] = {
   /* Default calibration data - use if no valid data found in NVS */
-    { 15000   },       /* Lid     90degC */
+    { 15000  },       /* Lid     90degC */
     { -19963 },       /* Peltier  15degC */
     { -13528 }        /* Fan      40degC */
   };
@@ -325,7 +325,7 @@ void stopPeltier()
   GPIO_ResetBits(PELTIER_EN_PORT, PELTIER_EN_PIN);
   *peltier[0].io.ctrVal = 0;
   //*peltierData[1].regulator.pwmVal = 0;
-  peltier[0].state = STOP_STATE;
+  peltier[0].state = CTR_STOP_STATE;
   //peltierData[1].regulator.state = STOP_STATE;
 }
 
@@ -720,7 +720,7 @@ bool coolLidWriteRegs(u8 slave, u16 addr, u16 *data, u16 datasize)
             lidTempOK = FALSE;
             break;
           case PELTIER_ADDR:
-            peltier[0].controller.setPoint = val;
+            peltier[0].setPoint = val;
             coolTempOK = FALSE;
             break;
           case FAN_ADDR:
@@ -745,13 +745,13 @@ bool coolLidWriteRegs(u8 slave, u16 addr, u16 *data, u16 datasize)
             switch(slave)
             {
               case LID_ADDR:
-                lidHeater[0].state = STOP_STATE;
+                lidHeater[0].state = CTR_STOP_STATE;
                 break;
               case PELTIER_ADDR:
-                peltier[0].state = STOP_STATE;
+                peltier[0].state = CTR_STOP_STATE;
                 break;
               case FAN_ADDR:
-                fan[0].state = STOP_STATE;
+                fan[0].state = CTR_STOP_STATE;
                 break;
               default:
                 break;
@@ -761,15 +761,15 @@ bool coolLidWriteRegs(u8 slave, u16 addr, u16 *data, u16 datasize)
             switch(slave)
             {
               case LID_ADDR:
-                lidHeater[0].state = CTRL_CLOSED_LOOP_STATE;
+                lidHeater[0].state = CTR_CLOSED_LOOP_STATE;
                 lidTempOK = FALSE;
                 break;
               case PELTIER_ADDR:
-                peltier[0].state = CTRL_CLOSED_LOOP_STATE;
+                peltier[0].state = CTR_CLOSED_LOOP_STATE;
                 coolTempOK = FALSE;
                 break;
               case FAN_ADDR:
-                fan[0].state = CTRL_CLOSED_LOOP_STATE;
+                fan[0].state = CTR_CLOSED_LOOP_STATE;
                 break;
               default:
                 break;
@@ -779,15 +779,15 @@ bool coolLidWriteRegs(u8 slave, u16 addr, u16 *data, u16 datasize)
             switch(slave)
             {
               case LID_ADDR:
-                lidHeater[0].state = MANUAL_STATE;
+                lidHeater[0].state = CTR_MANUAL_STATE;
                 lidTempOK = FALSE;
                 break;
               case PELTIER_ADDR:
-                peltier[0].state = MANUAL_STATE;
+                peltier[0].state = CTR_MANUAL_STATE;
                 coolTempOK = FALSE;
                 break;
               case FAN_ADDR:
-                fan[0].state = MANUAL_STATE;
+                fan[0].state = CTR_MANUAL_STATE;
                 break;
               default:
                 break;
@@ -797,13 +797,13 @@ bool coolLidWriteRegs(u8 slave, u16 addr, u16 *data, u16 datasize)
             switch(slave)
             {
               case LID_ADDR:
-                lidHeater[0].state = STOP_STATE;
+                lidHeater[0].state = CTR_STOP_STATE;
                 break;
               case PELTIER_ADDR:
-                peltier[0].state = STOP_STATE;
+                peltier[0].state = CTR_STOP_STATE;
                 break;
               case FAN_ADDR:
-                fan[0].state = STOP_STATE;
+                fan[0].state = CTR_STOP_STATE;
                 break;
               default:
                 break;
@@ -813,15 +813,15 @@ bool coolLidWriteRegs(u8 slave, u16 addr, u16 *data, u16 datasize)
             switch(slave)
             {
               case LID_ADDR:
-                lidHeater[0].state = CTRL_OPEN_LOOP_STATE;
+                lidHeater[0].state = CTR_OPEN_LOOP_STATE;
                 lidTempOK = FALSE;
                 break;
               case PELTIER_ADDR:
-                peltier[0].state = CTRL_OPEN_LOOP_STATE;
+                peltier[0].state = CTR_OPEN_LOOP_STATE;
                 coolTempOK = FALSE;
                 break;
               case FAN_ADDR:
-                fan[0].state = CTRL_OPEN_LOOP_STATE;
+                fan[0].state = CTR_OPEN_LOOP_STATE;
                 break;
               default:
                 break;
@@ -831,13 +831,13 @@ bool coolLidWriteRegs(u8 slave, u16 addr, u16 *data, u16 datasize)
             switch(slave)
             {
               case LID_ADDR:
-                lidHeater[0].state = CTRL_CLOSED_LOOP_STATE;
+                lidHeater[0].state = CTR_CLOSED_LOOP_STATE;
                 break;
               case PELTIER_ADDR:
-                peltier[0].state = CTRL_CLOSED_LOOP_STATE;
+                peltier[0].state = CTR_CLOSED_LOOP_STATE;
                 break;
               case FAN_ADDR:
-                fan[0].state = CTRL_CLOSED_LOOP_STATE;
+                fan[0].state = CTR_CLOSED_LOOP_STATE;
                 break;
               default:
                 break;
@@ -937,17 +937,21 @@ void CoolAndLidTask( void * pvParameters )
   while(1)
   {
   #ifdef DEBUG_COOL
-    if (cnt == 30)
+    if (cnt == 10)
     {
       static int toggle = 0;
-      PRINTF("PEL_OUT:%d, PEL_IN:%d, FAN_OUT:%d, FAN_IN:%d, LID_OUT:%d, LID_IN:%d", dacCh[0], adcCh[0], pwmCh[3], adcCh[3], pwmCh[5], adcCh[1]);
+      //PRINTF("PEL_OUT:%d, PEL_IN:%d, FAN_OUT:%d, FAN_IN:%d, LID_OUT:%d, LID_IN:%d", dacCh[0], adcCh[0], pwmCh[3], adcCh[3], pwmCh[5], adcCh[1]);
+
+      //PRINTF("%d, %d, %d, %d, %d, %d", *peltier[0].io.ctrVal, *peltier[0].io.adcVal, *fan[0].io.ctrVal, *fan[0].io.adcVal, *lidHeater[0].io.ctrVal, *lidHeater[0].io.adcVal);
+      PRINTF("%d, %d, %d, %d, %d, %d, %d", *peltier[0].io.ctrVal, *peltier[0].io.adcVal, adcCh[2], *fan[0].io.ctrVal, *fan[0].io.adcVal, *lidHeater[0].io.ctrVal, *lidHeater[0].io.adcVal);
+
       //DEBUG_PRINTF("Adc:%4d, %4d, %4d, %4d", adcCh[0], adcCh[1], adcCh[2], adcCh[3]);
       cnt = 0;
       if(toggle) {
-        DEBUG_PRINTF("vmon: %d", readADC(ADC_VMON_MUX_CH));
+        //DEBUG_PRINTF("vmon: %d", readADC(ADC_VMON_MUX_CH));
         toggle = 0;
       } else {
-        DEBUG_PRINTF("hw_id: %d", readADC(ADC_HW_REV_ID_MUX_CH));
+        //DEBUG_PRINTF("hw_id: %d", readADC(ADC_HW_REV_ID_MUX_CH));
         toggle = 1;
       }
     }
@@ -960,7 +964,9 @@ void CoolAndLidTask( void * pvParameters )
     xSemaphoreTake(xADCSemaphore, portMAX_DELAY);
     /* The semaphore is given when the ADC is done */
     /* Read lastest ADC samples into buffer */
-#ifdef USE_M3_ADC
+    configASSERT(peltier[0].io.adcVal == &adcCh[2]);
+
+    #ifdef USE_M3_ADC
     adcGetLatest(&adcCh[0], &adcCh[1], &adcCh[2], &adcCh[3]);
 #else
     adsGetLatest(&adcCh[0], &adcCh[1], &adcCh[2], &adcCh[3]);
@@ -968,25 +974,28 @@ void CoolAndLidTask( void * pvParameters )
     adcDiff[0] =  adc_2_temp(*adcDiffSource[1]) - adc_2_temp(*adcDiffSource[0]); // Fan controll is based on the temp diff
 #ifndef STANDALONE
 
-
+    configASSERT(peltier[0].io.adcVal == &adcCh[2]);
     peltier_controller(&peltier[0]);
+    configASSERT(peltier[0].io.adcVal == &adcCh[2]);
     fan_controller(&fan[0]);
+    configASSERT(peltier[0].io.adcVal == &adcCh[2]);
     lid_heater_controller(&lidHeater[0]);
+    configASSERT(peltier[0].io.adcVal == &adcCh[2]);
 
 
 
     switch (peltier->state) {
-      case STOP_STATE:
+      case CTR_STOP_STATE:
       {
         GPIO_ResetBits(PELTIER_EN_PORT, PELTIER_EN_PIN);  //Disable Peltier
       }
       break;
-      case CTRL_OPEN_LOOP_STATE:
+      case CTR_OPEN_LOOP_STATE:
       {
         GPIO_SetBits(PELTIER_EN_PORT, PELTIER_EN_PIN); //Enable peltier
       }
       break;
-      case CTRL_CLOSED_LOOP_STATE:
+      case CTR_CLOSED_LOOP_STATE:
       {
         GPIO_SetBits(PELTIER_EN_PORT, PELTIER_EN_PIN); //Enable peltier
       }
@@ -995,8 +1004,8 @@ void CoolAndLidTask( void * pvParameters )
       break;
     }
 
-    if( abs(peltier->controller.setPoint - *peltier->io.adcVal) < 10 ) { coolTempOK = TRUE; }
-    if( abs(lidHeater->controller.setPoint - *lidHeater->io.adcVal) < 10 ) { lidTempOK = TRUE; }
+    if( abs(peltier->controller.setPoint - *peltier[0].io.adcVal) < 10 ) { coolTempOK = TRUE; }
+    if( abs(lidHeater->controller.setPoint - *lidHeater[0].io.adcVal) < 10 ) { lidTempOK = TRUE; }
 
 #endif
 
@@ -1027,10 +1036,11 @@ void CoolAndLidTask( void * pvParameters )
     }
 #else
     // Full power on top heater
-    if(MANUAL_STATE != lidHeater[0].state) {
+    if(CTR_MANUAL_STATE != lidHeater[0].state) {
       *pwmChMirror[0] = *pwmChMirror[1] = *(lidHeater[0].io.ctrVal);
     }
 #endif
+    configASSERT(peltier[0].io.adcVal == &adcCh[2]);
 
     PWM_Set(pwmCh[0], PWM0_TIM4CH3);  /* pwmCh[0], TIM4,CH3 - PB8 -  J175 :  TopHeater1Ctrl */
     PWM_Set(pwmCh[1], PWM1_TIM4CH4);  /* pwmCh[1], TIM4,CH4 - PB9 -  J26  :  TopHeater2Ctrl */
@@ -1039,11 +1049,13 @@ void CoolAndLidTask( void * pvParameters )
     if (dacCh[0] > DAC_UPPER_LIMIT) { dacCh[0] = DAC_UPPER_LIMIT; }
     DAC_SetChannel1Data(DAC_Align_12b_R, dacCh[0]);
     //DAC_SetChannel2Data(DAC_Align_12b_R, dacCh[1]);
+    configASSERT(peltier[0].io.adcVal == &adcCh[2]);
 
     /* Add to log */
 #ifdef USE_CL_DATA_LOGGING
     logUpdate(&adcCh[0], &adcCh[1], &adcCh[2], &adcCh[3]);
 #endif
+    configASSERT(peltier[0].io.adcVal == &adcCh[2]);
 
     /* Handle incomming messages if any */
     if( xQueueReceive( CoolAndLidQueueHandle, &msg, /*Do not block*/ 0) == pdPASS )
@@ -1055,7 +1067,7 @@ void CoolAndLidTask( void * pvParameters )
           long p;
           p = *((uint16_t *)(msg->ucData));
           *fan[0].io.ctrVal = p * 32768/100;
-          fan[0].state = CTRL_CLOSED_LOOP_STATE;
+          fan[0].state = CTR_CLOSED_LOOP_STATE;
         }
         break;
         case SET_COOL_TEMP:
@@ -1063,7 +1075,7 @@ void CoolAndLidTask( void * pvParameters )
           SetCooleAndLidReq *p;
           p=(SetCooleAndLidReq *)(msg->ucData);
           peltier[0].controller.setPoint = temp_2_adc(p->value);
-          peltier[0].state = CTRL_CLOSED_LOOP_STATE;
+          peltier[0].state = CTR_CLOSED_LOOP_STATE;
           coolTempOK = FALSE;
         }
         break;
@@ -1073,7 +1085,7 @@ void CoolAndLidTask( void * pvParameters )
           p=(SetCooleAndLidReq *)(msg->ucData);
           if(p->idx-1 < nLID_HEATER) {
             lidHeater[p->idx-1].controller.setPoint = temp_2_adc(p->value);
-            lidHeater[p->idx-1].state = CTRL_CLOSED_LOOP_STATE;
+            lidHeater[p->idx-1].state = CTR_CLOSED_LOOP_STATE;
             //lidData[1].regulator.state = CTRL_CLOSED_LOOP_STATE;
           }
         }
@@ -1083,12 +1095,12 @@ void CoolAndLidTask( void * pvParameters )
           SetCooleAndLidReq *p;
           p=(SetCooleAndLidReq *)(msg->ucData);
           *(lidHeater[p->idx-1].io.ctrVal) = (p->value);
-          lidHeater[p->idx-1].state = MANUAL_STATE;
+          lidHeater[p->idx-1].state = CTR_MANUAL_STATE;
         }
         break;
         case START_LID_HEATING:
         {
-          lidHeater[0].state = CTRL_CLOSED_LOOP_STATE;
+          lidHeater[0].state = CTR_CLOSED_LOOP_STATE;
           //lidData[1].regulator.state = CTRL_CLOSED_LOOP_STATE;
           coolTempOK = FALSE;
           lidTempOK = FALSE;
@@ -1096,7 +1108,7 @@ void CoolAndLidTask( void * pvParameters )
         break;
         case STOP_LID_HEATING:
         {
-          lidHeater[0].state = STOP_STATE;
+          lidHeater[0].state = CTR_STOP_STATE;
           //setCLStatusReg(0xf00f); //Set flag for stopped lid heating ####JRJ
           //lidData[1].regulator.state = STOP_STATE;
         }
@@ -1154,25 +1166,25 @@ void CoolAndLidTask( void * pvParameters )
             case 0:
               /* pwmCh[0], TIM4,CH3 - PB8 - J175 : PWM0_TIM4CH3 - TopHeater1Ctrl */
               if(0 == pPWMReq->value) {
-                lidHeater[0].state = STOP_STATE;
+                lidHeater[0].state = CTR_STOP_STATE;
               } else {
-                lidHeater[0].state = MANUAL_STATE;
+                lidHeater[0].state = CTR_MANUAL_STATE;
               }
               break;
             case 1:
               /* pwmCh[1], TIM4,CH4 - PB9 - J26  : PWM1_TIM4CH4 - FAN control */
               if(0 == pPWMReq->value) {
-                fan[0].state = STOP_STATE;
+                fan[0].state = CTR_STOP_STATE;
               } else {
-                fan[0].state = MANUAL_STATE;
+                fan[0].state = CTR_MANUAL_STATE;
               }
               break;
             case 2:
               /* pwmCh[2], TIM3,CH1 - PC6 - J33  : PWM2_TIM3CH1 - Peltier PWM 1 */
               if(0 == pPWMReq->value) {
-                peltier[0].state = STOP_STATE;
+                peltier[0].state = CTR_STOP_STATE;
               } else {
-                peltier[0].state = MANUAL_STATE;
+                peltier[0].state = CTR_MANUAL_STATE;
               }
               break;
             case 3:
@@ -1204,7 +1216,7 @@ void CoolAndLidTask( void * pvParameters )
                 } else { 
                   GPIO_SetBits(PELTIER_EN_PORT, PELTIER_EN_PIN);
                 }
-                peltier[0].state = MANUAL_STATE;
+                peltier[0].state = CTR_MANUAL_STATE;
                 break;
               case 1:
                 //??[?].regulator.state = MANUAL_STATE;

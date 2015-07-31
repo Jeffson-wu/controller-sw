@@ -41,7 +41,7 @@ typedef struct FAN {
 
 void init_fan(fan_t * fan);
 void fan_init_feedback_ctr(controller_t * controller);
-void fan_controller(fan_t *fan);
+void fan_controller(fan_t * fan);
 
 #endif /* __FAN_H */
 

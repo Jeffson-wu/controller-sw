@@ -19,8 +19,6 @@
 /* Includes ------------------------------------------------------------------*/
 #include "fan.h"
 
-#define TEMPORARY
-
 /* ---------------------------------------------------------------------------*/
 /* Fan handling */
 /* ---------------------------------------------------------------------------*/
@@ -38,28 +36,28 @@ void fan_init_feedback_ctr(controller_t * controller)
 
 void fan_controller(fan_t *fan)
 {
-  fan->controller.setPoint = 2600; //<< ToDo: read from calib
   int64_t ctr_out = 0;
 
   switch (fan->state) {
-    case STOP_STATE:
+    case CTR_STOP_STATE:
     {
       *fan->io.ctrVal = 0;
-      fan->state = CTRL_CLOSED_LOOP_STATE; //Starts when power on
+      fan->state = CTR_CLOSED_LOOP_STATE; //Starts when power on
     }
     break;
-    case MANUAL_STATE:
+    case CTR_MANUAL_STATE:
     {
       return; // No action in manuel state
     } 
     break;
-    case CTRL_OPEN_LOOP_STATE:
+    case CTR_OPEN_LOOP_STATE:
     {
-      fan->state = CTRL_CLOSED_LOOP_STATE;
+    	ctr_out = (double)fan->controller.setPoint;
     } 
     break;
-    case CTRL_CLOSED_LOOP_STATE:
+    case CTR_CLOSED_LOOP_STATE:
     {
+      fan->controller.setPoint = 2600; //<< ToDo: read from calib
     	ctr_out = feedback_controller(&fan->controller, *fan->io.adcVal);
     }
     break;

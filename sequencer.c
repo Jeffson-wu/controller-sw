@@ -38,7 +38,7 @@ extern xQueueHandle CoolAndLidQueueHandle;
 /* Private debug define ------------------------------------------------------*/
 //#define SIMULATE_HEATER /*Disable communication to M0 CPU's return temperature reached when temp is requested*/
 //#define USE_DEVELOPMENT_LOGGING
-#define DEBUG       /*General debug shows state changes of tubes (new temp, new time etc.)*/
+//#define DEBUG       /*General debug shows state changes of tubes (new temp, new time etc.)*/
 //#define DEBUG_SEQ   /*Debug of sequencer, to follow state of sequencer    */
 //#define DEBUG_IF    /*Debug of external interfaces modbus, IRQ and serial */
 //#define DEBUG_QUEUE /*Debug of stage queue */
