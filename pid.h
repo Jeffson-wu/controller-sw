@@ -23,11 +23,11 @@
 #define PWM_UPPER_LIMIT   32767
 
 typedef enum {
-  STOP_STATE,
-  MANUAL_STATE,
-  CTRL_OPEN_LOOP_STATE,
-  CTRL_CLOSED_LOOP_STATE,
-  nCTRL_STATES
+  CTR_STOP_STATE,
+  CTR_MANUAL_STATE,
+  CTR_OPEN_LOOP_STATE,
+  CTR_CLOSED_LOOP_STATE,
+  nCTR_STATES
 } controllerState_t;
 
 typedef struct {
@@ -79,7 +79,7 @@ double feedback_controller(controller_t *controller, int16_t processValue);
 double first_order_difference_equation(controller_t *controller, double input);
 void reset_controller(controller_t *controller);
 //void reset_rateLimiter(rateLimiter_t *rateLimiter, int16_t adc);
-//double rate_limiter(rateLimiter_t *rateLimiter, double input);
+double rate_limiter(rateLimiter_t *rateLimiter, double input);
 
 #endif /* __PID_H */
   /************************ (C) COPYRIGHT Xtel *****END OF FILE****/
