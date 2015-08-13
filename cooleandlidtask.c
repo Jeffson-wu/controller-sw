@@ -863,6 +863,7 @@ void CoolAndLidTask( void * pvParameters )
   xSemaphoreHandle xADCSemaphore = NULL;
 
   xMessage *msg;
+  medianFilter_t median[4];
 
 #ifdef DEBUG_COOL
   int8_t cnt = 0;
@@ -935,6 +936,10 @@ void CoolAndLidTask( void * pvParameters )
   init_peltier(&peltier[0]);
   init_fan(&fan[0]);
   init_lid_heater(&lidHeater[0]);
+  init_median_filter(&median[0]);
+  init_median_filter(&median[1]);
+  init_median_filter(&median[2]);
+  init_median_filter(&median[3]);
 
   while(1)
   {
@@ -974,7 +979,10 @@ void CoolAndLidTask( void * pvParameters )
 #endif
     adcDiff[0] =  adc_2_temp(*adcDiffSource[1]) - adc_2_temp(*adcDiffSource[0]); // Fan controll is based on the temp diff
 #ifndef STANDALONE
-
+    adcCh[0] = median_filter(&median[0], adcCh[0]);
+    adcCh[1] = median_filter(&median[1], adcCh[1]);
+    adcCh[2] = median_filter(&median[2], adcCh[2]);
+    adcCh[3] = median_filter(&median[3], adcCh[3]);
     peltier_controller(&peltier[0]);
     fan_controller(&fan[0]);
     lid_heater_controller(&lidHeater[0]);

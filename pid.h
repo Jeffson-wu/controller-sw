@@ -22,6 +22,8 @@
 #define DAC_UPPER_LIMIT   3725
 #define PWM_UPPER_LIMIT   32767
 
+#define MEDIAN_LENGTH 5
+
 typedef enum {
   CTR_STOP_STATE,
   CTR_MANUAL_STATE,
@@ -69,6 +71,12 @@ typedef struct {
   diff_eq_t           diff_eq;
 } controller_t;
 
+typedef struct MEDIAN_FILTER {
+  int16_t samples[MEDIAN_LENGTH];
+  uint8_t sortIdx[MEDIAN_LENGTH];
+  uint8_t samplesIdx;
+} medianFilter_t;
+
 
 
 /* Private define ------------------------------------------------------------*/
@@ -80,6 +88,8 @@ double first_order_difference_equation(controller_t *controller, double input);
 void reset_controller(controller_t *controller);
 //void reset_rateLimiter(rateLimiter_t *rateLimiter, int16_t adc);
 double rate_limiter(rateLimiter_t *rateLimiter, double input);
+void init_median_filter(medianFilter_t *medianFilter);
+int16_t median_filter(medianFilter_t *medianFilter, int16_t sample);
 
 #endif /* __PID_H */
   /************************ (C) COPYRIGHT Xtel *****END OF FILE****/
