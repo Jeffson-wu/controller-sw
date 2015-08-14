@@ -33,7 +33,11 @@ typedef struct PELTIER {
   io_t								io;
   controller_t        controller;
   rateLimiter_t       rateLimiter;
+  filter_t            filter;
+  ntcCoef_t           ntcCoef;
+  //int16_t             (*adc_to_temp)(peltier_t);
   int16_t             setPoint;
+  int16_t             adcValFilt;
 } peltier_t;
 
 
@@ -44,6 +48,9 @@ typedef struct PELTIER {
 void init_peltier(peltier_t * peltier);
 void peltier_init_feedback_ctr(controller_t * controller);
 void peltier_controller(peltier_t *peltier);
+void peltier_init_rate_limiter(rateLimiter_t * rateLimiter);
+void peltier_setpoint(peltier_t * peltier, int16_t value);
+void peltier_init_adc_to_temp(ntcCoef_t * ntcCoef);
 
 #endif /* __PELTIER_H */
 
