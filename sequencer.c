@@ -26,7 +26,7 @@
 extern xQueueHandle CoolAndLidQueueHandle;
 
 /* Private feature defines ---------------------------------------------------*/
-#define USE_SYNCHRONOUS_PROTOCOL /* All tubes are synced at temp hold timeout */
+//#define USE_SYNCHRONOUS_PROTOCOL /* All tubes are synced at temp hold timeout */
 #define USE_PAUSE_FEATURE
 #define USE_NEIGHBOUR_TUBE_TEMP_FEATURE
 #define USE_LOGGING_FEATURE

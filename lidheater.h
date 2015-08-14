@@ -18,6 +18,7 @@
 #define __LIDHEATER_H
 
 #include "pid.h"
+#include <math.h>
 
 /* Includes ------------------------------------------------------------------*/
 /* Exported types ------------------------------------------------------------*/
@@ -33,6 +34,11 @@ typedef struct LID {
   io_t								io;
   controller_t        controller;
   rateLimiter_t       rateLimiter;
+  filter_t            filter;
+  ntcCoef_t           ntcCoef;
+  int16_t             setPoint;
+  int16_t             adcValFilt;
+  int16_t							setPointLow;
 } lidHeater_t;
 
 /* Exported constants --------------------------------------------------------*/
@@ -42,6 +48,9 @@ typedef struct LID {
 void init_lid_heater(lidHeater_t * lidHeater);
 void lid_heater_init_feedback_ctr(controller_t * controller);
 void lid_heater_controller(lidHeater_t *lidHeater);
+void lid_heater_init_rate_limiter(rateLimiter_t * rateLimiter);
+void lid_heater_setpoint(lidHeater_t * lidHeater, int16_t value);
+void lid_heater_init_ntc_coef(ntcCoef_t * ntcCoef);
 
 #endif /* __LIDHEATER_H */
 

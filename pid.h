@@ -18,9 +18,13 @@
 #define __PID_H
 /* Includes ------------------------------------------------------------------*/
 #include "stdint.h"
+#include <math.h>
 
-#define DAC_UPPER_LIMIT   3725
-#define PWM_UPPER_LIMIT   32767
+#define T_R_KEL 298.15
+#define R_R_OHM 10000.00
+#define MAX_DAC_VALUE 4095.00
+#define DAC_UPPER_LIMIT 3725
+#define PWM_UPPER_LIMIT 32767
 
 typedef enum {
   CTR_STOP_STATE,
@@ -60,16 +64,24 @@ typedef struct {
 } rateLimiter_t;
 
 typedef struct {
+  int16_t             r_s_ohm;
+  int16_t             beta;
+} ntcCoef_t;
+
+typedef struct {
   diff_eq_t           diff_eq;
 } prefilter_t;
-
 
 typedef struct {
   double              setPoint;
   diff_eq_t           diff_eq;
 } controller_t;
 
-
+typedef struct {
+  int16_t							adcValMean;
+  int16_t							adcValAccum;
+  int16_t							avgCnt;
+} filter_t;
 
 /* Private define ------------------------------------------------------------*/
 /* Exported constants --------------------------------------------------------*/
@@ -78,8 +90,12 @@ typedef struct {
 double feedback_controller(controller_t *controller, int16_t processValue);
 double first_order_difference_equation(controller_t *controller, double input);
 void reset_controller(controller_t *controller);
-//void reset_rateLimiter(rateLimiter_t *rateLimiter, int16_t adc);
+void reset_rateLimiter(rateLimiter_t *rateLimiter, int16_t adc);
 double rate_limiter(rateLimiter_t *rateLimiter, double input);
+int16_t filter(filter_t *filter, int16_t adc);
+void reset_filter(filter_t *filter, int16_t adc);
+int16_t adc_to_temp(ntcCoef_t *ntcCoef, int16_t adc);
+int16_t temp_to_adc(ntcCoef_t *ntcCoef, int16_t temp);
 
 #endif /* __PID_H */
   /************************ (C) COPYRIGHT Xtel *****END OF FILE****/

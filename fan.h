@@ -29,10 +29,14 @@ typedef enum {
 
 typedef struct FAN {
   fanID_t         		fanID;
-  controllerState_t				 	state;
+  controllerState_t		state;
   io_t								io;
   controller_t        controller;
   rateLimiter_t       rateLimiter;
+  filter_t            filter;
+  ntcCoef_t           ntcCoef;
+  int16_t             setPoint;
+  int16_t             adcValFilt;
 } fan_t;
 
 /* Exported constants --------------------------------------------------------*/
@@ -42,6 +46,9 @@ typedef struct FAN {
 void init_fan(fan_t * fan);
 void fan_init_feedback_ctr(controller_t * controller);
 void fan_controller(fan_t * fan);
+void fan_init_rate_limiter(rateLimiter_t * rateLimiter);
+void fan_setpoint(fan_t * fan, int16_t value);
+void fan_init_adc_to_temp(ntcCoef_t * ntcCoef);
 
 #endif /* __FAN_H */
 

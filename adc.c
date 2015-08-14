@@ -14,7 +14,6 @@
   */ 
 /* Includes ------------------------------------------------------------------*/
 #include <stdio.h>
-#include <math.h>
 #include <stm32f10x_gpio.h>
 #include <stm32f10x_tim.h>
 #include "FreeRTOS.h"
@@ -30,9 +29,6 @@
 #define AWD_HIGH_THRESHOLD 4096
 #define ADC1_DR_Address ((uint32_t)0x4001244C)
 
-#define BETA 3984.0
-#define COEF_A (-43.1879)
-#define COEF_B (-13.0872)
 
 /* Private debug defines -----------------------------------------------------*/
 //#define DEBUG
@@ -58,32 +54,6 @@ static xSemaphoreHandle ADCSemaphore = NULL;
 /* Public functions ----------------------------------------------------------*/
 /* ---------------------------------------------------------------------------*/
 #define HEART_BEAT_LED GPIOC,GPIO_Pin_9
-int32_t adc_2_temp(signed short adc)
-{
-#if 0
-  int64_t res;
-  res = BETA / (1/adc);
-#else
-  float res;
-#if 0
-  res = BETA / ((1/adc) * COEF_A - COEF_B);
-#else
-  //GPIO_SetBits(HEART_BEAT_LED);/*RX LED*/
-  res = BETA / logf( ((1/adc) * COEF_A - COEF_B) );
-  //GPIO_ResetBits(HEART_BEAT_LED);/*RX LED*/
-#endif
-#endif
-  return (int32_t)res;
-}
-
-/* ---------------------------------------------------------------------------*/
-signed short temp_2_adc(int16_t temp)
-{
-  int64_t res;
-  res = (10000*(((int64_t)temp*100)-77175))/29549;
-  return (signed short)res;
-}
-
 /* ---------------------------------------------------------------------------*/
 void adcInit()
 {

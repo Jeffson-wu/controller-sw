@@ -24,6 +24,7 @@
 #include <stm32f10x_adc.h>
 /* Exported types ------------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
+
 // Port A channels
 #define ADC_PORT_TEMP_SENSE GPIOA
 #define ADC_PIN_CH_0 GPIO_Pin_0
