@@ -26,6 +26,8 @@
 #define DAC_UPPER_LIMIT 3725
 #define PWM_UPPER_LIMIT 32767
 
+#define MEDIAN_LENGTH 5
+
 typedef enum {
   CTR_STOP_STATE,
   CTR_MANUAL_STATE,
@@ -77,11 +79,12 @@ typedef struct {
   diff_eq_t           diff_eq;
 } controller_t;
 
-typedef struct {
-  int16_t							adcValMean;
-  int16_t							adcValAccum;
-  int16_t							avgCnt;
-} filter_t;
+typedef struct MEDIAN_FILTER {
+  int16_t samples[MEDIAN_LENGTH];
+  uint8_t sortIdx[MEDIAN_LENGTH];
+  uint8_t samplesIdx;
+} medianFilter_t;
+
 
 /* Private define ------------------------------------------------------------*/
 /* Exported constants --------------------------------------------------------*/
@@ -92,8 +95,8 @@ double first_order_difference_equation(controller_t *controller, double input);
 void reset_controller(controller_t *controller);
 void reset_rateLimiter(rateLimiter_t *rateLimiter, int16_t adc);
 double rate_limiter(rateLimiter_t *rateLimiter, double input);
-int16_t filter(filter_t *filter, int16_t adc);
-void reset_filter(filter_t *filter, int16_t adc);
+void init_median_filter(medianFilter_t *medianFilter);
+int16_t median_filter(medianFilter_t *medianFilter, int16_t sample);
 int16_t adc_to_temp(ntcCoef_t *ntcCoef, int16_t adc);
 int16_t temp_to_adc(ntcCoef_t *ntcCoef, int16_t temp);
 

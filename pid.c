@@ -97,3 +97,39 @@ void reset_filter(filter_t *filter, int16_t adc)
   filter->adcValAccum = 0;
   filter->adcValMean = adc;
 }
+
+void init_median_filter(medianFilter_t *medianFilter)
+{
+  int i;
+  for(i=0;i<MEDIAN_LENGTH;i++) {medianFilter->samples[i]=0; medianFilter->sortIdx[i]=i;}
+  medianFilter->samplesIdx = 0;
+}
+
+int16_t median_filter(medianFilter_t *medianFilter, int16_t sample)
+{ /* for simplicity only odd length is allowed */
+  #if (MEDIAN_LENGTH < 3) || ( (MEDIAN_LENGTH % 2) == 0)
+  #error "MEDIAN_LENGTH needs to be odd and at least 3"
+  #endif
+  uint8_t i, j;
+  uint8_t tmp;
+
+  /* insert new sample */
+  medianFilter->samples[medianFilter->samplesIdx++] = sample;
+  if(medianFilter->samplesIdx > MEDIAN_LENGTH-1) { medianFilter->samplesIdx = 0; } // circular buffer
+
+  for(i = 0; i < MEDIAN_LENGTH - 1; i++)
+  {
+    for(j = 0; j < MEDIAN_LENGTH - i - 1; j++)
+    {
+      if(medianFilter->samples[medianFilter->sortIdx[j]] < medianFilter->samples[medianFilter->sortIdx[j+1]])
+        {//swap
+          tmp = medianFilter->sortIdx[j];
+          medianFilter->sortIdx[j] = medianFilter->sortIdx[j+1];
+          medianFilter->sortIdx[j+1] = tmp;
+        }
+    }
+  }
+  return medianFilter->samples[medianFilter->sortIdx[(MEDIAN_LENGTH/2)]]; // return middle value
+}
+
+
