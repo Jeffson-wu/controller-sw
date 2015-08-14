@@ -34,7 +34,7 @@ typedef struct LID {
   io_t								io;
   controller_t        controller;
   rateLimiter_t       rateLimiter;
-  filter_t            filter;
+  medianFilter_t      filter;
   ntcCoef_t           ntcCoef;
   int16_t             setPoint;
   int16_t             adcValFilt;

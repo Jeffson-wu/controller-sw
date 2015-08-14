@@ -59,6 +59,8 @@ void lid_heater_controller(lidHeater_t *lidHeater)
 {
   int64_t ctr_out = 0;
 
+  lidHeater->adcValFilt = median_filter(&lidHeater->filter, *lidHeater->io.adcVal);
+
   switch (lidHeater->state) {
     case CTR_STOP_STATE:
     {
@@ -85,7 +87,7 @@ void lid_heater_controller(lidHeater_t *lidHeater)
     case CTR_CLOSED_LOOP_STATE:
     {
       lidHeater->controller.setPoint = (double)lidHeater->setPoint;
-      ctr_out = feedback_controller(&lidHeater->controller, *lidHeater->io.adcVal);
+      ctr_out = feedback_controller(&lidHeater->controller, lidHeater->adcValFilt);
     }
     break;
     default:

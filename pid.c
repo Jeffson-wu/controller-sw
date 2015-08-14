@@ -77,6 +77,7 @@ void reset_rateLimiter(rateLimiter_t *rateLimiter, int16_t adc)
 	rateLimiter->output = (double)adc;
 }
 
+/*
 int16_t filter(filter_t *filter, int16_t adc)
 {
 	uint32_t samplesPerLog = 10;
@@ -91,12 +92,13 @@ int16_t filter(filter_t *filter, int16_t adc)
   return filter->adcValMean;
 }
 
-void reset_filter(filter_t *filter, int16_t adc)
+void reset_filter(medianFilter_t *filter, int16_t adc)
 {
   filter->avgCnt = 0;
   filter->adcValAccum = 0;
   filter->adcValMean = adc;
 }
+*/
 
 void init_median_filter(medianFilter_t *medianFilter)
 {

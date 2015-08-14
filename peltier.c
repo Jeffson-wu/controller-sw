@@ -58,13 +58,15 @@ void peltier_controller(peltier_t *peltier)
 {
   int64_t ctr_out = 0;
 
+  peltier->adcValFilt = median_filter(&peltier->filter, *peltier->io.adcVal);
+
   switch (peltier->state) {
     case CTR_STOP_STATE:
     {
       *peltier->io.ctrVal = 0;
       reset_controller(&peltier->controller);
       reset_rateLimiter(&peltier->rateLimiter, *peltier->io.adcVal);
-      reset_filter(&peltier->filter, *peltier->io.adcVal);
+      //reset_filter(&peltier->filter, *peltier->io.adcVal);
     }
     break;
     case CTR_MANUAL_STATE:
@@ -81,8 +83,7 @@ void peltier_controller(peltier_t *peltier)
     case CTR_CLOSED_LOOP_STATE:
     {
       peltier->controller.setPoint = -rate_limiter(&peltier->rateLimiter, (double)peltier->setPoint);
-      peltier->adcValFilt = filter(&peltier->filter, *peltier->io.adcVal);
-      ctr_out = feedback_controller(&peltier->controller, -(*peltier->io.adcVal));
+      ctr_out = feedback_controller(&peltier->controller, -(peltier->adcValFilt));
     }
     break;
     default:

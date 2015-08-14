@@ -866,7 +866,6 @@ void CoolAndLidTask( void * pvParameters )
   xSemaphoreHandle xADCSemaphore = NULL;
 
   xMessage *msg;
-  medianFilter_t median[4];
 
 #ifdef DEBUG_COOL
   int8_t cnt = 0;
@@ -939,10 +938,10 @@ void CoolAndLidTask( void * pvParameters )
   init_peltier(&peltier[0]);
   init_fan(&fan[0]);
   init_lid_heater(&lidHeater[0]);
-  init_median_filter(&median[0]);
-  init_median_filter(&median[1]);
-  init_median_filter(&median[2]);
-  init_median_filter(&median[3]);
+
+  init_median_filter(&fan[0].filter);
+  init_median_filter(&peltier[0].filter);
+  init_median_filter(&lidHeater[0].filter);
 
   while(1)
   {
@@ -950,7 +949,7 @@ void CoolAndLidTask( void * pvParameters )
     if (cnt == 10)
     {
       static int toggle = 0;
-      PRINTF("%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d", peltier[0].setPoint, (int16_t)peltier->controller.setPoint, *peltier[0].io.ctrVal, *peltier[0].io.adcVal, (int16_t)fan[0].controller.setPoint, *fan[0].io.ctrVal, *fan[0].io.adcVal, lidHeater[0].setPoint, (int16_t)lidHeater[0].controller.setPoint, *lidHeater[0].io.ctrVal, *lidHeater[0].io.adcVal, (int16_t)lidHeater[0].state, lidHeater->setPointLow);
+      PRINTF("%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d", peltier[0].setPoint, (int16_t)peltier->controller.setPoint, *peltier[0].io.ctrVal, peltier[0].adcValFilt, (int16_t)fan[0].controller.setPoint, *fan[0].io.ctrVal, *fan[0].io.adcVal, lidHeater[0].setPoint, (int16_t)lidHeater[0].controller.setPoint, *lidHeater[0].io.ctrVal, lidHeater[0].adcValFilt);
 
       //DEBUG_PRINTF("Adc:%4d, %4d, %4d, %4d", adcCh[0], adcCh[1], adcCh[2], adcCh[3]);
       cnt = 0;
@@ -979,10 +978,6 @@ void CoolAndLidTask( void * pvParameters )
 #endif
     adcDiff[0] =  adc_to_temp(&fan[0].ntcCoef, *adcDiffSource[1]) - adc_to_temp(&fan[0].ntcCoef, *adcDiffSource[0]); // Fan controll is based on the temp diff
 #ifndef STANDALONE
-    adcCh[0] = median_filter(&median[0], adcCh[0]);
-    adcCh[1] = median_filter(&median[1], adcCh[1]);
-    adcCh[2] = median_filter(&median[2], adcCh[2]);
-    adcCh[3] = median_filter(&median[3], adcCh[3]);
     peltier_controller(&peltier[0]);
     fan_controller(&fan[0]);
     lid_heater_controller(&lidHeater[0]);
