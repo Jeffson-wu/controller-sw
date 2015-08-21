@@ -20,6 +20,7 @@
 #define USE_ANALOG_WATCH_DOG
 //#define USE_TWO_LEVEL_LID_POWER
 #define DISABLE_ERROR_REPOTING
+#define USE_LID_DETECT_FEATURE
 
 
 /* Private debug define ------------------------------------------------------*/
@@ -110,6 +111,13 @@ typedef enum CL_STATES_T {
   nCL_STATES
 } cl_states_t;
 
+typedef enum CL_LID_OPEN_STATE_T {
+  CL_LID_ERROR,
+  CL_LID_OPEN,
+  CL_LID_CLOSED,
+  nCL_LID_states
+} cl_lid_open_states_t;
+
 typedef struct CALIB_DATA_T {
   int16_t c_1;
 } calib_data_t;
@@ -143,11 +151,12 @@ bool msgSent = FALSE;
 
 // Events to be sent to the Linux box
 static uint16_t cl_status = 0;
-static uint8_t clState = CL_STATE_CLNOK;
+static cl_states_t clState = CL_STATE_CLNOK;
 static bool coolTempOK = FALSE;
 static bool lidTempOK = FALSE;
 static bool coolTempError = FALSE;
 static bool lidTempError = FALSE;
+static cl_lid_open_states_t lidState = CL_LID_ERROR;
 
 // Parameters for ADC
 static int16_t adcCh[4] = {0, 0, 0, 0};
@@ -260,7 +269,94 @@ static void gpioInit(void)
   GPIO_InitStructure.GPIO_Pin = LID_DETECT_PIN;
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
   GPIO_Init(LID_DETECT_PORT, &GPIO_InitStructure);
+#ifdef USE_LID_DETECT_FEATURE
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_5;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
+  GPIO_Init(GPIOB, &GPIO_InitStructure);
+#endif // USE_LID_DETECT_FEATURE
 }
+
+#ifdef USE_LID_DETECT_FEATURE
+/* ---------------------------------------------------------------------------*/
+cl_lid_open_states_t getLidState(void)
+{
+  return lidState;
+}
+
+/* ---------------------------------------------------------------------------*/
+/* This fn is executed in the context of the TimerTask */
+void LidDetectedFromTmrTask(void *pvParameter1, uint32_t lidDetectState)
+{
+  if(lidState != CL_LID_ERROR)
+  { //do not report initial event
+    // For now we only report a lid open event.
+    if(1 == lidDetectState)
+    { // Lid has been opened
+      PRINTF("Lid open");
+      lidState = CL_LID_OPEN;
+      //setCLStatusReg(uint16_t status);
+    }
+    if(0 == lidDetectState)
+    { // Lid has been closed
+      PRINTF("Lid closed");
+      lidState = CL_LID_CLOSED;
+      //setCLStatusReg(uint16_t status);
+    }
+  }
+  else
+  { //use initial event to set state - do not report
+    if(1 == lidDetectState)
+    { // Lid has been opened
+      lidState = CL_LID_OPEN;
+    }
+    if(0 == lidDetectState)
+    { // Lid has been closed
+      lidState = CL_LID_CLOSED;
+    }
+  }
+}
+
+/* ---------------------------------------------------------------------------*/
+/* This fn is executed in the context of the sysTick ISR */
+void vApplicationTickHook()
+{
+  // debounce is required
+  static u16 pinState = 0xAAAA; // 1010101010101010 -> do not get all 0 or all 1 straighr away
+  static bool state = FALSE;
+  BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+
+  if(Bit_SET == GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_5))
+  {
+    pinState = (pinState << 1) + 1;
+  }
+  else
+  {
+    pinState = (pinState << 1);
+  }
+  if(0x0000 == pinState) 
+  {
+    if(TRUE == state)
+    {
+      state = FALSE;
+      xTimerPendFunctionCallFromISR( LidDetectedFromTmrTask,
+                               NULL, (uint32_t)0,
+                               &xHigherPriorityTaskWoken);
+    }
+  }
+  if(0xFFFF == pinState) 
+  {
+    if(FALSE == state)
+    {
+      state = TRUE;
+      xTimerPendFunctionCallFromISR( LidDetectedFromTmrTask,
+                             NULL, (uint32_t)1,
+                             &xHigherPriorityTaskWoken);
+    }
+  }
+}
+#else
+  void vApplicationTickHook(){}
+#endif // USE_LID_DETECT_FEATURE
 
 /* ---------------------------------------------------------------------------*/
 void togglePeltier() {
@@ -942,6 +1038,9 @@ void CoolAndLidTask( void * pvParameters )
   init_median_filter(&fan[0].filter);
   init_median_filter(&peltier[0].filter);
   init_median_filter(&lidHeater[0].filter);
+
+  lidState = getLidState();
+  DEBUG_PRINTF("Lid state: %d", (int)lidState);
 
   while(1)
   {

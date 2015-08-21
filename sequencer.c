@@ -30,7 +30,6 @@ extern xQueueHandle CoolAndLidQueueHandle;
 #define USE_PAUSE_FEATURE
 #define USE_NEIGHBOUR_TUBE_TEMP_FEATURE
 #define USE_LOGGING_FEATURE
-//#define USE_LID_DETECT_FEATURE
 #define DISABLE_ERROR_STATES
 //#define USE_M3_SET_PULSATING_LEDS_ON_START
 #define USE_M3_REBOOT_SURVIVAL_FEATURE
@@ -653,80 +652,7 @@ void Heater_PinConfig(void)
   GPIO_InitStructure.GPIO_Pin = GPIO_Pin_3 | GPIO_Pin_4 | GPIO_Pin_11 | GPIO_Pin_12;
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPD;
   GPIO_Init(GPIOC, &GPIO_InitStructure);
-#ifdef USE_LID_DETECT_FEATURE
-  RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_5;
-  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
-  GPIO_Init(GPIOB, &GPIO_InitStructure);
-#endif // USE_LID_DETECT_FEATURE
 }
-
-#ifdef USE_LID_DETECT_FEATURE
-/* ---------------------------------------------------------------------------*/
-/* This fn is executed in the context of the TimerTask */
-void LidDetectedFromISR(void *pvParameter1, uint32_t lidState)
-{
-  DEBUG_IF_PRINTF("Lid Detect: %d", (int)lidState);
-  if(1 == lidState)
-  { // Lid has been opened
-    stop_lid_heating();
-#ifdef USE_PAUSE_FEATURE
-    long TubeId;
-    for(TubeId = 1; TubeId < 17; TubeId++)
-    {
-      //pause_tube_state(TubeId);
-    }
-#else // USE_PAUSE_FEATURE
-    long TubeId;
-    for(TubeId = 1; TubeId < 17; TubeId++)
-    {
-      //stop_tube_seq(TubeId);
-    }
-#endif // USE_PAUSE_FEATURE
-  }
-}
-
-/* ---------------------------------------------------------------------------*/
-/* This fn is executed in the context of the sysTick ISR */
-void vApplicationTickHook()
-{
-  // debounce is required
-  static u16 pinState = 0xAAAA; // 1010101010101010 -> do not get all 0 or all 1 straighr away
-  static bool lidState = FALSE;
-  BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-
-  if(Bit_SET == GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_5))
-  {
-    pinState = (pinState << 1) + 1;
-  }
-  else
-  {
-    pinState = (pinState << 1);
-  }
-  if(0x0000 == pinState) 
-  {
-    if(TRUE == lidState)
-    {
-      lidState = FALSE;
-      xTimerPendFunctionCallFromISR( LidDetectedFromISR,
-                               NULL, (uint32_t)1,
-                               &xHigherPriorityTaskWoken);
-    }
-  }
-  if(0xFFFF == pinState) 
-  {
-    if(FALSE == lidState)
-    {
-      lidState = TRUE;
-      xTimerPendFunctionCallFromISR( LidDetectedFromISR,
-                             NULL, (uint32_t)0,
-                             &xHigherPriorityTaskWoken);
-    }
-  }
-}
-#else
-  void vApplicationTickHook(){}
-#endif // USE_LID_DETECT_FEATURE
 
 /* ---------------------------------------------------------------------------*/
 /* This fn is executed in the context of the TimerTask */
