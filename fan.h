@@ -33,7 +33,7 @@ typedef struct FAN {
   io_t								io;
   controller_t        controller;
   rateLimiter_t       rateLimiter;
-  medianFilter_t      filter;
+  medianFilter_t      medianFilter;
   ntcCoef_t           ntcCoef;
   int16_t             setPoint;
   int16_t             adcValFilt;

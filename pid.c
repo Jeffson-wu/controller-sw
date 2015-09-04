@@ -56,14 +56,31 @@ double rate_limiter(rateLimiter_t *rateLimiter, double input)
   return output;
 }
 
-double feedback_controller(controller_t *controller, int16_t processValue)
+double imc_pid(controller_t *controller, double input)
 {
-  //double input = (double)(processValue - controller->setPoint);
-  double input = (double)(controller->setPoint - processValue);
   double output = (controller->diff_eq.N0*input + controller->diff_eq.N1*controller->diff_eq.input - controller->diff_eq.D1*controller->diff_eq.output);
+
+  if (output <= controller->diff_eq.minOutputValue)
+    output = controller->diff_eq.minOutputValue;
+  if (output >= controller->diff_eq.maxOutputValue)
+    output = controller->diff_eq.maxOutputValue;
+
   controller->diff_eq.input = input;
   controller->diff_eq.output = output;
+
   return output;
+}
+
+double feedback_controller_neg(controller_t *controller, int16_t processValue)
+{
+  double input = (double)(processValue - controller->setPoint);
+  return imc_pid(controller, input);
+}
+
+double feedback_controller_pos(controller_t *controller, int16_t processValue)
+{
+  double input = (double)(controller->setPoint - processValue);
+  return imc_pid(controller, input);
 }
 
 void reset_controller(controller_t *controller)
@@ -77,33 +94,14 @@ void reset_rateLimiter(rateLimiter_t *rateLimiter, int16_t adc)
 	rateLimiter->output = (double)adc;
 }
 
-/*
-int16_t filter(filter_t *filter, int16_t adc)
-{
-	uint32_t samplesPerLog = 10;
-
-	filter->adcValAccum += adc;
-	if (0 == ++filter->avgCnt%samplesPerLog) 
-	{
-	    filter->avgCnt = 0;
-	    filter->adcValMean = filter->adcValAccum / samplesPerLog;
-	    filter->adcValAccum = 0;
-	}
-  return filter->adcValMean;
-}
-
-void reset_filter(medianFilter_t *filter, int16_t adc)
-{
-  filter->avgCnt = 0;
-  filter->adcValAccum = 0;
-  filter->adcValMean = adc;
-}
-*/
-
 void init_median_filter(medianFilter_t *medianFilter)
 {
   int i;
-  for(i=0;i<MEDIAN_LENGTH;i++) {medianFilter->samples[i]=0; medianFilter->sortIdx[i]=i;}
+  for(i=0; i<MEDIAN_LENGTH; i++) 
+  {
+    medianFilter->samples[i] = 0; 
+    medianFilter->sortIdx[i] = i;
+  }
   medianFilter->samplesIdx = 0;
 }
 
@@ -133,5 +131,3 @@ int16_t median_filter(medianFilter_t *medianFilter, int16_t sample)
   }
   return medianFilter->samples[medianFilter->sortIdx[(MEDIAN_LENGTH/2)]]; // return middle value
 }
-
-

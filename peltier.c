@@ -26,6 +26,7 @@ void init_peltier(peltier_t * peltier)
 {
   peltier_init_feedback_ctr(&peltier->controller);
   peltier_init_rate_limiter(&peltier->rateLimiter);
+  init_median_filter(&peltier->medianFilter);
   peltier_init_adc_to_temp(&peltier->ntcCoef);
   peltier->controller.setPoint = peltier->setPoint = MAX_DAC_VALUE;
 }
@@ -35,6 +36,9 @@ void peltier_init_feedback_ctr(controller_t * controller)
   controller->diff_eq.N0 = 1.005000E1;
   controller->diff_eq.N1 = -9.950000E0;
   controller->diff_eq.D1 = -1.000000E0;
+
+  controller->diff_eq.minOutputValue = 0;
+  controller->diff_eq.maxOutputValue = DAC_UPPER_LIMIT;
 }
 
 void peltier_init_rate_limiter(rateLimiter_t * rateLimiter)
@@ -56,23 +60,26 @@ void peltier_init_adc_to_temp(ntcCoef_t * ntcCoef)
 
 void peltier_controller(peltier_t *peltier)
 {
-  int64_t ctr_out = 0;
+  uint16_t ctr_out = 0;
 
-  peltier->adcValFilt = median_filter(&peltier->filter, *peltier->io.adcVal);
+  peltier->adcValFilt = median_filter(&peltier->medianFilter, *peltier->io.adcVal);
 
   switch (peltier->state) {
     case CTR_STOP_STATE:
     {
       *peltier->io.ctrVal = 0;
+    }
+    break;
+    case CTR_INIT:
+    {
       reset_controller(&peltier->controller);
       reset_rateLimiter(&peltier->rateLimiter, *peltier->io.adcVal);
-      //reset_filter(&peltier->filter, *peltier->io.adcVal);
+      peltier[0].state = CTR_CLOSED_LOOP_STATE;
     }
     break;
     case CTR_MANUAL_STATE:
     {
-    	ctr_out = (double)peltier->setPoint;
-      return;
+      ctr_out = (uint16_t)peltier->setPoint;
     }
     break;
     case CTR_OPEN_LOOP_STATE:
@@ -82,21 +89,21 @@ void peltier_controller(peltier_t *peltier)
     break;
     case CTR_CLOSED_LOOP_STATE:
     {
-      peltier->controller.setPoint = -rate_limiter(&peltier->rateLimiter, (double)peltier->setPoint);
-      ctr_out = feedback_controller(&peltier->controller, -(peltier->adcValFilt));
+      peltier->controller.setPoint = rate_limiter(&peltier->rateLimiter, (double)peltier->setPoint);
+      ctr_out = (uint16_t)feedback_controller_neg(&peltier->controller, peltier->adcValFilt);
     }
     break;
     default:
     break;
   }
 
-  if (ctr_out > DAC_UPPER_LIMIT)
+  if (ctr_out > peltier->controller.diff_eq.maxOutputValue)
   {
-    ctr_out = DAC_UPPER_LIMIT;
+    ctr_out = peltier->controller.diff_eq.maxOutputValue;
   }
-  else if (ctr_out < 0)
+  else if (ctr_out < peltier->controller.diff_eq.minOutputValue)
   {
-    ctr_out = 0;
+    ctr_out = peltier->controller.diff_eq.minOutputValue;
   }
 
   *peltier->io.ctrVal = ctr_out;
