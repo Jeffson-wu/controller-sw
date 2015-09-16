@@ -93,7 +93,7 @@ enum gdi_func_type
   coolandlid,
   cool,
   lid,
-  fan,
+  fantemp,
   seq_cmd,
   test_func,
 #ifdef USE_FLOAT_REG_FEATURE
@@ -142,7 +142,7 @@ gdi_func_table_type gdi_func_info_table[] =
   {"print",   " Print the debug variable values",     "at@gdi:print()",             print },
   {"cool",    " Set cooling temperature & start",     "at@gdi:cool(setpoint)",      cool },
   {"lid",     " Set lid temperature & start",         "at@gdi:lid(setpoint)",       lid },
-  {"fan",     " Set fan speed %  & start",            "at@gdi:fan(setpoint)",       fan },
+  {"fantemp", " Set fan temperature & start",         "at@gdi:fantemp(setpoint)",   fantemp },
   {"test_func",         " Test function call",        "at@gdi:test_func(parameter1,parameter2)",test_func},
 #ifdef USE_FLOAT_REG_FEATURE
   {"modbus_read_regs_float",  " Read register values as float",  "at@gdi:modbus_read_regs_float(slave,addr,datasize)",modbus_read_regs_float},
@@ -898,7 +898,7 @@ void gdi_map_to_functions()
       }
       break;
 
-    case fan:
+    case fantemp:
       {
         s16 setpoint;
         xMessage *msg;        
@@ -922,8 +922,8 @@ void gdi_map_to_functions()
         if(msg)
         {
           setpoint = (s16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
-          if((setpoint >= 0)&&(setpoint <= 100)) {
-            msg->ucMessageID = SET_FAN_SPEED;
+          if((setpoint >= 0)&&(setpoint <= 1000)) {
+            msg->ucMessageID = SET_FAN_TEMP;
           } else {
             result = FALSE;
             gdi_send_data_response("NOK invalid parameter", newline_end);

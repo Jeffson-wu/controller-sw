@@ -111,7 +111,7 @@ const char *  signals_txt[] =
   "DATA_FROM_TUBE",
   "SET_COOL_AND_LID",
   "SET_COOL_AND_LID_RES",
-  "SET_FAN_SPEED",
+  "SET_FAN_TEMP",
   "SET_FAN_RES",
   "SET_COOL_TEMP",
   "SET_COOL_TEMP_RES",

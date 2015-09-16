@@ -1157,7 +1157,7 @@ void CoolAndLidTask( void * pvParameters )
     {
       switch(msg->ucMessageID)
       {
-        case SET_FAN_SPEED:
+        case SET_FAN_TEMP:
         {
           SetCooleAndLidReq *p;
           p=(SetCooleAndLidReq *)(msg->ucData);
