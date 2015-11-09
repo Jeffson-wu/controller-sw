@@ -28,7 +28,7 @@ extern xQueueHandle CoolAndLidQueueHandle;
 /* Private feature defines ---------------------------------------------------*/
 //#define USE_SYNCHRONOUS_PROTOCOL /* All tubes are synced at temp hold timeout */
 #define USE_PAUSE_FEATURE
-#define USE_NEIGHBOUR_TUBE_TEMP_FEATURE
+//#define USE_NEIGHBOUR_TUBE_TEMP_FEATURE
 #define USE_LOGGING_FEATURE
 #define DISABLE_ERROR_STATES
 //#define USE_M3_SET_PULSATING_LEDS_ON_START
@@ -1423,7 +1423,6 @@ void HW_EventHandler(ReadModbusRegsRes *preg, xMessage *msg){
         break;
     }
   }
-#if 1																				// ToDo: ER IKKE TESTET!! - JSL
   if(Tubeloop[TubeId-1].hw_status_reg & HW_TUBE1_TEMP_FAILURE)
   { // temp error on tube 1
     switch(heater)
@@ -1584,7 +1583,6 @@ void HW_EventHandler(ReadModbusRegsRes *preg, xMessage *msg){
         break;
     }
   }
-#endif
 }
 
 /* ---------------------------------------------------------------------------*/
