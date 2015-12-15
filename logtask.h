@@ -29,7 +29,7 @@ void vReadTubeTemp(xTimerHandle pxTimer );
 void LogTask( void * pvParameters );
 void sendLog();
 void emptyLog(int tubeId);
-int getLog(char *poutText,int tubeId );
+int addLog(char *poutText,int tubeId, int size );
 
 #endif /* __LOGTASK_H */
 

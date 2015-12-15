@@ -130,8 +130,8 @@ typedef struct CL_LOG_DATA_ELEMENT {
 } cl_logDataElement_t;
 
 typedef struct CL_LOG_DATA_QUEUE {
-  s16 head; 
-  s16 tail;
+  u16 head; 
+  u16 tail;
   cl_logDataElement_t cl_logDataElement[CL_LOG_QUEUE_SIZE];
 } cl_logDataQueue_t;
 
@@ -641,7 +641,7 @@ void logUpdate(int16_t * ch0value, int16_t * ch1value, int16_t * ch2value, int16
 /* state=<state>,seq_number=<seqNum>;log={<t0>,<t1>,<t2>,<t3>[,<t0>,<t1>,<t2>,<t3>[,<t0>,<t1>,<t2>,<t3>[,<t0>,<t1>,<t2>,<t3>]]]]} */
 /* or state=<state>\r  */
 
-int getClLog(char *poutText )
+int getClLog(char *poutText, int maxlen )
 {
   int i = 0;
   int nElements = 0;
@@ -668,11 +668,11 @@ int getClLog(char *poutText )
   	clState = CL_STATE_CLNOK;
   }
 
-  strcat(poutText,"state=");
+  addStrToBuf(poutText,"state=", maxlen);
 #ifdef DISABLE_ERROR_REPOTING
-  strcat(poutText,cl_states[CL_STATE_CLOK]); // Juste say everything is OK
+  addStrToBuf(poutText,cl_states[CL_STATE_CLOK], maxlen); // Juste say everything is OK
 #else
-  strcat(poutText,cl_states[clState]);
+  addStrToBuf(poutText,cl_states[clState], maxlen);
 #endif
   //#### strcat(poutText,",");
 
@@ -684,24 +684,24 @@ int getClLog(char *poutText )
     dataAdded = 1;
     if(nElements == 0)
     { // Before payload
-      strcat(poutText,",seq_number=");
+      addStrToBuf(poutText,",seq_number=", maxlen);
       Itoa(pinData->seqNum, str);
-      strcat(poutText,str);
-      strcat(poutText,";log={");
+      addStrToBuf(poutText,str,maxlen);
+      addStrToBuf(poutText,";log={", maxlen);
     }
     else
     { // Just next batch of payload data
-      strcat(poutText, ",");       
+      addStrToBuf(poutText, ",", maxlen);
     }
     for(i=0; i<CL_LOG_ELEMENT_SIZE; i++)
     { // Add payload
       //int templen=0;
       Itoa(pinData->cldata[i], str);
       //templen = strlen(str);
-      strcat(poutText,str);
+      addStrToBuf(poutText,str, maxlen);
       if(CL_LOG_ELEMENT_SIZE - 1 > i)
       { 
-        strcat(poutText, ","); 
+        addStrToBuf(poutText, ",", maxlen); 
       }
     }
     nElements+=CL_LOG_ELEMENT_SIZE;
@@ -709,7 +709,7 @@ int getClLog(char *poutText )
   
   if(dataAdded) { 
     poutText[strlen(poutText)]=0;
-    strcat(poutText, "}>"); // #### Remove '>' when KS has updated tube mand.
+    addStrToBuf(poutText, "}>", maxlen); // #### Remove '>' when KS has updated tube mand.
   } 
   nElements++; // "state=<clState>" is always added
   DEBUG_LOGGING_PRINTF("Lenght of log %d",strlen(poutText));
