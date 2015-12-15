@@ -74,16 +74,18 @@ void send_msg_on_monitor(char * response)
   if(USART3_intitalized)
   {
     char i = 0;
-    int len = strlen(response)+3;
-    char message[strlen(response)+3];
-    strcpy(message, "\0");
-    strcat(message, response);
-    strcat(message, "\r\n");
+    const char lineend[3] = "\r\n\0";
+    int len = strlen(response);
     while(i<len)
     {
       while(USART_GetFlagStatus(USART3, USART_FLAG_TXE)==RESET);
-      USART_SendData(USART3,*(message+i));
+      USART_SendData(USART3,*(response+i));
       i++;
+    }
+    for(i=0; i<3; i++)
+    {
+      while(USART_GetFlagStatus(USART3, USART_FLAG_TXE)==RESET);
+      USART_SendData(USART3,*(lineend+i));
     }
   }
 }
