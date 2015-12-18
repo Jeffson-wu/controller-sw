@@ -295,6 +295,7 @@ void LogOff()
 #endif // USE_DEVELOPMENT_LOGGING /* <-- For USE_DEVELOPMENT_LOGGING feature */
 
 /* ---------------------------------------------------------------------------*/
+#if 0 																																							//Todo: Change to mean temp
 void vReadTubeTemp(xTimerHandle pxTimer )
 {
   xMessage *msg;
@@ -328,6 +329,7 @@ void vReadTubeTemp(xTimerHandle pxTimer )
     }
   }
 }
+#endif
 
 /* ---------------------------------------------------------------------------*/
 void LogTask( void * pvParameters )
