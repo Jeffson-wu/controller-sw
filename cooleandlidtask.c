@@ -24,7 +24,7 @@
 
 
 /* Private debug define ------------------------------------------------------*/
-//#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
+#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
 #define DEBUG_COOL
 //#define DEBUG_LOGGING
 //#define STANDALONE /*Defines if the M3 Runs with or without Linux box*/
@@ -490,6 +490,7 @@ int getAdc(char *poutText)
   return 0;
 }
 
+
 /* ---------------------------------------------------------------------------*/
 /* Read out latest running variables                                          */
 /* This function is called from gdi and thus is executed in gdi context.      */
@@ -512,7 +513,7 @@ int getCLMonitor(char *poutText)
   Itoa(*peltier[0].io.ctrVal, str);     // peltier_dac
   strcat(poutText,str);
   strcat(poutText, ","); 
-  Itoa(readADC(ADC_VMON_MUX_CH), str);  // peltier_voltage
+  Itoa(peltier[0].voltage, str);  // peltier_voltage
   strcat(poutText,str);
   strcat(poutText, "}");
   return 0;
@@ -608,13 +609,14 @@ void logInit()
 
 /* ---------------------------------------------------------------------------*/
 /* Linux Box interpretation = Ambient, top heater, could side, warm side      */
-void logUpdate(int16_t * ch0value, int16_t * ch1value, int16_t * ch2value, int16_t * ch3value)
+
+void logUpdate(lidHeater_t *lidHeater, peltier_t *peltier, fan_t *fan, int16_t *ambient)
 {
   cl_dataLog.avgCnt += 1;
-  cl_dataLog.accum[0] += *ch0value;
-  cl_dataLog.accum[1] += *ch1value;
-  cl_dataLog.accum[2] += *ch2value;
-  cl_dataLog.accum[3] += *ch3value;
+  cl_dataLog.accum[0] += adc_to_temp(&lidHeater[0].ntcCoef, lidHeater[0].adcValFilt);
+  cl_dataLog.accum[1] += adc_to_temp(&peltier[0].ntcCoef, peltier[0].adcValFilt);
+  cl_dataLog.accum[2] += adc_to_temp(&fan[0].ntcCoef, fan[0].adcValFilt);
+  cl_dataLog.accum[3] += peltier[0].t_hot_est; //*ambient;
 
   // Is the log buffer full?
   if(CL_SAMPLES_PER_LOG <= cl_dataLog.avgCnt) {
@@ -773,6 +775,32 @@ bool coolLidReadRegs(u8 slave, u16 addr, u16 datasize, u16 *buffer)
             break;
         }
         break;
+      case TUBE_TEMP_REG:
+        switch(slave)
+        {
+          case LID_ADDR:
+            val = adc_to_temp(&lidHeater[0].ntcCoef, lidHeater[0].adcValFilt);
+            break;
+          case PELTIER_ADDR:
+          	val = adc_to_temp(&peltier[0].ntcCoef, peltier[0].adcValFilt);
+            break;
+          case FAN_ADDR:
+          	val = adc_to_temp(&fan[0].ntcCoef, fan[0].adcValFilt);
+            break;
+          default:
+            break;
+        }
+        break;
+			case PELTIER_VOLTAGE:
+				switch(slave)
+				{
+					case PELTIER_ADDR:
+						val = peltier[0].voltage;
+						break;
+					default:
+						break;
+				}
+				break;
       //if( (17 <= slave) && (19 >= slave) ) // slave 17 - 19 maps to coolandlid
       case PWM_1_REG:
         //if(NoWell == mode) {  // Preheat state
@@ -954,6 +982,14 @@ bool coolLidWriteRegs(u8 slave, u16 addr, u16 *data, u16 datasize)
   return FALSE;
 }
 
+
+/* ---------------------------------------------------------------------------*/
+uint16_t getPeltierVoltage()
+{
+	return 81*(readADC(ADC_VMON_MUX_CH)*0x400) / 0x100000; // y=(A*scale)*(ADC*scale)/(scale*scale), scale=1024(0x400)
+}
+
+
 /* ---------------------------------------------------------------------------*/
 /* Task main loop                                                             */
 /* ---------------------------------------------------------------------------*/
@@ -1045,10 +1081,21 @@ void CoolAndLidTask( void * pvParameters )
   while(1)
   {
   #ifdef DEBUG_COOL
-    if (cnt == 10)
+    if (cnt == 1)
     {
       static int toggle = 0;
-      PRINTF("%d, %d, %d, %d, %d, %d, %d, %d, %d", (int16_t)peltier->controller.setPoint, *peltier[0].io.ctrVal, peltier[0].adcValFilt, (int16_t)fan[0].controller.setPoint, *fan[0].io.ctrVal, *fan[0].io.adcVal, (int16_t)lidHeater[0].controller.setPoint, *lidHeater[0].io.ctrVal, lidHeater[0].adcValFilt);
+      //PRINTF("%d, %d, %d, %d, %d, %d, %d, %d, %d, %d", (int16_t)peltier->controller.setPoint, *peltier[0].io.ctrVal, peltier[0].adcValFilt, (int16_t)fan[0].controller.setPoint, *fan[0].io.ctrVal, *fan[0].io.adcVal, (int16_t)lidHeater[0].controller.setPoint, *lidHeater[0].io.ctrVal, lidHeater[0].adcValFilt, *lidHeater[0].io.adcVal);
+      //PRINTF("%d, %d, %d, %d, %d, %d, %d", (int16_t)peltier->controller.setPoint, *peltier[0].io.ctrVal, peltier[0].adcValFilt, getPeltierVoltage(), (int16_t)fan[0].controller.setPoint, *fan[0].io.ctrVal, *fan[0].io.adcVal);
+      	PRINTF("%d, %d, %d, %d, %d, %d, %d, %d, %d",
+      			adc_to_temp(&peltier[0].ntcCoef, (int16_t)peltier->controller.setPoint),
+      			*peltier[0].io.ctrVal,
+      			adc_to_temp(&peltier[0].ntcCoef, peltier[0].adcValFilt),
+      			peltier[0].voltage,
+      			peltier[0].t_hot_est,
+      			(int16_t)peltier[0].controller.diff_eq.maxOutputValue,
+      			fan[0].adcValFilt,
+      			adc_to_temp(&fan[0].ntcCoef, (int16_t)fan[0].controller.setPoint),
+      			*fan[0].io.ctrVal);
 
       //DEBUG_PRINTF("Adc:%4d, %4d, %4d, %4d", adcCh[0], adcCh[1], adcCh[2], adcCh[3]);
       cnt = 0;
@@ -1070,15 +1117,17 @@ void CoolAndLidTask( void * pvParameters )
     /* The semaphore is given when the ADC is done */
     /* Read lastest ADC samples into buffer */
 
-    #ifdef USE_M3_ADC
+#ifdef USE_M3_ADC
     adcGetLatest(&adcCh[0], &adcCh[1], &adcCh[2], &adcCh[3]);
 #else
     adsGetLatest(&adcCh[0], &adcCh[1], &adcCh[2], &adcCh[3]);
 #endif
     adcDiff[0] =  adc_to_temp(&fan[0].ntcCoef, *adcDiffSource[1]) - adc_to_temp(&fan[0].ntcCoef, *adcDiffSource[0]); // Fan controll is based on the temp diff
 #ifndef STANDALONE
+
+    peltier[0].voltage = getPeltierVoltage();
     peltier_controller(&peltier[0]);
-    fan_controller(&fan[0]);
+    fan_controller(&fan[0], peltier[0].t_hot_est);
     lid_heater_controller(&lidHeater[0]);
 
     switch (peltier->state) {
@@ -1148,7 +1197,7 @@ void CoolAndLidTask( void * pvParameters )
 
     /* Add to log */
 #ifdef USE_CL_DATA_LOGGING
-    logUpdate(&adcCh[0], &adcCh[1], &adcCh[2], &adcCh[3]);
+    logUpdate(&lidHeater[0], &peltier[0], &fan[0], &adcCh[3]);
 #endif
     configASSERT(peltier[0].io.adcVal == &adcCh[2]);
 

@@ -23,7 +23,7 @@
 #define T_R_KEL 298.15
 #define R_R_OHM 10000.00
 #define MAX_DAC_VALUE 4095.00
-#define DAC_UPPER_LIMIT 3725
+#define DAC_UPPER_LIMIT 4095.00 //3725
 #define PWM_UPPER_LIMIT 32767
 
 #define MEDIAN_LENGTH 15
@@ -52,6 +52,7 @@ typedef enum {
 typedef struct {
   double              input;
   double              output;
+  double							output_old;
   double							N0;
   double							N1;
   double							D1;
@@ -87,7 +88,6 @@ typedef struct MEDIAN_FILTER {
   uint8_t sortIdx[MEDIAN_LENGTH];
   uint8_t samplesIdx;
 } medianFilter_t;
-
 
 /* Private define ------------------------------------------------------------*/
 /* Exported constants --------------------------------------------------------*/

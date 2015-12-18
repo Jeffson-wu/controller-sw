@@ -49,7 +49,7 @@ int uid;
 
 /* Private debug define ------------------------------------------------------*/
 //#define DEBUG_USE_ECHO_AS_DEFAULT
-#define DEBUG
+//#define DEBUG
 
 #ifdef DEBUG
 #define GDI_PRINTF(fmt, args...)      sprintf(dbgbuf, fmt, ## args);  send_msg_on_monitor(dbgbuf);
@@ -482,13 +482,17 @@ void gdi_print_wrong_endian_number(int number, u8 status)
 /* ---------------------------------------------------------------------------*/
 void my_sprintf(gdi_float input)
 {
+	char sign = '\0';
 	int d1 = input;            // Get the integer part
 	gdi_float f2 = fabs(input) - fabs(d1);     // Get fractional part
 	int d2 = trunc(f2 * 10000);   // Turn into integer
 	gdi_float f3 = f2 * 10000 - d2;   // Get next fractional part
 	int d3 = trunc(f3 * 10000);   // Turn into integer.
 
-	sprintf (str, "%d.%04d%04d\n", d1, d2, d3);
+	if (input < 0 && d1 == 0)
+		sign = '-';
+
+	sprintf (str, "%c%d.%04d%04d\n", sign, d1, d2, d3);
 }
 
 /* ---------------------------------------------------------------------------*/
