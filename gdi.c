@@ -60,6 +60,7 @@ int uid;
 /* Private variables ---------------------------------------------------------*/
 static char inputCmdBuf = 0;
 static char input_buffer[2][INPUT_BUF_SIZE];
+char str[20];
 
 #ifdef DEBUG_USE_ECHO_AS_DEFAULT
 static u8 gdiEcho = TRUE;
@@ -479,6 +480,18 @@ void gdi_print_wrong_endian_number(int number, u8 status)
 }
 
 /* ---------------------------------------------------------------------------*/
+void my_sprintf(gdi_float input)
+{
+	int d1 = input;            // Get the integer part
+	gdi_float f2 = fabs(input) - fabs(d1);     // Get fractional part
+	int d2 = trunc(f2 * 10000);   // Turn into integer
+	gdi_float f3 = f2 * 10000 - d2;   // Get next fractional part
+	int d3 = trunc(f3 * 10000);   // Turn into integer.
+
+	sprintf (str, "%d.%04d%04d\n", d1, d2, d3);
+}
+
+/* ---------------------------------------------------------------------------*/
 #ifdef USE_FLOAT_REG_FEATURE
 #if 1 //sprintf(str, "%f", number); causes a Hardfault print hex instead
 void gdi_print_wrong_endian_gdi_float(gdi_float number, u8 status)
@@ -502,7 +515,7 @@ void gdi_print_wrong_endian_gdi_float(gdi_float number, u8 status)
     while (USART_GetFlagStatus(uart, USART_FLAG_TXE) == RESET);
   }
   else {
-    char str[20];
+
     int i;
     
     //ByteSwap for Modbus
@@ -513,7 +526,11 @@ void gdi_print_wrong_endian_gdi_float(gdi_float number, u8 status)
       swap_p++;
     }
 #ifdef USE_FLOAT_PRECICION_DOUBLE
-    sprintf(str, "0x%08x%08x", *(pval+1), *pval);
+    //sprintf(str, "0x%08x%08x", *(pval+1), *pval);
+
+    uint64_t tmp = (uint64_t)(*(pval+1)) << 32 | (uint32_t)(*pval);
+    my_sprintf(*((gdi_float*)&tmp));
+
 #else
     sprintf(str, "0x%08x", *pval);
 #endif
@@ -598,6 +615,7 @@ int gdi_get_regwrite_float_values(gdi_float * fbuffer)
   int i = 0, j = 0, start_pos = 0, end_pos = 0;
   char *token;
   u16 swap_tmp;
+
   u16 * swap_p = (u16*)&fbuffer[0];
   while(gdi_req_func_info.parameters[i])
   {
@@ -610,7 +628,13 @@ int gdi_get_regwrite_float_values(gdi_float * fbuffer)
   if((end_pos != 0) && (start_pos <= end_pos))
   {
     gdi_float tmp;
-    tmp =  (gdi_float) atof((*(gdi_req_func_info.parameters + start_pos))+1); // +1 to point past the initial '['
+    char *ptr;
+
+    if (strlen((*(gdi_req_func_info.parameters + start_pos))+1) > 15) //Otherwise atof fails, precision...
+    	return 0;
+
+    tmp = (gdi_float)strtod((*(gdi_req_func_info.parameters + start_pos))+1, &ptr);
+   	//tmp = atof((*(gdi_req_func_info.parameters + start_pos))+1);
     fbuffer[j++] = tmp;
     for(i = start_pos + 1; i < end_pos; i++)
     {
@@ -633,6 +657,7 @@ int gdi_get_regwrite_float_values(gdi_float * fbuffer)
     }
     return end_pos + 1;
   }
+
   return 0;
 }
 #endif // USE_FLOAT_REG_FEATURE
@@ -1695,7 +1720,7 @@ bool DebugModbusWriteRegs(u8 slave, u16 addr, u8 *data, u16 register_count)
 {
   xMessage *msgout;
   WriteModbusRegsReq *pReq;
-  msgout=pvPortMalloc(sizeof(xMessage)+sizeof(WriteModbusRegsReq)+register_count*sizeof(u16));
+  msgout=pvPortMalloc(sizeof(xMessage)+sizeof(WriteModbusRegsReq)+(register_count*sizeof(u16)));
   if(NULL == msgout)
   {
     GDI_PRINTF("Malloc failed! DebugModbusWriteRegs Tube %d, Reg %d",slave,addr);

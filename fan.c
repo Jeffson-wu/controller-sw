@@ -67,17 +67,15 @@ void fan_controller(fan_t *fan)
     case CTR_STOP_STATE:
     {
       *fan->io.ctrVal = 0;
-      reset_controller(&fan->controller);
-      reset_rateLimiter(&fan->rateLimiter, *fan->io.adcVal);
-      fan->state = CTR_CLOSED_LOOP_STATE; // ToDo: FJERN NAAR KIM HAR FIKSET KOMMANDOEN FRA LINUX - JSL!!
-      fan->setPoint = 2500;
     }
     break;
     case CTR_INIT:
     {
       reset_controller(&fan->controller);
       reset_rateLimiter(&fan->rateLimiter, *fan->io.adcVal);
-      fan[0].state = CTR_CLOSED_LOOP_STATE;
+
+      fan[0].state = CTR_CLOSED_LOOP_STATE; // ToDo: FJERN NAAR KIM HAR FIKSET KOMMANDOEN FRA LINUX - JSL!!
+      fan->setPoint = 2500; //
     }
     break;
     case CTR_MANUAL_STATE:
