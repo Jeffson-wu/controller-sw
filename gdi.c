@@ -1529,7 +1529,7 @@ void gdi_map_to_functions()
       }
       if(ASSERT_KEY == (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10) )
       {
-        assert_failed((unsigned char *)__FILE__, __LINE__);
+        configASSERT(1);
       }
       if(CRASH_KEY == (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10) )
       {
