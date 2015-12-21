@@ -125,6 +125,7 @@ int getCoolandlidHWReport(char *poutText);
 int getAdc(char *poutText);
 int getCLMonitor(char *poutText);
 
+
 #if 0
 void init_ctr_feedback_coef(controller_t * controller);
 void fan_controller(fan_t *fan);

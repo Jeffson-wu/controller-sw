@@ -29,7 +29,7 @@
 int16_t adc_to_temp(ntcCoef_t *ntcCoef, int16_t adc)
 {
   int16_t temp;
-  temp = (ntcCoef->beta / (logf((ntcCoef->r_s_ohm*(MAX_DAC_VALUE - adc)) / (adc*R_R_OHM) + ntcCoef->beta / T_R_KEL) - 273.15)) * 10.00;
+  temp = (ntcCoef->beta / (logf((ntcCoef->r_s_ohm*(MAX_DAC_VALUE - adc)) / (adc*R_R_OHM)) + ntcCoef->beta / T_R_KEL) - 273.15) * 10.00;
   return temp;
 }
 
@@ -62,7 +62,7 @@ double imc_pid(controller_t *controller, double input)
 
   if (output <= controller->diff_eq.minOutputValue)
     output = controller->diff_eq.minOutputValue;
-  if (output >= controller->diff_eq.maxOutputValue)
+  else if (output >= controller->diff_eq.maxOutputValue)
     output = controller->diff_eq.maxOutputValue;
 
   controller->diff_eq.input = input;

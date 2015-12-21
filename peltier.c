@@ -31,6 +31,7 @@ void init_peltier(peltier_t * peltier)
   peltier->controller.setPoint = peltier->setPoint = MAX_DAC_VALUE;
 }
 
+
 void peltier_init_feedback_ctr(controller_t * controller)
 {
   controller->diff_eq.N0 = 1.005000E1;
@@ -38,13 +39,13 @@ void peltier_init_feedback_ctr(controller_t * controller)
   controller->diff_eq.D1 = -1.000000E0;
 
   controller->diff_eq.minOutputValue = 0;
-  controller->diff_eq.maxOutputValue = DAC_UPPER_LIMIT;
+  controller->diff_eq.maxOutputValue = MAX_DAC_VALUE;
 }
 
 void peltier_init_rate_limiter(rateLimiter_t * rateLimiter)
 {
-  rateLimiter->slewRateRising = 4;
-  rateLimiter->slewRateFaling = -4;
+  rateLimiter->slewRateRising = 0.5; //4;
+  rateLimiter->slewRateFaling = -0.5; //-4;
 }
 
 void peltier_setpoint(peltier_t * peltier, int16_t value)
@@ -61,7 +62,6 @@ void peltier_init_adc_to_temp(ntcCoef_t * ntcCoef)
 void peltier_controller(peltier_t *peltier)
 {
   uint16_t ctr_out = 0;
-
   peltier->adcValFilt = median_filter(&peltier->medianFilter, *peltier->io.adcVal);
 
   switch (peltier->state) {
@@ -105,6 +105,26 @@ void peltier_controller(peltier_t *peltier)
   {
     ctr_out = peltier->controller.diff_eq.minOutputValue;
   }
+
+
+  double dT = 0;
+
+  dT = (double)(2*peltier->voltage) + (-0.04*(double)ctr_out-9.56);
+  peltier->controller.diff_eq.maxOutputValue = 22.9*dT+3160;
+
+  peltier->t_hot_est = adc_to_temp(&peltier->ntcCoef, peltier->adcValFilt) + (dT*10.0);
+
+
+  /*
+  if (peltier->voltage < 100) //peltier voltage
+  {
+  	peltier->controller.diff_eq.output_old = ctr_out;
+  }
+  else
+  {
+  	ctr_out = peltier->controller.diff_eq.output = peltier->controller.diff_eq.output_old;
+  }
+  */
 
   *peltier->io.ctrVal = ctr_out;
 }

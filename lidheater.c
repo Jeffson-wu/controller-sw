@@ -50,7 +50,7 @@ void lid_heater_init_rate_limiter(rateLimiter_t * rateLimiter)
 void lid_heater_setpoint(lidHeater_t * lidHeater, int16_t value)
 {
   lidHeater->setPoint = lidHeater->controller.setPoint = temp_to_adc(&lidHeater->ntcCoef, value);
-  lidHeater->setPointLow = temp_to_adc(&lidHeater->ntcCoef, (value-(int16_t)((double)value*0.05)));
+  lidHeater->setPointLow = temp_to_adc(&lidHeater->ntcCoef, (value-(int16_t)((double)value*0.03)));
 }
 
 void lid_heater_init_ntc_coef(ntcCoef_t * ntcCoef)
