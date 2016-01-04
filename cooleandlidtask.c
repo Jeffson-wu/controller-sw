@@ -95,11 +95,12 @@
 /* Private typedef -----------------------------------------------------------*/
 const char *cl_states[] =
 {
-  "clnok",    		/* CL temperatures not reached - Not OK to start PCR            */
-  "clok",					/* CL temperatures reached     - OK to start PCR                */
-  "clliderr",			/* CL lid error                - Not ok to start PCR            */
-  "clcoolerr",		/* CL peltier error            - Not ok to start PCR            */
-  "clcoolliderr", /* CL peltier & lid error      - Not ok to start PCR            */
+  "clnok",    		/* CL temperatures not reached 	- Not OK to start PCR            */
+  "clok",			/* CL temperatures reached     	- OK to start PCR                */
+  "clliderr",		/* CL lid error                	- Not OK to start PCR            */
+  "clcoolerr",		/* CL peltier error            	- Not OK to start PCR            */
+  "clcoolliderr", 	/* CL peltier & lid error      	- Not OK to start PCR            */
+  "clamberr"		/* CL ambient temp too high		- Not OK to start PCR            */
 };
 
 typedef enum CL_STATES_T {
@@ -108,6 +109,7 @@ typedef enum CL_STATES_T {
   CL_STATE_CLLIDERROR,
   CL_STATE_CLCOOLERROR,
   CL_STATE_CLCOOLLIDERROR,
+  CL_STATE_CLAMBERROR,
   nCL_STATES
 } cl_states_t;
 
@@ -156,6 +158,7 @@ static bool coolTempOK = FALSE;
 static bool lidTempOK = FALSE;
 static bool coolTempError = FALSE;
 static bool lidTempError = FALSE;
+static bool ambTempOK = FALSE;
 static cl_lid_open_states_t lidState = CL_LID_ERROR;
 
 // Parameters for ADC
@@ -209,6 +212,8 @@ static uint16_t dacCh[1] = {0};
 
 // Fan controll is based on the temp diff: adcDiff[0] =  Fin temp - Ambient temp
 static int16_t *adcDiffSource[2] = {&adcCh[3], &adcCh[0]};
+
+static int16_t *adcAmbient = &adcCh[0];
 
 static peltier_t peltier[nPELTIER] = {
   {PELTIER_1, CTR_STOP_STATE, { &dacCh[0], &adcCh[2]}} //, {-26213}
@@ -653,7 +658,7 @@ int getClLog(char *poutText )
   
   *poutText = 0;
 
-  if( coolTempOK && lidTempOK )
+  if( coolTempOK && lidTempOK && ambTempOK)
   {
   	clState = CL_STATE_CLOK;
   }
@@ -665,6 +670,10 @@ int getClLog(char *poutText )
   {
   	clState = CL_STATE_CLLIDERROR;
   }
+  else if( !ambTempOK )
+  {
+  	clState = CL_STATE_CLAMBERROR;
+  }
   else
   {
   	clState = CL_STATE_CLNOK;
@@ -672,7 +681,7 @@ int getClLog(char *poutText )
 
   strcat(poutText,"state=");
 #ifdef DISABLE_ERROR_REPOTING
-  strcat(poutText,cl_states[CL_STATE_CLOK]); // Juste say everything is OK
+  strcat(poutText,cl_states[CL_STATE_CLOK]); // Just say everything is OK
 #else
   strcat(poutText,cl_states[clState]);
 #endif
@@ -1086,7 +1095,8 @@ void CoolAndLidTask( void * pvParameters )
       static int toggle = 0;
       //PRINTF("%d, %d, %d, %d, %d, %d, %d, %d, %d, %d", (int16_t)peltier->controller.setPoint, *peltier[0].io.ctrVal, peltier[0].adcValFilt, (int16_t)fan[0].controller.setPoint, *fan[0].io.ctrVal, *fan[0].io.adcVal, (int16_t)lidHeater[0].controller.setPoint, *lidHeater[0].io.ctrVal, lidHeater[0].adcValFilt, *lidHeater[0].io.adcVal);
       //PRINTF("%d, %d, %d, %d, %d, %d, %d", (int16_t)peltier->controller.setPoint, *peltier[0].io.ctrVal, peltier[0].adcValFilt, getPeltierVoltage(), (int16_t)fan[0].controller.setPoint, *fan[0].io.ctrVal, *fan[0].io.adcVal);
-      	PRINTF("%d, %d, %d, %d, %d, %d, %d, %d, %d",
+      	PRINTF("%d, %d, %d, %d, %d, %d, %d, %d, %d, %d",
+      			adc_to_temp(&peltier[0].ntcCoef, (int16_t)*adcAmbient),
       			adc_to_temp(&peltier[0].ntcCoef, (int16_t)peltier->controller.setPoint),
       			*peltier[0].io.ctrVal,
       			adc_to_temp(&peltier[0].ntcCoef, peltier[0].adcValFilt),
@@ -1150,8 +1160,18 @@ void CoolAndLidTask( void * pvParameters )
       break;
     }
 
-    if( abs(peltier->controller.setPoint - *peltier[0].io.adcVal) < 10 ) { coolTempOK = TRUE; }
-    if( abs(lidHeater->controller.setPoint - *lidHeater[0].io.adcVal) < 10 ) { lidTempOK = TRUE; }
+    // ToDo: Find limits.
+    if( abs( adc_to_temp(&peltier[0].ntcCoef, peltier->controller.setPoint) - adc_to_temp(&peltier[0].ntcCoef, *peltier->io.adcVal) ) < 10 ) { coolTempOK = TRUE; }
+    if( abs( adc_to_temp(&lidHeater[0].ntcCoef, lidHeater->controller.setPoint) - adc_to_temp(&lidHeater[0].ntcCoef, *lidHeater->io.adcVal) ) < 10 ) { lidTempOK = TRUE; }
+
+    if( adc_to_temp(&peltier[0].ntcCoef, *adcAmbient) < 300 ) // same coef as for peltier
+    {
+    	ambTempOK = TRUE;
+    }
+    else
+    {
+    	ambTempOK = FALSE;
+    }
 
 #endif
 
