@@ -1,6 +1,8 @@
 #include "util.h"
 #include "string.h"
 #include "stm32f10x.h"
+#include "FreeRTOS.h"
+
 
 
 /*Util functions*/
@@ -37,7 +39,7 @@ int addStrToBuf(char *buffer, const char *str, int maxsize)
 {
   if(strlen(buffer)+strlen(str)>maxsize)
   {
-    assert_failed((unsigned char *)__FILE__, __LINE__);
+    configASSERT(pdFALSE);
     return -1;
   }
   else
