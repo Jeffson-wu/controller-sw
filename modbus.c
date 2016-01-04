@@ -283,7 +283,10 @@ static USART_ERROR ModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer)
   {
     return ERR;
   }
-  memcpy(buffer, telegram, datasize*sizeof(u16)>telegramsize?telegramsize:datasize*sizeof(u16));
+  if(!buffer)
+  {
+    memcpy(buffer, telegram, datasize*sizeof(u16)>telegramsize?telegramsize:datasize*sizeof(u16));
+  }
   if(telegramsize-5<=0)
   {
     return WRONG_TEL_LENGHT;

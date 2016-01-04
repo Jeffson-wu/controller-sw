@@ -679,7 +679,6 @@ void ReadTubeHeaterRegFromISR( void *pvParameter1, uint32_t ulParameter2 )
   }
   return;
 }
-
 /* ---------------------------------------------------------------------------*/
 void EXTI_Handler(void)
 {
@@ -909,7 +908,7 @@ bool pause_tube_state(long TubeId)
 #endif
 
 /* ---------------------------------------------------------------------------*/
-char * get_tube_state(long TubeId, char *poutText)
+char * get_tube_state(long TubeId, char *poutText, int size)
 {
   char state[20]="idle";
   char progress[5]="50";
@@ -950,30 +949,30 @@ char * get_tube_state(long TubeId, char *poutText)
     strcpy(state, "error");
   }
   Itoa(Tubeloop[TubeId-1].curr.seq_num, stage_nr);
-  strcpy(poutText, "OK,state=\"");
-  strcat(poutText, state);
-  strcat(poutText, "\"");
+  addStrToBuf(poutText, "OK,state=\"", size);
+  addStrToBuf(poutText, state, size);
+  addStrToBuf(poutText, "\"", size);
   if(Tubeloop[TubeId-1].state != TUBE_IDLE)
   {
-    strcat(poutText, ";progress=");
-    strcat(poutText, progress);
-    strcat(poutText, ";stage_number=");
-    strcat(poutText, stage_nr);
-    getLog(poutText, TubeId);
+    addStrToBuf(poutText, ";progress=", size);
+    addStrToBuf(poutText, progress, size);
+    addStrToBuf(poutText, ";stage_number=", size);
+    addStrToBuf(poutText, stage_nr, size);
+    addLog(poutText, TubeId, size);
   }
   if( (event = Tubeloop[TubeId-1].event_reg) )      /* last event/status register read from tube*/
   { // Report event to linux box 
     sprintf(numberStr, ";event=%d", (int)Tubeloop[TubeId-1].event_reg);
     Tubeloop[TubeId-1].event_reg = 0;
-    strcat(poutText, numberStr);
+    addStrToBuf(poutText, numberStr, size);
   }
   if( (hw_status = Tubeloop[TubeId-1].hw_status_reg) )  /* last hw status register read from tube   */
   { // Report hw status to linux box
     sprintf(numberStr, ";hw_status=%d", (int)Tubeloop[TubeId-1].hw_status_reg);
     Tubeloop[TubeId-1].hw_status_reg = 0;
-    strcat(poutText, numberStr);
+    addStrToBuf(poutText, numberStr, size);
   }
-  strcat(poutText, ";");
+  addStrToBuf(poutText, ";", size);
   return poutText;
 }
 

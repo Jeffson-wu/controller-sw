@@ -39,7 +39,7 @@ void heaterIrqInit(void);
 bool start_tube_seq(long TubeId);
 bool stop_tube_seq(long TubeId);
 
-char *get_tube_state(long TubeId, char *poutText);
+char *get_tube_state(long TubeId, char *poutText, int size);
 bool tubedataQueueAdd(u8 tubeId, u16 seq_num, char state, stageCmd_t *data);
 bool pause_tube_state(long TubeId);
 int getTubeHWReport(char *poutText, long TubeId);

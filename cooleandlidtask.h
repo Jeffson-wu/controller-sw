@@ -118,7 +118,7 @@ typedef struct LID {
 /* Exported functions ------------------------------------------------------- */
 
 void CoolAndLidTask( void * pvParameters );
-int getClLog(char *poutText );
+int getClLog(char *poutText, int maxlen );
 bool coolLidReadRegs(u8 slave, u16 addr, u16 datasize, u16 *buffer);
 bool coolLidWriteRegs(u8 slave, u16 addr, u16 *data, u16 datasize);
 int getCoolandlidHWReport(char *poutText);

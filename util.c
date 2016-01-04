@@ -1,5 +1,7 @@
 #include "util.h"
 #include "string.h"
+#include "stm32f10x.h"
+
 
 /*Util functions*/
 
@@ -16,19 +18,34 @@ static void reverse(char s[])
 }
 
 void Itoa(int n, char s[])
- {
- int i, sign;
+{
+  int i, sign;
 
- if ((sign = n) < 0)  
-     n = -n;         
- i = 0;
- do {
-     s[i++] = n % 10 + '0';
- } while ((n /= 10) > 0);
- if (sign < 0)
-     s[i++] = '-';
- s[i] = '\0';
- reverse(s);
- }
+  if ((sign = n) < 0)  
+    n = -n;
+  i = 0;
+  do {
+    s[i++] = n % 10 + '0';
+  } while ((n /= 10) > 0);
+  if (sign < 0)
+    s[i++] = '-';
+  s[i] = '\0';
+  reverse(s);
+}
+
+int addStrToBuf(char *buffer, const char *str, int maxsize)
+{
+  if(strlen(buffer)+strlen(str)>maxsize)
+  {
+    assert_failed((unsigned char *)__FILE__, __LINE__);
+    return -1;
+  }
+  else
+  {
+    strcat(buffer,str);
+  }
+  return 0;
+}
+
 
 

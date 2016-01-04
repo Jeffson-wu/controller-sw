@@ -799,7 +799,7 @@ void gdi_map_to_functions()
         int tubeNum;
         int dataSent = 0;
         /* Get log */
-        if(getClLog(str))
+        if(getClLog(str, SIZE_OF_STR_RESULT))
         { /* CL log data was retrieved */
           dataSent = 1;
         }
@@ -1152,7 +1152,7 @@ void gdi_map_to_functions()
             }
             else
             {
-              gdi_send_data_response(get_tube_state(TubeId, str), newline_end);
+              gdi_send_data_response(get_tube_state(TubeId, str, SIZE_OF_STR_RESULT), newline_end);
             }
           }
           // "at@gdi:seq_cmd(<uid>,<tube>,<stage number>,<temp>,<time>,<stage>,tubestage)\r"
@@ -1797,7 +1797,7 @@ bool DebugWriteRegs(xQueueHandle destQueue, u8 slave, u16 addr, u8 *data, u16 re
 {
   xMessage *msgout;
   WriteModbusRegsReq *pReq;
-  msgout=pvPortMalloc(sizeof(xMessage)+sizeof(ReadModbusRegsReq));
+  msgout=pvPortMalloc(sizeof(xMessage)+sizeof(WriteModbusRegsReq)+register_count*sizeof(u16));
   if(NULL == msgout)
   {
     GDI_PRINTF("Malloc failed! DebugWriteRegs Slave %d, Reg %d",slave,addr);
