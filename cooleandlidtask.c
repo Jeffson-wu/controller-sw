@@ -97,18 +97,22 @@ const char *cl_states[] =
 {
   "clnok",    		/* CL temperatures not reached 	- Not OK to start PCR            */
   "clok",			/* CL temperatures reached     	- OK to start PCR                */
-  "clliderr",		/* CL lid error                	- Not OK to start PCR            */
-  "clcoolerr",		/* CL peltier error            	- Not OK to start PCR            */
-  "clcoolliderr", 	/* CL peltier & lid error      	- Not OK to start PCR            */
-  "clamberr"		/* CL ambient temp too high		- Not OK to start PCR            */
+  "cllidok",
+  "cllidnok",		/* CL lid error                	- Not OK to start PCR            */
+  "clcoolok",
+  "clcoolnok",		/* CL peltier error            	- Not OK to start PCR            */
+  "clambok",
+  "clambnok"		/* CL ambient temp too high		- Not OK to start PCR            */
 };
 
 typedef enum CL_STATES_T {
   CL_STATE_CLNOK,
   CL_STATE_CLOK,
+  CL_STATE_CLLIDOK,
   CL_STATE_CLLIDERROR,
+  CL_STATE_CLCOOLOK,
   CL_STATE_CLCOOLERROR,
-  CL_STATE_CLCOOLLIDERROR,
+  CL_STATE_CLAMBOK,
   CL_STATE_CLAMBERROR,
   nCL_STATES
 } cl_states_t;
@@ -156,9 +160,9 @@ static uint16_t cl_status = 0;
 static cl_states_t clState = CL_STATE_CLNOK;
 static bool coolTempOK = FALSE;
 static bool lidTempOK = FALSE;
-static bool coolTempError = FALSE;
-static bool lidTempError = FALSE;
-static bool ambTempOK = FALSE;
+static bool coolTempError = TRUE;
+static bool lidTempError = TRUE;
+static bool ambTempError = TRUE;
 static cl_lid_open_states_t lidState = CL_LID_ERROR;
 
 // Parameters for ADC
@@ -655,36 +659,60 @@ int getClLog(char *poutText, int maxlen )
   cl_logDataElement_t * pinData;
   char str[20];
   int dataAdded = 0;
-  
+  //const char *cl_output[] = {"OK", "OK", "OK", "OK", "OK"};
+
   *poutText = 0;
 
+  addStrToBuf(poutText,"state={", maxlen);
+
+
+  /*
   if( coolTempOK && lidTempOK && ambTempOK)
   {
-  	clState = CL_STATE_CLOK;
+  	cl_state = cl_states[CL_STATE_CLOK];
   }
-  else if( coolTempError )
+  */
+
+#ifdef DISABLE_ERROR_REPOTING
+  coolTempError = FALSE;
+  lidTempError = FALSE;
+  ambTempError = FALSE;
+#endif
+  if( coolTempError )
   {
-  	clState = CL_STATE_CLCOOLERROR;
-  }
-  else if( lidTempError )
-  {
-  	clState = CL_STATE_CLLIDERROR;
-  }
-  else if( !ambTempOK )
-  {
-  	clState = CL_STATE_CLAMBERROR;
+	  clState = CL_STATE_CLCOOLERROR;
   }
   else
   {
-  	clState = CL_STATE_CLNOK;
+	  clState = CL_STATE_CLCOOLOK;
   }
+  addStrToBuf(poutText, cl_states[clState], maxlen);
+  addStrToBuf(poutText, ",", maxlen);
 
-  addStrToBuf(poutText,"state=", maxlen);
-#ifdef DISABLE_ERROR_REPOTING
-  addStrToBuf(poutText,cl_states[CL_STATE_CLOK], maxlen); // Juste say everything is OK
-#else
-  addStrToBuf(poutText,cl_states[clState], maxlen);
-#endif
+  if( lidTempError )
+  {
+	  clState = CL_STATE_CLLIDERROR;
+  }
+  else
+  {
+	  clState = CL_STATE_CLLIDOK;
+  }
+  addStrToBuf(poutText, cl_states[clState], maxlen);
+  addStrToBuf(poutText, ",", maxlen);
+
+  if( ambTempError )
+  {
+	  clState = CL_STATE_CLAMBERROR;
+  }
+  else
+  {
+	  clState = CL_STATE_CLAMBOK;
+	  //clState = cl_states[CL_STATE_CLNOK];
+  }
+  addStrToBuf(poutText, cl_states[clState], maxlen);
+  addStrToBuf(poutText, "}", maxlen);
+
+
   //#### strcat(poutText,",");
 
   // Send all available log elements
@@ -1166,11 +1194,11 @@ void CoolAndLidTask( void * pvParameters )
 
     if( adc_to_temp(&peltier[0].ntcCoef, *adcAmbient) < 300 ) // same coef as for peltier
     {
-    	ambTempOK = TRUE;
+    	ambTempError = FALSE;
     }
     else
     {
-    	ambTempOK = FALSE;
+    	ambTempError = TRUE;
     }
 
 #endif
