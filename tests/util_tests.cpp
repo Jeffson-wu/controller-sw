@@ -27,5 +27,12 @@ int main(int ac, char** av)
 	return CommandLineTestRunner::RunAllTests(sizeof(argv)/sizeof(const char *), argv);
 }
 
+extern "C" {
+void assert_failed(unsigned char* file, unsigned int line)
+{
+  /*simple stub*/
+}
+}
+
 IMPORT_TEST_GROUP(Util);
 
