@@ -75,6 +75,7 @@
 #endif
 
 #define PELT_EN_TOGGLE_TICKS  14400000  // 4 hours 4*60*60*(ticks/sec) 14400000ms : ( 500/*ms*/ / portTICK_PERIOD_MS )
+#define PELT_EN_TOGGLE_DISABLE_TIME 10 // 10 ms
 #define CL_STATUS_TICKS   300000  // 30 sec 0.5*60*(ticks/sec) 60000ms : ( 500/*ms*/ / portTICK_PERIOD_MS )
 #define LOCK_OUTPUT_PIN   GPIO_Pin_8
 #define LOCK_OUTPUT_PORT  GPIOA
@@ -150,7 +151,8 @@ typedef struct CL_DATA_LOG_T {
 /* ---------------------------------------------------------------------------*/
 // command queue
 xQueueHandle CoolAndLidQueueHandle;
-TimerHandle_t BQ24600Timer;
+TimerHandle_t BQ24600TimerBegin;
+TimerHandle_t BQ24600TimerEnd;
 TimerHandle_t CLStatusTimer;
 extern xQueueHandle TubeSequencerQueueHandle;
 bool msgSent = FALSE;
@@ -368,9 +370,24 @@ void vApplicationTickHook()
 #endif // USE_LID_DETECT_FEATURE
 
 /* ---------------------------------------------------------------------------*/
-void togglePeltier() {
-  GPIO_ResetBits(PELTIER_EN_PORT, PELTIER_EN_PIN);
+void togglePeltierEnd() {
   GPIO_SetBits(  PELTIER_EN_PORT, PELTIER_EN_PIN);
+}
+
+void togglePeltierBegin() {
+  BQ24600TimerEnd = xTimerCreate((char *)"BQ24600TimerEnd",
+            PELT_EN_TOGGLE_DISABLE_TIME, // The timer period in ticks.
+            pdFALSE,               // auto-reload.
+            ( void * ) 0,         // id.
+            togglePeltierEnd         // callback.
+            );
+  if( BQ24600TimerEnd == NULL ) {
+    PRINTF("Peltier driver start toggle timer end not created");
+  } else {
+    GPIO_ResetBits(PELTIER_EN_PORT, PELTIER_EN_PIN);
+    xTimerStart(BQ24600TimerEnd, 0);
+  }
+
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -397,16 +414,16 @@ void CLStatus( xTimerHandle pxTimer )
 
 /* ---------------------------------------------------------------------------*/
 void initTogglePeltierTimer() {
-  BQ24600Timer = xTimerCreate((char *)"BQ24600Timer",
+  BQ24600TimerBegin = xTimerCreate((char *)"BQ24600TimerBegin",
             PELT_EN_TOGGLE_TICKS, // The timer period in ticks.
             pdTRUE,               // auto-reload.
             ( void * ) 0,         // id.
-            togglePeltier         // callback.
+            togglePeltierBegin         // callback.
             );
-  if( BQ24600Timer == NULL ) {
+  if( BQ24600TimerBegin == NULL ) {
     PRINTF("Peltier driver restart timer not created");
   } else {
-    xTimerStart(BQ24600Timer, 0);
+    xTimerStart(BQ24600TimerBegin, 0);
   }
 }
 
