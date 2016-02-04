@@ -18,6 +18,7 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "lidheater.h"
+#include "sequencer.h"
 
 /* ---------------------------------------------------------------------------*/
 /* Lid handling */
@@ -29,6 +30,7 @@ void init_lid_heater(lidHeater_t * lidHeater)
   init_median_filter(&lidHeater->medianFilter);
   lid_heater_init_ntc_coef(&lidHeater->ntcCoef);
   lidHeater->controller.setPoint = lidHeater->setPoint = 0;
+  lidHeater->error = FALSE;
 }
 
 void lid_heater_init_feedback_ctr(controller_t * controller)
@@ -85,11 +87,11 @@ void lid_heater_controller(lidHeater_t *lidHeater)
     break;
     case CTR_OPEN_LOOP_STATE:
     {
-      ctr_out = PWM_UPPER_LIMIT;
-    	if (*lidHeater->io.adcVal > lidHeater->setPointLow)
-    	{
-    		lidHeater->state = CTR_CLOSED_LOOP_STATE;
-    	}
+			ctr_out = PWM_UPPER_LIMIT;
+			if (*lidHeater->io.adcVal > lidHeater->setPointLow)
+			{
+				lidHeater->state = CTR_CLOSED_LOOP_STATE;
+			}
     }
     break;
     case CTR_CLOSED_LOOP_STATE:
@@ -110,5 +112,17 @@ void lid_heater_controller(lidHeater_t *lidHeater)
     ctr_out = lidHeater->controller.diff_eq.minOutputValue;
   }
 
+  int8_t i;
+  if (lidHeater->adcValFilt > lidHeater->max_adc)
+  {
+	  //setCLStatusReg(0x0001);
+	  for (i=0;i<16; i++)
+	  {
+		  stop_tube_seq(i+1);
+		  //send_led_cmd(21, i+1); //SET_LED_OFF
+	  }
+	  lidHeater->state = CTR_STOP_STATE;
+	  lidHeater->error = TRUE;
+  }
   *lidHeater->io.ctrVal = ctr_out;
 }

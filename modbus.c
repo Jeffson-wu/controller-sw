@@ -277,7 +277,7 @@ static USART_ERROR ModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer)
   UART_SendMsg(usedUart, telegram, 6+2);
   DEBUG_MB_PRINTF("MBR->");
   ERR = waitForRespons(telegram, &telegramsize);
- // DEBUG_HF_PRINTF("* TelRRS:%d", telegramsize);
+  DEBUG_HF_PRINTF("* TelRRS:%d", telegramsize);
   DEBUG_MB_PRINTF("MBR<-");
   if(ERR != NO_ERROR)
   {

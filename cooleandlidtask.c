@@ -634,15 +634,15 @@ void logInit()
 }
 
 /* ---------------------------------------------------------------------------*/
-/* Linux Box interpretation = Ambient, top heater, could side, warm side      */
+/* Linux Box interpretation = Ambient, top heater, cold side, warm side */
 
 void logUpdate(lidHeater_t *lidHeater, peltier_t *peltier, fan_t *fan, int16_t *ambient)
 {
   cl_dataLog.avgCnt += 1;
-  cl_dataLog.accum[0] += adc_to_temp(&lidHeater[0].ntcCoef, lidHeater[0].adcValFilt);
-  cl_dataLog.accum[1] += adc_to_temp(&peltier[0].ntcCoef, peltier[0].adcValFilt);
-  cl_dataLog.accum[2] += adc_to_temp(&fan[0].ntcCoef, fan[0].adcValFilt);
-  cl_dataLog.accum[3] += peltier[0].t_hot_est; //*ambient;
+  cl_dataLog.accum[0] += adc_to_temp(&peltier[0].ntcCoef, (int16_t)*adcAmbient);
+  cl_dataLog.accum[1] += adc_to_temp(&lidHeater[0].ntcCoef, lidHeater[0].adcValFilt);
+  cl_dataLog.accum[2] += adc_to_temp(&peltier[0].ntcCoef, peltier[0].adcValFilt);
+  cl_dataLog.accum[3] += peltier[0].t_hot_est;
 
   // Is the log buffer full?
   if(CL_SAMPLES_PER_LOG <= cl_dataLog.avgCnt) {
@@ -1180,10 +1180,19 @@ void CoolAndLidTask( void * pvParameters )
     adcDiff[0] =  adc_to_temp(&fan[0].ntcCoef, *adcDiffSource[1]) - adc_to_temp(&fan[0].ntcCoef, *adcDiffSource[0]); // Fan controll is based on the temp diff
 #ifndef STANDALONE
 
+    peltier[0].max_adc = temp_to_adc(&peltier[0].ntcCoef, 300);
+    lidHeater[0].max_adc = temp_to_adc(&lidHeater[0].ntcCoef, 1200);
+
     peltier[0].voltage = getPeltierVoltage();
     peltier_controller(&peltier[0]);
-    fan_controller(&fan[0], peltier[0].t_hot_est);
+    fan_controller(&fan[0], peltier[0].t_hot_est);  // Todo T to ADC
     lid_heater_controller(&lidHeater[0]);
+
+    if (peltier[0].error == TRUE || lidHeater[0].error == TRUE)
+    {
+    	//peltier[0].state = CTR_STOP_STATE;
+    	//lidHeater[0].state = CTR_STOP_STATE;
+    }
 
     switch (peltier->state) {
       case CTR_STOP_STATE:

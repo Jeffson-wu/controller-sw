@@ -39,6 +39,8 @@ typedef struct LID {
   int16_t             setPoint;
   int16_t             adcValFilt;
   int16_t							setPointLow;
+  int16_t							max_adc;
+  int8_t							error;
 } lidHeater_t;
 
 /* Exported constants --------------------------------------------------------*/

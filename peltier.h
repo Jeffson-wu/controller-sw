@@ -40,6 +40,8 @@ typedef struct PELTIER {
   int16_t             adcValFilt;
   uint16_t						voltage;
   int16_t							t_hot_est;
+  int16_t							max_adc;
+  int8_t							error;
 } peltier_t;
 
 

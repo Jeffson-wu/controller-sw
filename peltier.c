@@ -18,6 +18,8 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "peltier.h"
+#include "sequencer.h"
+//#include	"gdi.h"
 
 /* ---------------------------------------------------------------------------*/
 /* Peltier handling */
@@ -29,6 +31,7 @@ void init_peltier(peltier_t * peltier)
   init_median_filter(&peltier->medianFilter);
   peltier_init_adc_to_temp(&peltier->ntcCoef);
   peltier->controller.setPoint = peltier->setPoint = MAX_DAC_VALUE;
+  peltier->error = FALSE;
 }
 
 
@@ -114,6 +117,18 @@ void peltier_controller(peltier_t *peltier)
 
   peltier->t_hot_est = adc_to_temp(&peltier->ntcCoef, peltier->adcValFilt) + (dT*10.0);
 
+  int8_t i;
+  if (peltier->adcValFilt > peltier->max_adc)
+  {
+	  //setCLStatusReg(0x0001);
+	  for (i=0;i<16; i++)
+	  {
+		  stop_tube_seq(i+1);
+		  //send_led_cmd(21, i+1); //SET_LED_OFF
+	  }
+	  peltier->state = CTR_STOP_STATE;
+	  peltier->error = TRUE;
+  }
 
   /*
   if (peltier->voltage < 100) //peltier voltage

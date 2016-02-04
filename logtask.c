@@ -141,7 +141,7 @@ logDataElement_t * enqueue(logDataQueue_t * pQueue)
 }
 
 /* ---------------------------------------------------------------------------*/
-// Dequeue elament. Return pointer to element so it can be read.
+// Dequeue elrment. Return pointer to element so it can be read.
 logDataElement_t * dequeue(logDataQueue_t * pQueue)
 {
 #ifdef DEBUG
@@ -300,7 +300,6 @@ void LogOff()
 #endif // USE_DEVELOPMENT_LOGGING /* <-- For USE_DEVELOPMENT_LOGGING feature */
 
 /* ---------------------------------------------------------------------------*/
-#if 0 																																							//Todo: Change to mean temp
 void vReadTubeTemp(xTimerHandle pxTimer )
 {
   xMessage *msg;
@@ -334,7 +333,6 @@ void vReadTubeTemp(xTimerHandle pxTimer )
     }
   }
 }
-#endif
 
 /* ---------------------------------------------------------------------------*/
 void LogTask( void * pvParameters )

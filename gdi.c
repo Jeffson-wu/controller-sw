@@ -50,12 +50,12 @@ int uid;
 /* Private debug define ------------------------------------------------------*/
 //#define DEBUG_USE_ECHO_AS_DEFAULT
 //#define DEBUG
-
 #ifdef DEBUG
 #define GDI_PRINTF(fmt, args...)      sprintf(dbgbuf, fmt, ## args);  send_msg_on_monitor(dbgbuf);
 #else
 #define GDI_PRINTF(fmt, args...)    /* Don't do anything in release builds */
 #endif
+
 
 /* Private variables ---------------------------------------------------------*/
 static char inputCmdBuf = 0;
@@ -1703,7 +1703,6 @@ u8 DebugModbusReadRegs(u8 slave, u16 addr, u16 register_count, u8 *buffer)
       ReadModbusRegsRes *preg;
       u16 *modbus_data = (u16*)buffer;
       int i=0;
-      
       preg = (ReadModbusRegsRes *)msgin->ucData;
       for(i = 0; i < (preg->datasize); i++)
       {
