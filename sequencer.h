@@ -35,6 +35,9 @@ typedef struct
 
 void Heater_PinConfig(void);
 void heaterIrqInit(void);
+void pingAllM0(void);
+void setPingMode(int mode);
+void setProdTestMode(int mode);
 
 bool start_tube_seq(long TubeId);
 bool stop_tube_seq(long TubeId);

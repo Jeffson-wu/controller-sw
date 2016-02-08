@@ -47,6 +47,7 @@
 #include "../heater-sw/heater_reg.h"
 #include "version.h"
 #include "debug.h"
+#include "sequencer.h"
 
 /* Private feature defines ---------------------------------------------------*/
 #define QUEUESIZE 10
@@ -236,8 +237,15 @@ void NVICInit(void)
 /* ---------------------------------------------------------------------------*/
 void vHeartBeat_LEDToggle(xTimerHandle pxTimer )
 {
+  static uint8_t toggle = 0;
   GPIOC->ODR ^= GPIO_Pin_9;
   //DEBUG_PRINTF("FREE HEAP:%d",xPortGetFreeHeapSize());
+  if(toggle){
+    pingAllM0();
+    toggle = 0;
+  } else {
+    toggle = 1;
+  }
 }
 
 /* ---------------------------------------------------------------------------*/

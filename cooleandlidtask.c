@@ -25,7 +25,7 @@
 
 /* Private debug define ------------------------------------------------------*/
 #define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
-#define DEBUG_COOL
+//#define DEBUG_COOL
 //#define DEBUG_LOGGING
 //#define STANDALONE /*Defines if the M3 Runs with or without Linux box*/
 
