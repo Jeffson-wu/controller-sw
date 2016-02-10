@@ -1200,12 +1200,9 @@ void CoolAndLidTask( void * pvParameters )
         GPIO_ResetBits(PELTIER_EN_PORT, PELTIER_EN_PIN);  //Disable Peltier
       }
       break;
-      case CTR_OPEN_LOOP_STATE:
-      {
-        GPIO_SetBits(PELTIER_EN_PORT, PELTIER_EN_PIN); //Enable peltier
-      }
-      break;
-      case CTR_CLOSED_LOOP_STATE:
+      case CTR_OPEN_LOOP_STATE:     // Fall through to enable peltier
+      case CTR_CLOSED_LOOP_STATE:   // Fall through to enable peltier
+      case CTR_MANUAL_STATE:
       {
         GPIO_SetBits(PELTIER_EN_PORT, PELTIER_EN_PIN); //Enable peltier
       }
@@ -1233,9 +1230,9 @@ void CoolAndLidTask( void * pvParameters )
     // TODO: Reset controller when changing TH power state
     if(CL_STATE_CLNOK == clState) {
       // Bottom heaters disabled : full power on top heater
-      if(MANUAL_STATE != lidHeater[0].state) {
+      //if(MANUAL_STATE != lidHeater[0].state) {
         *pwmChMirror[0] = *pwmChMirror[1] = *(lidHeater[0].io.ctrVal);
-      }
+      //}
     }
     else
     {
@@ -1256,9 +1253,9 @@ void CoolAndLidTask( void * pvParameters )
     }
 #else
     // Full power on top heater
-    if(CTR_MANUAL_STATE != lidHeater[0].state) {
+    //if(CTR_MANUAL_STATE != lidHeater[0].state) {
       *pwmChMirror[0] = *pwmChMirror[1] = *(lidHeater[0].io.ctrVal);
-    }
+    //}
 #endif
 
     PWM_Set(pwmCh[0], PWM0_TIM4CH3);  /* pwmCh[0], TIM4,CH3 - PB8 -  J175 :  TopHeater1Ctrl */
