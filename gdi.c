@@ -109,6 +109,7 @@ enum gdi_func_type
   setdac,
   getadc,
   getclmonitor,
+  setprodtest,
   crash_cmd,
   bu_cmd,     // Crash cmd - used after crashes - see debug.c
   invalid_command
@@ -155,6 +156,7 @@ gdi_func_table_type gdi_func_info_table[] =
   {"setdac",            " Set DAC [%]",               "at@gdi:setdac(idx, dac)",    setdac },
   {"getadc",            " Get latest ADC values",     "at@gdi:getadc()",            getadc },
   {"getclmonitor",      " Get CL running variables",  "at@gdi:getclmonitor",        getclmonitor },
+  {"setprodtestmode",   " Start prodtest mode ",      "at@gdi:setprodtest",         setprodtest},
   {"crash",             " Force crash",               "at@gdi:crash(key)",          crash_cmd },
   {"bu",                "",                           "",                           bu_cmd }, // cmd used only after a crash - see debug.c
   { NULL, NULL, NULL, 0 }
@@ -1521,6 +1523,43 @@ void gdi_map_to_functions()
     /***************************************************************/
     /* Misc commands                                               */
     /***************************************************************/
+    case setprodtest:
+      {
+        u8 paramcount;
+        if(!gdiEcho) {
+          uid = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
+          i++;
+          paramcount = 2;
+        } else { 
+          paramcount = 1; 
+        }
+        if (gdi_req_func_info.number_of_parameters != paramcount)
+        {
+          gdi_send_data_response("NOK wrong param count", newline_both);
+        }
+        else
+        {
+          if(1 == (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10) )
+          {
+            // Enable periodic pinging of all M0s 
+            setPingMode(1);
+            // Enable production test mode
+            setProdTestMode(1);
+            PRINTF("Prodtest mode");
+          }
+          else
+          {
+            // Disable periodic pinging of all M0s
+            setPingMode(0);
+            // Disable production test mode
+            setProdTestMode(0);
+            PRINTF("Normal mode");
+          }
+          gdi_send_data_response("OK", newline_end);
+        }
+      }
+      break;
+
     case crash_cmd:
     {
       if(!gdiEcho) {
@@ -1536,6 +1575,7 @@ void gdi_map_to_functions()
         forceHardFault();
       }
     }
+    break; // Will not reach this point
 
     case bu_cmd:
     {

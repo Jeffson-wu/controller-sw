@@ -639,6 +639,42 @@ void ReadTubeHeaterReg(u8 tube, u16 reg, u16 datasize, xQueueHandle xQueue, bool
 }
 
 /* ---------------------------------------------------------------------------*/
+static char pingmode = 0;
+void pingAllM0(void)
+{
+  u16 data = 0;
+  if(1 == pingmode){
+    WriteTubeHeaterReg(  1, EVENT_REG, &data, 1); //Writing EVENT_REG is a ping request
+    WriteTubeHeaterReg(  5, EVENT_REG, &data, 1); //Writing EVENT_REG is a ping request
+    WriteTubeHeaterReg(  9, EVENT_REG, &data, 1); //Writing EVENT_REG is a ping request
+    WriteTubeHeaterReg( 13, EVENT_REG, &data, 1); //Writing EVENT_REG is a ping request
+  }
+}
+
+void setPingMode(int mode)
+{
+  if(mode) {
+    pingmode = 1;
+  } else {
+    pingmode = 0;
+  }
+}
+
+void setProdTestMode(int mode){
+  u16 cmd = SET_RUNMODE_NORMAL;
+  u16 data;
+  if(1 == mode) { cmd = SET_RUNMODE_PRODTEST; }
+  data = cmd;
+  WriteTubeHeaterReg(  1, TUBE_COMMAND_REG, &data, 1);
+  data = cmd; // WriteTubeHeaterReg() swaps endianess
+  WriteTubeHeaterReg(  5, TUBE_COMMAND_REG, &data, 1);
+  data = cmd; // WriteTubeHeaterReg() swaps endianess
+  WriteTubeHeaterReg(  9, TUBE_COMMAND_REG, &data, 1);
+  data = cmd; // WriteTubeHeaterReg() swaps endianess
+  WriteTubeHeaterReg( 13, TUBE_COMMAND_REG, &data, 1);
+}
+
+/* ---------------------------------------------------------------------------*/
 /* Configure the GPIO Pins to input */
 void Heater_PinConfig(void)
 {

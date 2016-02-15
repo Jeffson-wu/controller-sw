@@ -124,7 +124,9 @@ void fan_controller(fan_t *fan, int16_t peltierTemp)
 #endif
   if (ctr_out < fan->controller.diff_eq.minOutputValue)
   {
-  	ctr_out = fan->controller.diff_eq.minOutputValue;
+    if(CTR_MANUAL_STATE != fan->state) { // In CTR_MANUAL_STATE there is no min
+      ctr_out = fan->controller.diff_eq.minOutputValue;
+    }
   }
 
   *fan->io.ctrVal = ctr_out;
