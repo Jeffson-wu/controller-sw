@@ -1140,14 +1140,13 @@ void CoolAndLidTask( void * pvParameters )
       static int toggle = 0;
       //PRINTF("%d, %d, %d, %d, %d, %d, %d, %d, %d, %d", (int16_t)peltier->controller.setPoint, *peltier[0].io.ctrVal, peltier[0].adcValFilt, (int16_t)fan[0].controller.setPoint, *fan[0].io.ctrVal, *fan[0].io.adcVal, (int16_t)lidHeater[0].controller.setPoint, *lidHeater[0].io.ctrVal, lidHeater[0].adcValFilt, *lidHeater[0].io.adcVal);
       //PRINTF("%d, %d, %d, %d, %d, %d, %d", (int16_t)peltier->controller.setPoint, *peltier[0].io.ctrVal, peltier[0].adcValFilt, getPeltierVoltage(), (int16_t)fan[0].controller.setPoint, *fan[0].io.ctrVal, *fan[0].io.adcVal);
-      	PRINTF("%d, %d, %d, %d, %d, %d, %d, %d, %d, %d",
+      	PRINTF("%d, %d, %d, %d, %d, %d, %d, %d, %d",
       			adc_to_temp(&peltier[0].ntcCoef, (int16_t)*adcAmbient),
       			adc_to_temp(&peltier[0].ntcCoef, (int16_t)peltier->controller.setPoint),
       			*peltier[0].io.ctrVal,
-      			adc_to_temp(&peltier[0].ntcCoef, peltier[0].adcValFilt),
+      			peltier[0].temp,
       			peltier[0].voltage,
       			peltier[0].t_hot_est,
-      			(int16_t)peltier[0].controller.diff_eq.maxOutputValue,
       			fan[0].adcValFilt,
       			adc_to_temp(&fan[0].ntcCoef, (int16_t)fan[0].controller.setPoint),
       			*fan[0].io.ctrVal);
@@ -1183,15 +1182,19 @@ void CoolAndLidTask( void * pvParameters )
     peltier[0].max_adc = temp_to_adc(&peltier[0].ntcCoef, 300);
     lidHeater[0].max_adc = temp_to_adc(&lidHeater[0].ntcCoef, 1200);
 
+  	peltier[0].temp = adc_to_temp(&peltier[0].ntcCoef, peltier[0].adcValFilt);
+    uint16_t peltierTemp = temp_to_adc(&peltier[0].ntcCoef, peltier[0].t_hot_est);
+    fan[0].controller.setPoint = temp_to_adc(&fan[0].ntcCoef, 400);
+
     peltier[0].voltage = getPeltierVoltage();
     peltier_controller(&peltier[0]);
-    fan_controller(&fan[0], peltier[0].t_hot_est);  // Todo T to ADC
+    fan_controller(&fan[0], peltierTemp);  // Todo T to ADC
     lid_heater_controller(&lidHeater[0]);
 
     if (peltier[0].error == TRUE || lidHeater[0].error == TRUE)
     {
-    	//peltier[0].state = CTR_STOP_STATE;
-    	//lidHeater[0].state = CTR_STOP_STATE;
+    	peltier[0].state = CTR_STOP_STATE;
+    	lidHeater[0].state = CTR_STOP_STATE;
     }
 
     switch (peltier->state) {

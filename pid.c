@@ -29,7 +29,7 @@
 int16_t adc_to_temp(ntcCoef_t *ntcCoef, int16_t adc)
 {
   int16_t temp;
-  temp = (ntcCoef->beta / (logf((ntcCoef->r_s_ohm*(MAX_DAC_VALUE - adc)) / (adc*R_R_OHM)) + ntcCoef->beta / T_R_KEL) - 273.15) * 10.00;
+  temp = (int16_t)(ntcCoef->beta / (logf((ntcCoef->r_s_ohm*(MAX_DAC_VALUE - adc)) / (adc*R_R_OHM)) + ntcCoef->beta / T_R_KEL) - 273.15) * 10.00;
   return temp;
 }
 
@@ -37,7 +37,7 @@ int16_t adc_to_temp(ntcCoef_t *ntcCoef, int16_t adc)
 int16_t temp_to_adc(ntcCoef_t *ntcCoef, int16_t temp)
 {
   int16_t adc;
-  adc = (ntcCoef->r_s_ohm*MAX_DAC_VALUE / (R_R_OHM*exp(ntcCoef->beta*(1.00 / (temp / 10.00 + 273.15) - 1.00 / T_R_KEL)) + ntcCoef->r_s_ohm));
+  adc = (int16_t)(ntcCoef->r_s_ohm*MAX_DAC_VALUE / (R_R_OHM*exp(ntcCoef->beta*(1.00 / (temp / 10.00 + 273.15) - 1.00 / T_R_KEL)) + ntcCoef->r_s_ohm));
   return adc;
 }
 
@@ -130,4 +130,19 @@ int16_t median_filter(medianFilter_t *medianFilter, int16_t sample)
     }
   }
   return medianFilter->samples[medianFilter->sortIdx[(MEDIAN_LENGTH/2)]]; // return middle value
+}
+
+void reset_lp_filter(lp_filter_t *filter)
+{
+  filter->diff_eq.input = -20000;
+  filter->diff_eq.output = -20000;
+}
+
+double lp_filter(lp_filter_t *lp_filter, double input)
+{
+  double output;
+  output = lp_filter->diff_eq.N0 * input - lp_filter->diff_eq.D1 * lp_filter->diff_eq.output;
+  lp_filter->diff_eq.input = input;
+  lp_filter->diff_eq.output = output;
+  return output;
 }

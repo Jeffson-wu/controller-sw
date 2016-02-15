@@ -45,7 +45,7 @@ typedef struct FAN {
 
 void init_fan(fan_t * fan);
 void fan_init_feedback_ctr(controller_t * controller);
-void fan_controller(fan_t *fan, uint16_t peltierTemp);
+void fan_controller(fan_t *fan, int16_t peltierTemp);
 void fan_init_rate_limiter(rateLimiter_t * rateLimiter);
 void fan_setpoint(fan_t * fan, int16_t value);
 void fan_init_adc_to_temp(ntcCoef_t * ntcCoef);

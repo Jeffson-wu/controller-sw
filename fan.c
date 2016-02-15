@@ -66,7 +66,12 @@ void fan_init_adc_to_temp(ntcCoef_t * ntcCoef)
   ntcCoef->r_s_ohm = 10000;
 }
 
-void fan_controller(fan_t *fan, uint16_t peltierTemp)
+/*
+#include <stdio.h>
+#include "debug.h"
+#define PRINTF(fmt, args...)      sprintf(dbgbuf, fmt, ## args);  send_msg_on_monitor(dbgbuf);
+*/
+void fan_controller(fan_t *fan, int16_t peltierTemp)
 {
   uint16_t ctr_out = 0;
   //fan->adcValFilt = median_filter(&fan->medianFilter, *fan->io.adcVal);
@@ -85,7 +90,7 @@ void fan_controller(fan_t *fan, uint16_t peltierTemp)
 
       fan[0].state = CTR_CLOSED_LOOP_STATE; // ToDo: FJERN NAAR KIM HAR FIKSET KOMMANDOEN FRA LINUX - JSL!!
       //fan->setPoint = 40; //2500; //
-      fan->setPoint = 350; //2500; //
+      //fan->setPoint = 2000; //350; //2500; //
     }
     break;
     case CTR_MANUAL_STATE:
@@ -101,9 +106,10 @@ void fan_controller(fan_t *fan, uint16_t peltierTemp)
     case CTR_CLOSED_LOOP_STATE:
     {
     	fan->controller.setPoint = (double)fan->setPoint;
-    	//ctr_out = (uint16_t)feedback_controller_neg(&fan->controller, fan->adcValFilt);
     	ctr_out = (uint16_t)feedback_controller_neg(&fan->controller, fan->adcValFilt);
-    	//ctr_out = getPeltierVoltage()*312;
+
+      //PRINTF("FAN: %d, %d, %d, %d\n", (int16_t)peltierTemp, (int16_t)fan->adcValFilt, (int16_t)fan->controller.setPoint, (int16_t)ctr_out);
+
     }
     break;
     default:

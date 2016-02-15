@@ -42,6 +42,8 @@ typedef struct PELTIER {
   int16_t							t_hot_est;
   int16_t							max_adc;
   int8_t							error;
+  int16_t							temp;
+  filter_t            filter;
 } peltier_t;
 
 
@@ -56,6 +58,8 @@ void peltier_init_rate_limiter(rateLimiter_t * rateLimiter);
 void peltier_setpoint(peltier_t * peltier, int16_t value);
 void peltier_init_adc_to_temp(ntcCoef_t * ntcCoef);
 uint16_t getPeltierVoltage();
+void init_lp_filter(lp_filter_t * lp_filter);
+void init_estfilter(lp_filter_t * lp_filter);
 
 #endif /* __PELTIER_H */
 

@@ -43,9 +43,7 @@ typedef struct {
 } io_t;
 
 typedef enum {
-  CTR_PREV = 0, //--> CTR_FF_PREV
   CTR_SELF, //--> CTR_FB
-  CTR_NEXT, //--> CTR_FF_NEXT
   nCTR
 } controllerID_t;
 
@@ -89,6 +87,16 @@ typedef struct MEDIAN_FILTER {
   uint8_t samplesIdx;
 } medianFilter_t;
 
+typedef struct {
+  double              kc;
+  double              wc;
+  diff_eq_t           diff_eq;
+} lp_filter_t;
+
+typedef struct {
+  lp_filter_t         lp_filter[1];
+} filter_t;
+
 /* Private define ------------------------------------------------------------*/
 /* Exported constants --------------------------------------------------------*/
 /* Exported macro ------------------------------------------------------------*/
@@ -104,6 +112,8 @@ void init_median_filter(medianFilter_t *medianFilter);
 int16_t median_filter(medianFilter_t *medianFilter, int16_t sample);
 int16_t adc_to_temp(ntcCoef_t *ntcCoef, int16_t adc);
 int16_t temp_to_adc(ntcCoef_t *ntcCoef, int16_t temp);
+void reset_lp_filter(lp_filter_t *lp_filter);
+double lp_filter(lp_filter_t *lp_filter, double input);
 
 #endif /* __PID_H */
   /************************ (C) COPYRIGHT Xtel *****END OF FILE****/
