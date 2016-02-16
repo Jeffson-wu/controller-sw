@@ -18,7 +18,11 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "peltier.h"
+#if (_MSC_VER)
+#include "dll_dummy.h"
+#else
 #include "sequencer.h"
+#endif
 //#include	"gdi.h"
 
 /* ---------------------------------------------------------------------------*/
@@ -30,6 +34,7 @@ void init_peltier(peltier_t * peltier)
   peltier_init_rate_limiter(&peltier->rateLimiter);
   init_median_filter(&peltier->medianFilter);
   peltier_init_adc_to_temp(&peltier->ntcCoef);
+  init_estfilter(&peltier->filter.lp_filter[0]);
   peltier->controller.setPoint = peltier->setPoint = MAX_DAC_VALUE;
   peltier->error = FALSE;
 }
@@ -37,8 +42,13 @@ void init_peltier(peltier_t * peltier)
 
 void peltier_init_feedback_ctr(controller_t * controller)
 {
+/*
   controller->diff_eq.N0 = 1.005000E1;
   controller->diff_eq.N1 = -9.950000E0;
+  controller->diff_eq.D1 = -1.000000E0;
+*/
+  controller->diff_eq.N0 = 3.0005000E1;
+  controller->diff_eq.N1 = -2.999500E1;
   controller->diff_eq.D1 = -1.000000E0;
 
   controller->diff_eq.minOutputValue = 0;
@@ -62,6 +72,49 @@ void peltier_init_adc_to_temp(ntcCoef_t * ntcCoef)
   ntcCoef->r_s_ohm = 10000;
 }
 
+void init_estfilter(lp_filter_t * lp_filter)
+{
+  lp_filter->kc = 1.0;
+  lp_filter->wc = 0.1;
+  init_lp_filter(lp_filter);
+}
+
+void init_lp_filter(lp_filter_t * lp_filter)
+{
+  double ticks = 10; //Hz
+  lp_filter->diff_eq.N0 = lp_filter->kc*lp_filter->wc/(lp_filter->wc+(double)ticks);
+  lp_filter->diff_eq.D1 = -(double)ticks/(lp_filter->wc+(double)ticks);
+}
+
+/*
+#include <stdio.h>
+#include "debug.h"
+#define PRINTF(fmt, args...)      sprintf(dbgbuf, fmt, ## args);  send_msg_on_monitor(dbgbuf);
+*/
+
+void th_estmator(peltier_t *peltier, uint16_t ctr_out)
+{
+  double G = 0.291;
+  double N = 127.0;
+  double alpha = 0.0001012;
+  double Kelvin = 273.15;
+  //double Tc = ((adc_to_temp(&peltier->ntcCoef, peltier->adcValFilt)) / 10.0) + Kelvin;
+  double Tc;
+  Tc = peltier[0].temp/10.0 + Kelvin;
+  double I = (double)(8.36/4095.00) * (double)ctr_out; //8.36 max Amp
+  double phi_a = 4.15841584158E-06;
+  double phi_b = -0.000215247524752;
+
+  double t_hot_est = (((peltier->voltage/10.0)-(2*N*I*phi_b)/G+alpha*Tc*2*N) / ((2*N*I*phi_a)/G+alpha*2*N) - Kelvin) * 10; //10 deci oC
+  if (t_hot_est <= 0)
+  {
+  	t_hot_est = 0;
+  }
+  peltier->t_hot_est = lp_filter(&peltier->filter.lp_filter[0], (double)(t_hot_est));
+
+  //PRINTF("FAN: %d, %d\n", (int16_t)t_hot_est, (int16_t)peltier->t_hot_est);
+}
+
 void peltier_controller(peltier_t *peltier)
 {
   uint16_t ctr_out = 0;
@@ -76,6 +129,8 @@ void peltier_controller(peltier_t *peltier)
     break;
     case CTR_INIT:
     {
+    	//peltier->filter.lp_filter[0].diff_eq.input = peltier->filter.lp_filter[0].diff_eq.output = 0;
+      //reset_lp_filter(&peltier->filter.lp_filter[0]);
       reset_controller(&peltier->controller);
       reset_rateLimiter(&peltier->rateLimiter, *peltier->io.adcVal);
       peltier[0].state = CTR_CLOSED_LOOP_STATE;
@@ -101,6 +156,7 @@ void peltier_controller(peltier_t *peltier)
     break;
   }
 
+  /*
   if (ctr_out > peltier->controller.diff_eq.maxOutputValue)
   {
     ctr_out = peltier->controller.diff_eq.maxOutputValue;
@@ -109,15 +165,19 @@ void peltier_controller(peltier_t *peltier)
   {
     ctr_out = peltier->controller.diff_eq.minOutputValue;
   }
+  */
 
 
-  double dT = 0;
+  //double dT = 0;
 
-  dT = (double)(2*peltier->voltage) + (-0.04*(double)ctr_out-9.56);
-  peltier->controller.diff_eq.maxOutputValue = 22.9*dT+3160;
 
-  peltier->t_hot_est = adc_to_temp(&peltier->ntcCoef, peltier->adcValFilt) + (dT*10.0);
+  //dT = (double)(2*peltier->voltage) + (-0.04*(double)ctr_out-9.56);
+  //peltier->controller.diff_eq.maxOutputValue = 22.9*dT+3160;
 
+  //peltier->t_hot_est = adc_to_temp(&peltier->ntcCoef, peltier->adcValFilt) + (dT*10.0);
+
+  th_estmator(peltier, ctr_out);
+  
   int8_t i;
   if (peltier->adcValFilt > peltier->max_adc)
   {
