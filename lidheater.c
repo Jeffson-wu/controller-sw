@@ -40,7 +40,8 @@ void lid_heater_init_feedback_ctr(controller_t * controller)
   controller->diff_eq.D1 = -1.000000E0;
 
   controller->diff_eq.minOutputValue = 0;
-  controller->diff_eq.maxOutputValue = PWM_UPPER_LIMIT;
+  //The topheater element melts down if we diserpate more power than this.
+  controller->diff_eq.maxOutputValue = (PWM_UPPER_LIMIT * 55) / 100;
 }
 
 void lid_heater_init_rate_limiter(rateLimiter_t * rateLimiter)

@@ -71,6 +71,7 @@ void peltier_controller(peltier_t *peltier)
     case CTR_STOP_STATE:
     {
       *peltier->io.ctrVal = 0;
+      ctr_out = 0;
     }
     break;
     case CTR_INIT:

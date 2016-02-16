@@ -857,11 +857,15 @@ bool coolLidReadRegs(u8 slave, u16 addr, u16 datasize, u16 *buffer)
 				break;
       //if( (17 <= slave) && (19 >= slave) ) // slave 17 - 19 maps to coolandlid
       case PWM_1_REG:
-        //if(NoWell == mode) {  // Preheat state
-        val = 2 * (*lidHeater[0].io.ctrVal); //Top heater mode full power
-        // } else {
+#ifdef USE_TWO_LEVEL_LID_POWER
+        if(NoWell == mode) {  // Preheat state
+          val = 2 * (*lidHeater[0].io.ctrVal); //Top heater mode full power
+        } else {
+          val = *lidHeater[0].io.ctrVal; //Top heater mode half power
+        }
+#else
         val = *lidHeater[0].io.ctrVal; //Top heater mode half power
-        // }
+#endif
         break;
       case PWM_2_REG:
         val = *peltier[0].io.ctrVal;
