@@ -326,13 +326,13 @@ int main(void)
   HW_Init();
   UART_Init(USART3,noRecieve); /*Only for monitoring no RX*/
   PWM_Init(20000,100); // 20kHz/100Hz PWM : (TIM3(Fan, Aux), TIM4(Topheater1, Topheater2))
+  PWM_Stop();
+  stopPeltier();
   PRINTF("Monitor Port UP");
   PRINTF("HW Rev ID = %d", HW_Rev_Id);
   PRINTF("SW build = %s", buildDateStr);
   PRINTF("Git Id = %s", gitCommitIdStr);
   init_os_trace(); /*GDB CMD:dump binary memory gdb_dump_23.txt 0x20000000 0x20010000  -- http://percepio.com/*/
-  stopPeltier();
-  PWM_Stop();
 
   ConfigOSTimer();
   initErrorLedTimer();
