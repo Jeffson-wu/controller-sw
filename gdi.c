@@ -482,8 +482,10 @@ void gdi_print_wrong_endian_number(int number, u8 status)
 }
 
 /* ---------------------------------------------------------------------------*/
-void my_sprintf(gdi_float input)
+void my_sprintf(char *out, gdi_float input)
 {
+	out = "1324";
+#if 0
 	char sign = '\0';
 	int d1 = input;            // Get the integer part
 	gdi_float f2 = fabs(input) - fabs(d1);     // Get fractional part
@@ -495,6 +497,7 @@ void my_sprintf(gdi_float input)
 		sign = '-';
 
 	sprintf (str, "%c%d.%04d%04d\n", sign, d1, d2, d3);
+#endif
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -535,7 +538,7 @@ void gdi_print_wrong_endian_gdi_float(gdi_float number, u8 status)
     //sprintf(str, "0x%08x%08x", *(pval+1), *pval);
 
     uint64_t tmp = (uint64_t)(*(pval+1)) << 32 | (uint32_t)(*pval);
-    my_sprintf(*((gdi_float*)&tmp));
+    my_sprintf(str, *((gdi_float*)&tmp));
 
 #else
     sprintf(str, "0x%08x", *pval);
@@ -913,7 +916,7 @@ void gdi_map_to_functions()
         if(msg)
         {
           setpoint = (s16)strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
-          if((setpoint >= 0) && (setpoint <= 1200))
+          if((setpoint >= 0) && (setpoint <= 1300))
           {
             msg->ucMessageID = SET_LID_TEMP;
           } else {

@@ -1184,7 +1184,8 @@ void CoolAndLidTask( void * pvParameters )
 #ifndef STANDALONE
 
     peltier[0].max_adc = temp_to_adc(&peltier[0].ntcCoef, 300);
-    lidHeater[0].max_adc = temp_to_adc(&lidHeater[0].ntcCoef, 1200);
+    lidHeater[0].max_adc = temp_to_adc(&lidHeater[0].ntcCoef, 1300);
+    lidHeater[0].min_adc = temp_to_adc(&lidHeater[0].ntcCoef, 500);
 
   	peltier[0].temp = adc_to_temp(&peltier[0].ntcCoef, peltier[0].adcValFilt);
     uint16_t peltierTemp = temp_to_adc(&peltier[0].ntcCoef, peltier[0].t_hot_est);

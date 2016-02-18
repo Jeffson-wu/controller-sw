@@ -53,7 +53,8 @@ void lid_heater_init_rate_limiter(rateLimiter_t * rateLimiter)
 void lid_heater_setpoint(lidHeater_t * lidHeater, int16_t value)
 {
   lidHeater->setPoint = lidHeater->controller.setPoint = temp_to_adc(&lidHeater->ntcCoef, value);
-  lidHeater->setPointLow = temp_to_adc(&lidHeater->ntcCoef, (value-(int16_t)((double)value*0.03)));
+  lidHeater->setPointLow_0 = temp_to_adc(&lidHeater->ntcCoef, (value-(int16_t)((double)value*0.005)));
+  lidHeater->setPointLow_1 = temp_to_adc(&lidHeater->ntcCoef, (value-(int16_t)((double)value*0.08)));
 }
 
 void lid_heater_init_ntc_coef(ntcCoef_t * ntcCoef)
@@ -65,6 +66,7 @@ void lid_heater_init_ntc_coef(ntcCoef_t * ntcCoef)
 void lid_heater_controller(lidHeater_t *lidHeater)
 {
   uint16_t ctr_out = 0;
+  //int8_t i;
 
   lidHeater->adcValFilt = median_filter(&lidHeater->medianFilter, *lidHeater->io.adcVal);
 
@@ -89,7 +91,7 @@ void lid_heater_controller(lidHeater_t *lidHeater)
     case CTR_OPEN_LOOP_STATE:
     {
 			ctr_out = PWM_UPPER_LIMIT;
-			if (*lidHeater->io.adcVal > lidHeater->setPointLow)
+			if (*lidHeater->io.adcVal > lidHeater->setPointLow_0)
 			{
 				lidHeater->state = CTR_CLOSED_LOOP_STATE;
 			}
@@ -98,6 +100,10 @@ void lid_heater_controller(lidHeater_t *lidHeater)
     case CTR_CLOSED_LOOP_STATE:
     {
       ctr_out = (uint16_t)feedback_controller_pos(&lidHeater->controller, lidHeater->adcValFilt);
+      if (*lidHeater->io.adcVal < lidHeater->setPointLow_1)
+			{
+				lidHeater->state = CTR_OPEN_LOOP_STATE;
+			}
     }
     break;
     default:
@@ -113,17 +119,19 @@ void lid_heater_controller(lidHeater_t *lidHeater)
     ctr_out = lidHeater->controller.diff_eq.minOutputValue;
   }
 
-  int8_t i;
-  if (lidHeater->adcValFilt > lidHeater->max_adc)
+  if (lidHeater->state == CTR_CLOSED_LOOP_STATE)
   {
-	  //setCLStatusReg(0x0001);
-	  for (i=0;i<16; i++)
-	  {
-		  stop_tube_seq(i+1);
-		  //send_led_cmd(21, i+1); //SET_LED_OFF
-	  }
-	  lidHeater->state = CTR_STOP_STATE;
-	  lidHeater->error = TRUE;
+		if (lidHeater->adcValFilt > lidHeater->max_adc || lidHeater->adcValFilt < lidHeater->min_adc)
+		{
+			/*
+			for (i=0;i<16; i++)
+			{
+				stop_tube_seq(i+1);
+			}
+			*/
+			lidHeater->state = CTR_STOP_STATE;
+			lidHeater->error = TRUE;
+		}
   }
   *lidHeater->io.ctrVal = ctr_out;
 }
