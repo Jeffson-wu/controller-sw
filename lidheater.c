@@ -66,7 +66,7 @@ void lid_heater_init_ntc_coef(ntcCoef_t * ntcCoef)
 void lid_heater_controller(lidHeater_t *lidHeater)
 {
   uint16_t ctr_out = 0;
-  int8_t i;
+  //int8_t i;
 
   lidHeater->adcValFilt = median_filter(&lidHeater->medianFilter, *lidHeater->io.adcVal);
 
