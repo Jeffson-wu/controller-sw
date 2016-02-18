@@ -484,9 +484,7 @@ void gdi_print_wrong_endian_number(int number, u8 status)
 /* ---------------------------------------------------------------------------*/
 void my_sprintf(char *out, gdi_float input)
 {
-	out = "1324";
-#if 0
-	char sign = '\0';
+	char sign;
 	int d1 = input;            // Get the integer part
 	gdi_float f2 = fabs(input) - fabs(d1);     // Get fractional part
 	int d2 = trunc(f2 * 10000);   // Turn into integer
@@ -495,9 +493,10 @@ void my_sprintf(char *out, gdi_float input)
 
 	if (input < 0 && d1 == 0)
 		sign = '-';
+	else if (input > 0 && d1 > 0)
+		sign = '+';
 
-	sprintf (str, "%c%d.%04d%04d\n", sign, d1, d2, d3);
-#endif
+	sprintf (out, "%c%d.%04d%04d\n", sign, d1, d2, d3);
 }
 
 /* ---------------------------------------------------------------------------*/
