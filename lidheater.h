@@ -38,8 +38,10 @@ typedef struct LID {
   ntcCoef_t           ntcCoef;
   int16_t             setPoint;
   int16_t             adcValFilt;
-  int16_t							setPointLow;
+  int16_t							setPointLow_0;
+  int16_t							setPointLow_1;
   int16_t							max_adc;
+  int16_t							min_adc;
   int8_t							error;
 } lidHeater_t;
 
