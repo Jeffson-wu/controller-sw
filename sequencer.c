@@ -1243,7 +1243,7 @@ void HW_EventHandler(ReadModbusRegsRes *preg, xMessage *msg){
         break;
     }
   }// ADC error all four wells are out of service
-  if(Tubeloop[TubeId-1].hw_status_reg & (HW_ERR_SENSOR1_SHORTED | HW_ERR_SENSOR1_OPEN))
+  if(Tubeloop[TubeId-1].hw_status_reg & HW_ERR_SENSOR1_ERROR)
   { // sensor error on sensor 1
     switch(heater)
     {
@@ -1251,31 +1251,31 @@ void HW_EventHandler(ReadModbusRegsRes *preg, xMessage *msg){
 #ifndef DISABLE_ERROR_STATES
         Tubeloop[0].state = TUBE_ERROR_STATE;
 #endif
-        setTubeHWReport(((Tubeloop[TubeId-1].hw_status_reg & HW_ERR_SENSOR1_SHORTED) ? HW_ERR_SENSOR1_SHORTED : HW_ERR_SENSOR1_OPEN), 1);
+        setTubeHWReport(HW_ERR_SENSOR1_ERROR, 1);
         break;
       case Heater2:
 #ifndef DISABLE_ERROR_STATES
         Tubeloop[4].state = TUBE_ERROR_STATE;
 #endif
-        setTubeHWReport(((Tubeloop[TubeId-1].hw_status_reg & HW_ERR_SENSOR1_SHORTED) ? HW_ERR_SENSOR1_SHORTED : HW_ERR_SENSOR1_OPEN), 5);
+        setTubeHWReport(HW_ERR_SENSOR1_ERROR, 5);
         break;
       case Heater3:
 #ifndef DISABLE_ERROR_STATES
         Tubeloop[8].state = TUBE_ERROR_STATE;
 #endif
-        setTubeHWReport(((Tubeloop[TubeId-1].hw_status_reg & HW_ERR_SENSOR1_SHORTED) ? HW_ERR_SENSOR1_SHORTED : HW_ERR_SENSOR1_OPEN), 9);
+        setTubeHWReport(HW_ERR_SENSOR1_ERROR, 9);
         break;
       case Heater4:
 #ifndef DISABLE_ERROR_STATES
         Tubeloop[12].state = TUBE_ERROR_STATE;
 #endif
-        setTubeHWReport(((Tubeloop[TubeId-1].hw_status_reg & HW_ERR_SENSOR1_SHORTED) ? HW_ERR_SENSOR1_SHORTED : HW_ERR_SENSOR1_OPEN), 13);
+        setTubeHWReport(HW_ERR_SENSOR1_ERROR, 13);
         break;
       default:
         break;
     }
   }
-  if(Tubeloop[TubeId-1].hw_status_reg & (HW_ERR_SENSOR2_SHORTED | HW_ERR_SENSOR2_OPEN))
+  if(Tubeloop[TubeId-1].hw_status_reg & HW_ERR_SENSOR2_ERROR)
   { // sensor error on sensor 2
     switch(heater)
     {
@@ -1283,31 +1283,31 @@ void HW_EventHandler(ReadModbusRegsRes *preg, xMessage *msg){
 #ifndef DISABLE_ERROR_STATES
         Tubeloop[1].state = TUBE_ERROR_STATE;
 #endif
-        setTubeHWReport(((Tubeloop[TubeId-1].hw_status_reg & HW_ERR_SENSOR2_SHORTED) ? HW_ERR_SENSOR2_SHORTED : HW_ERR_SENSOR2_OPEN), 2);
+        setTubeHWReport(HW_ERR_SENSOR2_ERROR, 2);
         break;
       case Heater2:
 #ifndef DISABLE_ERROR_STATES
         Tubeloop[5].state = TUBE_ERROR_STATE;
 #endif
-        setTubeHWReport(((Tubeloop[TubeId-1].hw_status_reg & HW_ERR_SENSOR2_SHORTED) ? HW_ERR_SENSOR2_SHORTED : HW_ERR_SENSOR2_OPEN), 8);
+        setTubeHWReport(HW_ERR_SENSOR2_ERROR, 8);
         break;
       case Heater3:
 #ifndef DISABLE_ERROR_STATES
         Tubeloop[9].state = TUBE_ERROR_STATE;
 #endif
-        setTubeHWReport(((Tubeloop[TubeId-1].hw_status_reg & HW_ERR_SENSOR2_SHORTED) ? HW_ERR_SENSOR2_SHORTED : HW_ERR_SENSOR2_OPEN), 10);
+        setTubeHWReport(HW_ERR_SENSOR2_ERROR, 10);
         break;
       case Heater4:
 #ifndef DISABLE_ERROR_STATES
         Tubeloop[13].state = TUBE_ERROR_STATE;
 #endif
-        setTubeHWReport(((Tubeloop[TubeId-1].hw_status_reg & HW_ERR_SENSOR2_SHORTED) ? HW_ERR_SENSOR2_SHORTED : HW_ERR_SENSOR2_OPEN), 14);
+        setTubeHWReport(HW_ERR_SENSOR2_ERROR, 14);
         break;
       default:
         break;
     }
   }
-  if(Tubeloop[TubeId-1].hw_status_reg & (HW_ERR_SENSOR3_SHORTED | HW_ERR_SENSOR3_OPEN))
+  if(Tubeloop[TubeId-1].hw_status_reg & HW_ERR_SENSOR3_ERROR)
   { // sensor error on sensor 3
     switch(heater)
     {
@@ -1315,31 +1315,31 @@ void HW_EventHandler(ReadModbusRegsRes *preg, xMessage *msg){
 #ifndef DISABLE_ERROR_STATES
         Tubeloop[2].state = TUBE_ERROR_STATE;
 #endif
-        setTubeHWReport(((Tubeloop[TubeId-1].hw_status_reg & HW_ERR_SENSOR3_SHORTED) ? HW_ERR_SENSOR3_SHORTED : HW_ERR_SENSOR3_OPEN), 3);
+        setTubeHWReport(HW_ERR_SENSOR3_ERROR, 3);
         break;
       case Heater2:
 #ifndef DISABLE_ERROR_STATES
         Tubeloop[6].state = TUBE_ERROR_STATE;
 #endif
-        setTubeHWReport(((Tubeloop[TubeId-1].hw_status_reg & HW_ERR_SENSOR3_SHORTED) ? HW_ERR_SENSOR3_SHORTED : HW_ERR_SENSOR3_OPEN), 7);
+        setTubeHWReport(HW_ERR_SENSOR3_ERROR, 7);
         break;
       case Heater3:
 #ifndef DISABLE_ERROR_STATES
         Tubeloop[10].state = TUBE_ERROR_STATE;
 #endif
-        setTubeHWReport(((Tubeloop[TubeId-1].hw_status_reg & HW_ERR_SENSOR3_SHORTED) ? HW_ERR_SENSOR3_SHORTED : HW_ERR_SENSOR3_OPEN), 11);
+        setTubeHWReport(HW_ERR_SENSOR3_ERROR, 11);
         break;
       case Heater4:
 #ifndef DISABLE_ERROR_STATES
         Tubeloop[14].state = TUBE_ERROR_STATE;
 #endif
-        setTubeHWReport(((Tubeloop[TubeId-1].hw_status_reg & HW_ERR_SENSOR3_SHORTED) ? HW_ERR_SENSOR3_SHORTED : HW_ERR_SENSOR3_OPEN), 15);
+        setTubeHWReport(HW_ERR_SENSOR3_ERROR, 15);
         break;
       default:
         break;
     }
   }
-  if(Tubeloop[TubeId-1].hw_status_reg & (HW_ERR_SENSOR4_SHORTED | HW_ERR_SENSOR4_OPEN))
+  if(Tubeloop[TubeId-1].hw_status_reg & HW_ERR_SENSOR4_ERROR)
   { // sensor error on sensor 4
     switch(heater)
     {
@@ -1347,25 +1347,25 @@ void HW_EventHandler(ReadModbusRegsRes *preg, xMessage *msg){
 #ifndef DISABLE_ERROR_STATES
         Tubeloop[3].state = TUBE_ERROR_STATE;
 #endif
-        setTubeHWReport(((Tubeloop[TubeId-1].hw_status_reg & HW_ERR_SENSOR4_SHORTED) ? HW_ERR_SENSOR4_SHORTED : HW_ERR_SENSOR4_OPEN), 4);
+        setTubeHWReport(HW_ERR_SENSOR4_ERROR, 4);
         break;
       case Heater2:
 #ifndef DISABLE_ERROR_STATES
         Tubeloop[7].state = TUBE_ERROR_STATE;
 #endif
-        setTubeHWReport(((Tubeloop[TubeId-1].hw_status_reg & HW_ERR_SENSOR4_SHORTED) ? HW_ERR_SENSOR4_SHORTED : HW_ERR_SENSOR4_OPEN), 8);
+        setTubeHWReport(HW_ERR_SENSOR4_ERROR, 8);
         break;
       case Heater3:
 #ifndef DISABLE_ERROR_STATES
         Tubeloop[11].state = TUBE_ERROR_STATE;
 #endif
-        setTubeHWReport(((Tubeloop[TubeId-1].hw_status_reg & HW_ERR_SENSOR4_SHORTED) ? HW_ERR_SENSOR4_SHORTED : HW_ERR_SENSOR4_OPEN), 12);
+        setTubeHWReport(HW_ERR_SENSOR4_ERROR, 12);
         break;
       case Heater4:
 #ifndef DISABLE_ERROR_STATES
         Tubeloop[15].state = TUBE_ERROR_STATE;
 #endif
-        setTubeHWReport(((Tubeloop[TubeId-1].hw_status_reg & HW_ERR_SENSOR4_SHORTED) ? HW_ERR_SENSOR4_SHORTED : HW_ERR_SENSOR4_OPEN), 16);
+        setTubeHWReport(HW_ERR_SENSOR4_ERROR, 16);
         break;
       default:
         break;
