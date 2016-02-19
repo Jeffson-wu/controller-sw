@@ -42,6 +42,7 @@ void lid_heater_init_feedback_ctr(controller_t * controller)
   controller->diff_eq.minOutputValue = 0;
   //The topheater element melts down if we diserpate more power than this.
   controller->diff_eq.maxOutputValue = (PWM_UPPER_LIMIT * 55) / 100;
+  //controller->diff_eq.maxOutputValue = (PWM_UPPER_LIMIT * 1070) / 100;
 }
 
 void lid_heater_init_rate_limiter(rateLimiter_t * rateLimiter)
@@ -80,7 +81,7 @@ void lid_heater_controller(lidHeater_t *lidHeater)
     {
       reset_controller(&lidHeater->controller);
       reset_rateLimiter(&lidHeater->rateLimiter, *lidHeater->io.adcVal);
-      lidHeater[0].state = CTR_OPEN_LOOP_STATE;
+      lidHeater->state = CTR_OPEN_LOOP_STATE;
     }
     break;
     case CTR_MANUAL_STATE:
