@@ -1342,7 +1342,7 @@ void gdi_map_to_functions()
             { // Adresses 0 - 16 are actually on the MODBUS
               result = DebugModbusReadRegs(slave, addr, datasize, (u8 *)buffer.uint16);
             }
-            else if(slave <= 20)
+            else if(slave <= 21)
             { // Adresses 17 - 20 are mapped to cool and lid, addr is reg, datasize is reg count, buffer is wrong endian
               //result = coolLidReadRegs(slave, addr, datasize, (u16 *)buffer.uint16);
               result = DebugReadRegs(CoolAndLidQueueHandle, slave, addr, datasize, (u8 *)buffer.uint16);

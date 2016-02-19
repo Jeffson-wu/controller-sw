@@ -23,6 +23,7 @@
 /* Exported types ------------------------------------------------------------*/
 typedef enum {
   LID_ADDR = 17,
+  MID_ADDR,
   PELTIER_ADDR,
   //PELTIER_ADDR2,
   FAN_ADDR,

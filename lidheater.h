@@ -25,6 +25,7 @@
 
 typedef enum {
   LID_HEATER_1,
+  LID_HEATER_2,
   nLID_HEATER
 } lidHeaterID_t;
 
