@@ -180,11 +180,11 @@ static uint16_t pwmCh[6] = {0, 0, 0, 0, 0, 0};
 static uint16_t dacCh[1] = {0};
 
 /*                      GPIO           On PCB Rev3
- * pwmCh[0], TIM4,CH3 - PB8 -  J175 :  TopHeater1Ctrl - lid heater
- * pwmCh[1], TIM4,CH4 - PB9 -  J26  :  TopHeater2Ctrl - middle heater
- * pwmCh[2], TIM3,CH1 - PC6 -  J33  :  -
- * pwmCh[3], TIM3,CH2 - PC7 -  J176 :  FAN control
- * pwmCh[4], TIM3,CH3 - PC8 -  J35  :  AUX PWM
+ * pwmCh[0], TIM4,CH3 - PB8 -  J173 :  TopHeater1Ctrl - lid heater
+ * pwmCh[1], TIM4,CH4 - PB9 -  J173 :  TopHeater2Ctrl - middle heater
+ * pwmCh[2], TIM3,CH1 - PC6 -       :  -
+ * pwmCh[3], TIM3,CH2 - PC7 -  J26  :  FAN control
+ * pwmCh[4], TIM3,CH3 - PC8 -       :  AUX PWM
  * pwmCh[5],                           dummy PWM
  * DAC_OUT1     PA4
  * DAC_OUT2     PA5
@@ -868,6 +868,31 @@ bool coolLidReadRegs(u8 slave, u16 addr, u16 datasize, u16 *buffer)
 				}
 				break;
       //if( (17 <= slave) && (19 >= slave) ) // slave 17 - 19 maps to coolandlid
+      case TUBE1_TEMP_REG:
+        val = adc_to_temp(&lidHeater[0].ntcCoef, lidHeater[0].adcValFilt);
+        break;
+      case TUBE2_TEMP_REG:
+        val = adc_to_temp(&peltier[0].ntcCoef, peltier[0].adcValFilt);
+        break;
+      case TUBE3_TEMP_REG:
+        val = adc_to_temp(&lidHeater[1].ntcCoef, lidHeater[1].adcValFilt);
+        break;
+      case TUBE4_TEMP_REG:
+        val = adc_to_temp(&fan[0].ntcCoef, fan[0].adcValFilt);
+        break;
+// Latest available raw ADC data.
+      case ADC_CODE1_REG:
+        val = adcCh[0];
+        break;
+      case ADC_CODE2_REG:
+        val = adcCh[1];
+        break;
+      case ADC_CODE3_REG:
+        val = adcCh[2];
+        break;
+      case ADC_CODE4_REG:
+        val = adcCh[3];
+        break;
       case PWM_1_REG:
 #ifdef USE_TWO_LEVEL_LID_POWER
         if(NoWell == mode) {  // Preheat state
