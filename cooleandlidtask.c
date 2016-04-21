@@ -24,7 +24,7 @@
 
 
 /* Private debug define ------------------------------------------------------*/
-#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
+//#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
 //#define DEBUG_COOL
 //#define DEBUG_LOGGING
 //#define STANDALONE /*Defines if the M3 Runs with or without Linux box*/
@@ -88,8 +88,8 @@
 
 #ifdef USE_CL_DATA_LOGGING
   #define CL_SAMPLES_PER_LOG  10    //Each log is the avarage over this number of samples
-  #define CL_LOG_ELEMENT_SIZE 4     //Log all four sensors
-  #define CL_LOG_QUEUE_SIZE   4     //Queue length
+  #define CL_LOG_ELEMENT_SIZE 5     //Log all four sensors
+  #define CL_LOG_QUEUE_SIZE   5     //Queue length
 #endif
 #define Swap2Bytes(val) ( (((val) >> 8) & 0x00FF) | (((val) << 8) & 0xFF00) )
 
@@ -171,7 +171,7 @@ static cl_lid_open_states_t lidState = CL_LID_ERROR;
 static int16_t adcCh[4] = {0, 0, 0, 0};
 
 // ADC diff for Fan
-static int16_t adcDiff[1] = {0};
+//static int16_t adcDiff[1] = {0};
 
 // Parameters for PWM
 static uint16_t pwmCh[6] = {0, 0, 0, 0, 0, 0};
@@ -217,23 +217,23 @@ static uint16_t dacCh[1] = {0};
  */ 
 
 // Fan controll is based on the temp diff: adcDiff[0] =  Fin temp - Ambient temp
-static int16_t *adcDiffSource[2] = {&adcCh[3], &adcCh[0]};
+//static int16_t *adcDiffSource[2] = {&adcCh[3], &adcCh[0]};
 
-static int16_t *adcAmbient = &adcCh[0];
+static int16_t *adcAmbient = &adcCh[3];
 
 static peltier_t peltier[nPELTIER] = {
   {PELTIER_1, CTR_STOP_STATE, { &dacCh[0], &adcCh[2]}} //, {-26213}
 };
 
 static lidHeater_t lidHeater[nLID_HEATER] = {
-  {LID_HEATER_1, CTR_STOP_STATE, {&pwmCh[0], &adcCh[1]}},
-  {LID_HEATER_2, CTR_STOP_STATE, {&pwmCh[1], &adcCh[3]}}
+  {LID_HEATER_1, CTR_STOP_STATE, {&pwmCh[1], &adcCh[1]}},
+  {LID_HEATER_2, CTR_STOP_STATE, {&pwmCh[0], &adcCh[0]}} //3
 };
 
 //Todo: remove   static uint16_t *pwmChMirror[2] = {&pwmCh[0], &pwmCh[1]};
 
 static fan_t fan[nFAN] = {
-  {FAN_1, CTR_STOP_STATE, {&pwmCh[3], /*&adcDiff[0]*/ &adcCh[3]}} //0
+  {FAN_1, CTR_STOP_STATE, {&pwmCh[3]}} //, /*&adcDiff[0]*/ &adcCh[3]}} //0
 };
 
 calib_data_t __attribute__ ((aligned (2))) calib_data[3] = {
@@ -528,24 +528,26 @@ int getCLMonitor(char *poutText)
   char str[20];
   *poutText = 0;  //add string termination
   strcat(poutText,"coolandlid_monitor={");
-  Itoa(*lidHeater[0].io.ctrVal, str);   // th_pwm
-  strcat(poutText,str);
-  strcat(poutText, ","); 
-  Itoa(*lidHeater[1].io.ctrVal, str);   // th_pwm
+  Itoa(*lidHeater[0].io.ctrVal, str);   // lid_pwm
   strcat(poutText,str);
   strcat(poutText, ",");
-  Itoa(clState, str);                   // clState
+
+  Itoa(*lidHeater[1].io.ctrVal, str);   // mid_pwm
   strcat(poutText,str);
-  strcat(poutText, ","); 
+  strcat(poutText, ",");
+
   Itoa(*fan[0].io.ctrVal, str);         // fan_pwm
   strcat(poutText,str);
   strcat(poutText, ","); 
+
   Itoa(*peltier[0].io.ctrVal, str);     // peltier_dac
   strcat(poutText,str);
   strcat(poutText, ","); 
+
   Itoa(peltier[0].voltage, str);  // peltier_voltage
   strcat(poutText,str);
   strcat(poutText, "}");
+
   return 0;
 }
 
@@ -613,12 +615,13 @@ void cl_dataQueueAdd(u32 seqNumber, cl_data_t data[])
   poutData = cl_enqueue(&cl_logDataQueue);
   if(NULL != poutData)
   {
-    DEBUG_LOGGING_PRINTF("dataQueueAdd @0x%08X %04x %04x %04x %04x", (unsigned int)poutData, data[0], data[1], data[2], data[3]);
+    DEBUG_LOGGING_PRINTF("dataQueueAdd @0x%08X %04x %04x %04x %04x", (unsigned int)poutData, data[0], data[1], data[2], data[3], data[4]);
     poutData->seqNum = seqNumber;
     poutData->cldata[0] = data[0];
     poutData->cldata[1] = data[1];
     poutData->cldata[2] = data[2];
     poutData->cldata[3] = data[3];
+    poutData->cldata[4] = data[4];
   }
   else
   {
@@ -632,7 +635,7 @@ void logInit()
   cl_dataLog.sequence = 0;  // Running sequence number
   cl_dataLog.avgCnt   = 0;  // Nof samples in sum - when avgCnt==10 the avg. is added to the log
   // Accumulated value for averaging over CL_SAMPLES_PER_LOG samples (avgCnt)
-  cl_dataLog.accum[0] = cl_dataLog.accum[1] = cl_dataLog.accum[2] = cl_dataLog.accum[3] = 0;
+  cl_dataLog.accum[0] = cl_dataLog.accum[1] = cl_dataLog.accum[2] = cl_dataLog.accum[3] = cl_dataLog.accum[4] = 0;
   //cl_logDataQueue.cl_logDataElement[0].seqNum = 0; // 4 elements
   //cl_logDataQueue.cl_logDataElement[0].cldata[0] = 0; // 4 data per element
 }
@@ -644,24 +647,25 @@ void logInit()
 void logUpdate(lidHeater_t *lidHeater, peltier_t *peltier, fan_t *fan, lidHeater_t *midHeater)
 {
   cl_dataLog.avgCnt += 1;
-  //cl_dataLog.accum[0] += adc_to_temp(&peltier[0].ntcCoef, (int16_t)*adcAmbient);  // Todo: remember to add
-  cl_dataLog.accum[0] += adc_to_temp(&lidHeater[0].ntcCoef, lidHeater[0].adcValFilt);
-  cl_dataLog.accum[1] += adc_to_temp(&midHeater[1].ntcCoef, midHeater[1].adcValFilt);
-  cl_dataLog.accum[2] += adc_to_temp(&peltier[0].ntcCoef, peltier[0].adcValFilt);
-  cl_dataLog.accum[3] += peltier[0].t_hot_est;
+  cl_dataLog.accum[0] += adc_to_temp(&lidHeater->ntcCoef, lidHeater->adcValFilt);
+  cl_dataLog.accum[1] += adc_to_temp(&midHeater->ntcCoef, midHeater->adcValFilt);
+  cl_dataLog.accum[2] += adc_to_temp(&peltier->ntcCoef, peltier->adcValFilt);
+  cl_dataLog.accum[3] += peltier->t_hot_est;
+  cl_dataLog.accum[4] += adc_to_temp(&peltier->ntcCoef, (int16_t)*adcAmbient);
 
   // Is the log buffer full?
   if(CL_SAMPLES_PER_LOG <= cl_dataLog.avgCnt) {
-    cl_data_t data[4];
+    cl_data_t data[5];
     cl_dataLog.avgCnt = 0;
     //Do avarage of the values
     data[0] = cl_dataLog.accum[0]/CL_SAMPLES_PER_LOG;
     data[1] = cl_dataLog.accum[1]/CL_SAMPLES_PER_LOG;
     data[2] = cl_dataLog.accum[2]/CL_SAMPLES_PER_LOG;
     data[3] = cl_dataLog.accum[3]/CL_SAMPLES_PER_LOG;
-    cl_dataLog.accum[0] = cl_dataLog.accum[1] = cl_dataLog.accum[2] = cl_dataLog.accum[3] = 0;
+    data[4] = cl_dataLog.accum[4]/CL_SAMPLES_PER_LOG;
+    cl_dataLog.accum[0] = cl_dataLog.accum[1] = cl_dataLog.accum[2] = cl_dataLog.accum[3] = cl_dataLog.accum[4] = 0;
     //put in queue
-    DEBUG_LOGGING_PRINTF("Li: %ld %04x,%04x,%04x,%04x", cl_dataLog.sequence, data[0], data[1], data[2], data[3]);
+    DEBUG_LOGGING_PRINTF("Li: %ld %04x,%04x,%04x,%04x", cl_dataLog.sequence, data[0], data[1], data[2], data[3], data[4]);
     cl_dataQueueAdd(cl_dataLog.sequence, data);
     cl_dataLog.sequence += 1;  // Running sequence number
   }
@@ -911,7 +915,7 @@ bool coolLidReadRegs(u8 slave, u16 addr, u16 datasize, u16 *buffer)
         val = *fan[0].io.ctrVal;
         break;
       case PWM_4_REG:
-        val = readADC(ADC_VMON_MUX_CH); // Peltier voltage
+        val = peltier[0].voltage; // Peltier voltage
         break;
       case PWM_4_REG+1:
         val = *lidHeater[1].io.ctrVal;
@@ -1185,6 +1189,12 @@ void CoolAndLidTask( void * pvParameters )
   init_lid_heater(&lidHeater[0]);
   init_lid_heater(&lidHeater[1]);
 
+  lidHeater[0].ntcCoef.beta = 3940;
+  lidHeater[0].ntcCoef.r_s_ohm = 470;
+
+  lidHeater[1].ntcCoef.beta = 3984;
+  lidHeater[1].ntcCoef.r_s_ohm = 10000;
+
   init_median_filter(&fan[0].medianFilter);
   init_median_filter(&peltier[0].medianFilter);
   init_median_filter(&lidHeater[0].medianFilter);
@@ -1207,7 +1217,8 @@ void CoolAndLidTask( void * pvParameters )
       static int toggle = 0;
       //PRINTF("%d, %d, %d, %d, %d, %d, %d, %d, %d, %d", (int16_t)peltier->controller.setPoint, *peltier[0].io.ctrVal, peltier[0].adcValFilt, (int16_t)fan[0].controller.setPoint, *fan[0].io.ctrVal, *fan[0].io.adcVal, (int16_t)lidHeater[0].controller.setPoint, *lidHeater[0].io.ctrVal, lidHeater[0].adcValFilt, *lidHeater[0].io.adcVal);
       //PRINTF("%d, %d, %d, %d, %d, %d, %d", (int16_t)peltier->controller.setPoint, *peltier[0].io.ctrVal, peltier[0].adcValFilt, getPeltierVoltage(), (int16_t)fan[0].controller.setPoint, *fan[0].io.ctrVal, *fan[0].io.adcVal);
-      	PRINTF("%d, %d, %d, %d, %d, %d, %d, %d, %d",
+      /*
+      PRINTF("%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d",
       			adc_to_temp(&peltier[0].ntcCoef, (int16_t)*adcAmbient),
       			adc_to_temp(&peltier[0].ntcCoef, (int16_t)peltier->controller.setPoint),
       			*peltier[0].io.ctrVal,
@@ -1216,7 +1227,20 @@ void CoolAndLidTask( void * pvParameters )
       			peltier[0].t_hot_est,
       			fan[0].adcValFilt,
       			adc_to_temp(&fan[0].ntcCoef, (int16_t)fan[0].controller.setPoint),
-      			*fan[0].io.ctrVal);
+      			*fan[0].io.ctrVal,
+      			(int16_t)*lidHeater[0].io.adcVal,
+      			(int16_t)lidHeater[1].adcValFilt,
+      			(int16_t)*lidHeater[1].io.adcVal,
+      			(int16_t)lidHeater[1].adcValFilt);
+       */
+      PRINTF("%d, %d, %d, %d, %d, %d, %d ",
+    			(int16_t)*lidHeater[0].io.adcVal,
+    			adc_to_temp(&lidHeater[0].ntcCoef, (int16_t)lidHeater[0].adcValFilt),
+    			lidHeater[0].setPoint,
+    			(int16_t)*lidHeater[1].io.adcVal,
+    			adc_to_temp(&lidHeater[1].ntcCoef, (int16_t)lidHeater[1].adcValFilt),
+    			lidHeater[1].setPoint,
+    			peltier[0].voltage)
 
       //DEBUG_PRINTF("Adc:%4d, %4d, %4d, %4d", adcCh[0], adcCh[1], adcCh[2], adcCh[3]);
       cnt = 0;
@@ -1243,7 +1267,7 @@ void CoolAndLidTask( void * pvParameters )
 #else
     adsGetLatest(&adcCh[0], &adcCh[1], &adcCh[2], &adcCh[3]);
 #endif
-    adcDiff[0] =  adc_to_temp(&fan[0].ntcCoef, *adcDiffSource[1]) - adc_to_temp(&fan[0].ntcCoef, *adcDiffSource[0]); // Fan controll is based on the temp diff
+    //adcDiff[0] =  adc_to_temp(&fan[0].ntcCoef, *adcDiffSource[1]) - adc_to_temp(&fan[0].ntcCoef, *adcDiffSource[0]); // Fan controll is based on the temp diff
 #ifndef STANDALONE
 
   	peltier[0].temp = adc_to_temp(&peltier[0].ntcCoef, peltier[0].adcValFilt);
@@ -1254,8 +1278,8 @@ void CoolAndLidTask( void * pvParameters )
     peltier_controller(&peltier[0]);
     fan_controller(&fan[0], peltierTemp);  // Todo T to ADC
 
-    lid_heater_controller(&lidHeater[0]);
-    lid_heater_controller(&lidHeater[1]);
+    lid_heater_controller(&lidHeater[LID_HEATER_1]);
+    lid_heater_controller(&lidHeater[LID_HEATER_2]);
 
     if (peltier[0].error == TRUE || lidHeater[0].error == TRUE)
     {
@@ -1351,9 +1375,10 @@ void CoolAndLidTask( void * pvParameters )
       {
         case SET_FAN_TEMP:
         {
-          SetCooleAndLidReq *p;
-          p=(SetCooleAndLidReq *)(msg->ucData);
-          fan_setpoint(&fan[0], p->value);
+          //SetCooleAndLidReq *p;
+          //p=(SetCooleAndLidReq *)(msg->ucData);
+          //fan_setpoint(&fan[0], p->value);
+          fan_setpoint(&fan[0], 500);
           fan[0].state = CTR_INIT;
         }
         break;
