@@ -28,7 +28,7 @@ void init_lid_heater(lidHeater_t * lidHeater)
   lid_heater_init_feedback_ctr(&lidHeater->controller);
   lid_heater_init_rate_limiter(&lidHeater->rateLimiter);
   init_median_filter(&lidHeater->medianFilter);
-  lid_heater_init_ntc_coef(&lidHeater->ntcCoef);
+  //lid_heater_init_ntc_coef(&lidHeater->ntcCoef);
   lidHeater->controller.setPoint = lidHeater->setPoint = 0;
   lidHeater->error = FALSE;
 }
@@ -41,8 +41,8 @@ void lid_heater_init_feedback_ctr(controller_t * controller)
 
   controller->diff_eq.minOutputValue = 0;
   //The topheater element melts down if we diserpate more power than this.
-  controller->diff_eq.maxOutputValue = (PWM_UPPER_LIMIT * 55) / 100;
-  //controller->diff_eq.maxOutputValue = (PWM_UPPER_LIMIT * 1070) / 100;
+  //controller->diff_eq.maxOutputValue = (PWM_UPPER_LIMIT * 55) / 100;
+  controller->diff_eq.maxOutputValue = (PWM_UPPER_LIMIT * 100) / 100;
 }
 
 void lid_heater_init_rate_limiter(rateLimiter_t * rateLimiter)
@@ -60,8 +60,11 @@ void lid_heater_setpoint(lidHeater_t * lidHeater, int16_t value)
 
 void lid_heater_init_ntc_coef(ntcCoef_t * ntcCoef)
 { 
-  ntcCoef->beta = 3940;
-  ntcCoef->r_s_ohm = 470;
+  //ntcCoef->beta = 3940;
+  //ntcCoef->r_s_ohm = 470;
+
+  //ntcCoef->beta = 3984;
+  //ntcCoef->r_s_ohm = 10000;
 }
 
 void lid_heater_controller(lidHeater_t *lidHeater)
@@ -120,6 +123,7 @@ void lid_heater_controller(lidHeater_t *lidHeater)
     ctr_out = lidHeater->controller.diff_eq.minOutputValue;
   }
 
+#if 0
   if (lidHeater->state == CTR_CLOSED_LOOP_STATE)
   {
 		if (lidHeater->adcValFilt > lidHeater->max_adc || lidHeater->adcValFilt < lidHeater->min_adc)
@@ -134,5 +138,6 @@ void lid_heater_controller(lidHeater_t *lidHeater)
 			lidHeater->error = TRUE;
 		}
   }
+#endif
   *lidHeater->io.ctrVal = ctr_out;
 }
