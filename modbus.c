@@ -51,7 +51,13 @@
 /* Private debug define ------------------------------------------------------*/
 //#define DEBUG_MB /* General debug */
 //#define DEBUG_HF /* Searching for a hard fault */
+#define DEBUG
 
+#ifdef DEBUG
+#define DEBUG_PRINTF(fmt, args...)      snprintf(dbgbuf, DEBUG_BUFFER_SIZE, fmt, ## args);  send_msg_on_monitor(dbgbuf);
+#else
+#define DEBUG_PRINTF(fmt, args...)                          /* Don't do anything in release builds */
+#endif
 #ifdef DEBUG_MB
 #define DEBUG_MB_PRINTF(fmt, args...)      snprintf(dbgbuf, DEBUG_BUFFER_SIZE, fmt, ## args);  send_msg_on_monitor(dbgbuf);
 #else
@@ -232,7 +238,6 @@ USART_ERROR waitForRespons(u8 *telegram, int *telegramSize)
   /*start response telegram timer,*/
   xTimerReset( TimerHandle, 0 );
   xTimerStart( TimerHandle, 0 );
-  NOFRecvChars=0;
   debug[debug_cnt].chars = 0xFF;
   /*wait for mutex*/
   DEBUG_MB_PRINTF("MB-SemTake");
@@ -274,6 +279,7 @@ static USART_ERROR ModbusReadRegs(u8 slave, u16 addr, u16 datasize, u8 *buffer)
   recvBuffer=telegram;
   recvBufferSize=telegramsize;
   debug[debug_cnt].chars = 0xAA;
+  NOFRecvChars=0;
   UART_SendMsg(usedUart, telegram, 6+2);
   DEBUG_MB_PRINTF("MBR->");
   ERR = waitForRespons(telegram, &telegramsize);
@@ -321,6 +327,7 @@ static USART_ERROR ModbusWriteRegs(u8 slave, u16 addr, u8 *data, u16 datasize)
   recvBuffer=telegram;
   recvBufferSize=telegramsize;
   debug[debug_cnt].chars = 0xBB;
+  NOFRecvChars=0;
   UART_SendMsg(usedUart, telegram, 7+datasize*2+2);
   DEBUG_MB_PRINTF("MBW->");
   ERR = waitForRespons(telegram, &telegramsize);
@@ -381,7 +388,16 @@ void ModbusTask( void * pvParameters )
               po->slave=p->slave;
               po->datasize=p->datasize;
               po->addr=p->addr;
-              po->resultOk=ModbusWriteRegs(p->slave, p->addr, p->data, p->datasize);
+
+              //po->resultOk=ModbusWriteRegs(p->slave, p->addr, p->data, p->datasize);
+              uint8_t retry = 0;
+              while ((po->resultOk=ModbusWriteRegs(p->slave, p->addr, p->data, p->datasize)) != NO_ERROR)
+              {
+              	DEBUG_MB_PRINTF("Tube[%d] MODBUS WRTIE RETRY # %d", p->slave, retry);
+              	if (retry == 3)
+              		break;
+              	retry++;
+              }
               xQueueSend(p->reply, &msgout, portMAX_DELAY);
             }
           }
@@ -407,9 +423,14 @@ void ModbusTask( void * pvParameters )
               po->addr=p->addr;
               po->datasize=p->datasize;
               po->resultOk=FALSE;
-              if(ModbusReadRegs(p->slave, p->addr, p->datasize, po->data)== NO_ERROR)
+              USART_ERROR mbreadres;
+              if((mbreadres = ModbusReadRegs(p->slave, p->addr, p->datasize, po->data))== NO_ERROR)
               {
                 po->resultOk=NO_ERROR;
+              }
+              else
+              {
+              	DEBUG_PRINTF("Tube[%d] MODBUS READ ERROR, RESULT: %d, ADR: %d, SIZE: %d, DATA: %d", p->slave, mbreadres, p->addr, p->datasize, *po->data);
               }
               xQueueSend(p->reply, &msgout, portMAX_DELAY);
             }
