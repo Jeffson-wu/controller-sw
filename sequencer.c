@@ -37,7 +37,7 @@ extern xQueueHandle CoolAndLidQueueHandle;
 /* Private debug define ------------------------------------------------------*/
 //#define SIMULATE_HEATER /*Disable communication to M0 CPU's return temperature reached when temp is requested*/
 //#define USE_DEVELOPMENT_LOGGING
-//#define DEBUG       /*General debug shows state changes of tubes (new temp, new time etc.)*/
+#define DEBUG       /*General debug shows state changes of tubes (new temp, new time etc.)*/
 //#define DEBUG_SEQ   /*Debug of sequencer, to follow state of sequencer    */
 //#define DEBUG_IF    /*Debug of external interfaces modbus, IRQ and serial */
 //#define DEBUG_QUEUE /*Debug of stage queue */
@@ -1745,7 +1745,7 @@ void HeaterEventHandler (ReadModbusRegsRes *preg, xMessage *msg)
       DEBUG_PRINTF("%s rebooted T%ld state %d", heater[tube2heater[TubeId-1]], TubeId, Tubeloop[TubeId-1].state );
       /* Notify the Linux Box */ 
       setTubeHWReport(M0_BOOT, TubeId);
-      send_led_cmd(SET_LED_ALL_OFF, (tube2heater[TubeId-1] * 4));
+      send_led_cmd(SET_LED_ALL_OFF, TubeId);
       extern void ErrorOn();
       ErrorOn();
     }
@@ -2054,7 +2054,7 @@ void TubeSequencerTask( void * pvParameter)
           {
             if(preg->addr == EVENT_REG)
             {
-              //  DEBUG_PRINTF("Tube[%ld]Event[%x]",TubeId,*preg->data);
+              //DEBUG_PRINTF("Tube[%ld]Event[%x]",TubeId,*preg->data);
               HeaterEventHandler(preg, msg);
             }
             else if(preg->addr == HW_STATUS_REG)
