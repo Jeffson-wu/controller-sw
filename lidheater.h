@@ -39,11 +39,11 @@ typedef struct LID {
   ntcCoef_t           ntcCoef;
   int16_t             setPoint;
   int16_t             adcValFilt;
-  int16_t							setPointLow_0;
-  int16_t							setPointLow_1;
-  int16_t							max_adc;
-  int16_t							min_adc;
-  int8_t							error;
+  int16_t							setPointLow;
+  //int16_t							setPointLow_1;
+  //int16_t							max_adc;
+  //int16_t							min_adc;
+  //int8_t							error;
 } lidHeater_t;
 
 /* Exported constants --------------------------------------------------------*/
@@ -51,7 +51,9 @@ typedef struct LID {
 /* Exported functions ------------------------------------------------------- */
 
 void init_lid_heater(lidHeater_t * lidHeater);
+void init_mid_heater(lidHeater_t * lidHeater);
 void lid_heater_init_feedback_ctr(controller_t * controller);
+void mid_heater_init_feedback_ctr(controller_t * controller);
 void lid_heater_controller(lidHeater_t *lidHeater);
 void lid_heater_init_rate_limiter(rateLimiter_t * rateLimiter);
 void lid_heater_setpoint(lidHeater_t * lidHeater, int16_t value);

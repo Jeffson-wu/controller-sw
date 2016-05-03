@@ -50,7 +50,6 @@ typedef enum {
 typedef struct {
   double              input;
   double              output;
-  double							output_old;
   double							N0;
   double							N1;
   double							D1;

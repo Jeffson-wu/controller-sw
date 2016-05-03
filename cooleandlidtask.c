@@ -1187,7 +1187,7 @@ void CoolAndLidTask( void * pvParameters )
   init_peltier(&peltier[0]);
   init_fan(&fan[0]);
   init_lid_heater(&lidHeater[0]);
-  init_lid_heater(&lidHeater[1]);
+  init_mid_heater(&lidHeater[1]);
 
   lidHeater[0].ntcCoef.beta = 3940;
   lidHeater[0].ntcCoef.r_s_ohm = 470;
@@ -1201,10 +1201,12 @@ void CoolAndLidTask( void * pvParameters )
   init_median_filter(&lidHeater[1].medianFilter);
 
   peltier[0].max_adc = temp_to_adc(&peltier[0].ntcCoef, 300);
+  /*
   lidHeater[0].max_adc = temp_to_adc(&lidHeater[0].ntcCoef, 1300);
   lidHeater[0].min_adc = temp_to_adc(&lidHeater[0].ntcCoef, 500);
   lidHeater[1].max_adc = temp_to_adc(&lidHeater[1].ntcCoef, 1300);
   lidHeater[1].min_adc = temp_to_adc(&lidHeater[1].ntcCoef, 500);
+   */
 
   lidState = getLidState();
   DEBUG_PRINTF("Lid state: %d", (int)lidState);
@@ -1281,12 +1283,14 @@ void CoolAndLidTask( void * pvParameters )
     lid_heater_controller(&lidHeater[LID_HEATER_1]);
     lid_heater_controller(&lidHeater[LID_HEATER_2]);
 
+    /*
     if (peltier[0].error == TRUE || lidHeater[0].error == TRUE)
     {
     	peltier[0].state = CTR_STOP_STATE;
     	lidHeater[0].state = CTR_STOP_STATE;
     	lidHeater[1].state = CTR_STOP_STATE;
     }
+    */
 
     switch (peltier->state) {
       case CTR_STOP_STATE:

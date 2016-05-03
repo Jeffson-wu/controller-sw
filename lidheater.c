@@ -18,7 +18,8 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "lidheater.h"
-#include "sequencer.h"
+//#include "sequencer.h"
+//#include "dll_dummy.h"
 
 /* ---------------------------------------------------------------------------*/
 /* Lid handling */
@@ -30,7 +31,17 @@ void init_lid_heater(lidHeater_t * lidHeater)
   init_median_filter(&lidHeater->medianFilter);
   //lid_heater_init_ntc_coef(&lidHeater->ntcCoef);
   lidHeater->controller.setPoint = lidHeater->setPoint = 0;
-  lidHeater->error = FALSE;
+  //lidHeater->error = FALSE;
+}
+
+void init_mid_heater(lidHeater_t * lidHeater)
+{
+  mid_heater_init_feedback_ctr(&lidHeater->controller);
+  lid_heater_init_rate_limiter(&lidHeater->rateLimiter);
+  init_median_filter(&lidHeater->medianFilter);
+  //lid_heater_init_ntc_coef(&lidHeater->ntcCoef);
+  lidHeater->controller.setPoint = lidHeater->setPoint = 0;
+  //lidHeater->error = FALSE;
 }
 
 void lid_heater_init_feedback_ctr(controller_t * controller)
@@ -38,6 +49,18 @@ void lid_heater_init_feedback_ctr(controller_t * controller)
   controller->diff_eq.N0 = 3.000500E2;
   controller->diff_eq.N1 = -2.999500E2;
   controller->diff_eq.D1 = -1.000000E0;
+
+  controller->diff_eq.minOutputValue = 0;
+  //The topheater element melts down if we diserpate more power than this.
+  //controller->diff_eq.maxOutputValue = (PWM_UPPER_LIMIT * 55) / 100;
+  controller->diff_eq.maxOutputValue = (PWM_UPPER_LIMIT * 100) / 100;
+}
+
+void mid_heater_init_feedback_ctr(controller_t * controller)
+{
+  controller->diff_eq.N0 = 2.001E2;
+  controller->diff_eq.N1 = -1.999E2;
+  controller->diff_eq.D1 = -1.0E0;
 
   controller->diff_eq.minOutputValue = 0;
   //The topheater element melts down if we diserpate more power than this.
@@ -54,8 +77,8 @@ void lid_heater_init_rate_limiter(rateLimiter_t * rateLimiter)
 void lid_heater_setpoint(lidHeater_t * lidHeater, int16_t value)
 {
   lidHeater->setPoint = lidHeater->controller.setPoint = temp_to_adc(&lidHeater->ntcCoef, value);
-  lidHeater->setPointLow_0 = temp_to_adc(&lidHeater->ntcCoef, (value-(int16_t)((double)value*0.005)));
-  lidHeater->setPointLow_1 = temp_to_adc(&lidHeater->ntcCoef, (value-(int16_t)((double)value*0.08)));
+  lidHeater->setPointLow = temp_to_adc(&lidHeater->ntcCoef, (value-(int16_t)((double)value*0.05)));
+  //lidHeater->setPointLow_1 = temp_to_adc(&lidHeater->ntcCoef, (value-(int16_t)((double)value*0.08)));
 }
 
 void lid_heater_init_ntc_coef(ntcCoef_t * ntcCoef)
@@ -95,8 +118,9 @@ void lid_heater_controller(lidHeater_t *lidHeater)
     case CTR_OPEN_LOOP_STATE:
     {
 			ctr_out = PWM_UPPER_LIMIT;
-			if (*lidHeater->io.adcVal > lidHeater->setPointLow_0)
+      if (*lidHeater->io.adcVal > lidHeater->setPointLow)
 			{
+      	lidHeater->controller.diff_eq.output = lidHeater->controller.diff_eq.input = ctr_out;
 				lidHeater->state = CTR_CLOSED_LOOP_STATE;
 			}
     }
@@ -104,10 +128,12 @@ void lid_heater_controller(lidHeater_t *lidHeater)
     case CTR_CLOSED_LOOP_STATE:
     {
       ctr_out = (uint16_t)feedback_controller_pos(&lidHeater->controller, lidHeater->adcValFilt);
+      /*
       if (*lidHeater->io.adcVal < lidHeater->setPointLow_1)
 			{
 				lidHeater->state = CTR_OPEN_LOOP_STATE;
 			}
+      */
     }
     break;
     default:

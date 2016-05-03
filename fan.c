@@ -18,8 +18,8 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "fan.h"
-#include "sequencer.h"
-#include	"gdi.h"
+//#include "sequencer.h"
+//#include "gdi.h"
 
 /* ---------------------------------------------------------------------------*/
 /* Fan handling */
