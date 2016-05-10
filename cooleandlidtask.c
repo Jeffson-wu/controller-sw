@@ -1400,7 +1400,7 @@ void CoolAndLidTask( void * pvParameters )
           SetCooleAndLidReq *p;
           p=(SetCooleAndLidReq *)(msg->ucData);
           lid_heater_setpoint(&lidHeater[0], p->value);
-          lid_heater_setpoint(&lidHeater[1], 1000);
+          lid_heater_setpoint(&lidHeater[1], 0); //1000
           lidHeater[0].state = CTR_INIT;
           lidHeater[1].state = CTR_INIT;
         }
