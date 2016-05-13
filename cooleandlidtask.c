@@ -1200,7 +1200,7 @@ void CoolAndLidTask( void * pvParameters )
   init_median_filter(&lidHeater[0].medianFilter);
   init_median_filter(&lidHeater[1].medianFilter);
 
-  peltier[0].max_adc = temp_to_adc(&peltier[0].ntcCoef, 300);
+  peltier[0].max_adc = temp_to_adc(&peltier[0].ntcCoef, 400); //300
   /*
   lidHeater[0].max_adc = temp_to_adc(&lidHeater[0].ntcCoef, 1300);
   lidHeater[0].min_adc = temp_to_adc(&lidHeater[0].ntcCoef, 500);
@@ -1379,10 +1379,10 @@ void CoolAndLidTask( void * pvParameters )
       {
         case SET_FAN_TEMP:
         {
-          //SetCooleAndLidReq *p;
-          //p=(SetCooleAndLidReq *)(msg->ucData);
-          //fan_setpoint(&fan[0], p->value);
-          fan_setpoint(&fan[0], 500);
+          SetCooleAndLidReq *p;
+          p=(SetCooleAndLidReq *)(msg->ucData);
+          fan_setpoint(&fan[0], p->value);
+          //fan_setpoint(&fan[0], 500);
           fan[0].state = CTR_INIT;
         }
         break;
@@ -1400,7 +1400,7 @@ void CoolAndLidTask( void * pvParameters )
           SetCooleAndLidReq *p;
           p=(SetCooleAndLidReq *)(msg->ucData);
           lid_heater_setpoint(&lidHeater[0], p->value);
-          lid_heater_setpoint(&lidHeater[1], 0); //1000
+          lid_heater_setpoint(&lidHeater[1], 0); //0
           lidHeater[0].state = CTR_INIT;
           lidHeater[1].state = CTR_INIT;
         }

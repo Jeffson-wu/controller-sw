@@ -47,6 +47,7 @@ void fan_init_feedback_ctr(controller_t * controller)
 
   controller->diff_eq.minOutputValue = 15000; // fan stops below    //must be 0 in sim.... add heat from peltier.
   controller->diff_eq.maxOutputValue = 32767; // fan whistles above 25000
+  //controller->diff_eq.maxOutputValue = 22340; // fan become too noisy above - ref 11v
 }
 
 void fan_init_rate_limiter(rateLimiter_t * rateLimiter)
@@ -116,12 +117,10 @@ void fan_controller(fan_t *fan, int16_t peltierTemp)
     break;
   }
   
-#if 0 // Power test
   if (ctr_out > fan->controller.diff_eq.maxOutputValue)
   {
   	ctr_out = fan->controller.diff_eq.maxOutputValue;
   }
-#endif
   if (ctr_out < fan->controller.diff_eq.minOutputValue)
   {
     if(CTR_MANUAL_STATE != fan->state) { // In CTR_MANUAL_STATE there is no min
