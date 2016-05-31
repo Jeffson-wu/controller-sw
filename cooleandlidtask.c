@@ -27,7 +27,6 @@
 //#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
 //#define DEBUG_COOL
 //#define DEBUG_LOGGING
-//#define STANDALONE /*Defines if the M3 Runs with or without Linux box*/
 
 /* Includes ------------------------------------------------------------------*/
 #include <stdio.h>
@@ -453,19 +452,6 @@ void stopPeltier()
   //peltierData[1].regulator.state = STOP_STATE;
 }
 
-/* ---------------------------------------------------------------------------*/
-void standAlone() //These settings should be made from the Linux Box
-{
-
-  *peltier[0].io.ctrVal = 8000;
-  *fan[0].io.ctrVal = 20000; //40% of 32767
-
-  *lidHeater[0].io.ctrVal = 25000;
-  *lidHeater[1].io.ctrVal = 0;
-  pwmCh[3] = 12000; ///###JRJ DEBUG 10% on Aux
-  coolTempOK = TRUE;
-  lidTempOK  = TRUE;
-}
 
 /* ---------------------------------------------------------------------------*/
 void setCLStatusReg(uint16_t status)
@@ -969,9 +955,6 @@ bool coolLidWriteRegs(u8 slave, u16 addr, u16 *data, u16 datasize)
         {
           case WRITE_CAL_DATA:
             /* Here the slave is irrelevant */
-            calib_data[0].c_1 = lidHeater[0].controller.setPoint;
-            calib_data[1].c_1 = peltier[0].controller.setPoint;
-            calib_data[2].c_1 = fan[0].controller.setPoint;
             NVSwrite(sizeof(calib_data), calib_data);
             DEBUG_PRINTF("\r\nWrote calib.\r\n");
             break;
@@ -1005,7 +988,8 @@ bool coolLidWriteRegs(u8 slave, u16 addr, u16 *data, u16 datasize)
                 coolTempOK = FALSE;
                 break;
               case FAN_ADDR:
-                fan[0].state = CTR_CLOSED_LOOP_STATE;
+                //fan[0].state = CTR_CLOSED_LOOP_STATE;
+              	fan[0].state = CTR_STOP_STATE;
                 break;
               default:
                 break;
@@ -1166,11 +1150,9 @@ void CoolAndLidTask( void * pvParameters )
   /* <-- Init DAC */
 
 // use "setCLStatusReg(HW_DEFAULT_CAL_USED)" if default calib is used
-#ifdef STANDALONE
-  standAlone();
   setCLStatusReg(0xf00f); //Debug####JRJ
   DEBUG_PRINTF("CL stand alone\r\n");
-#endif
+
   /* Read calibration data form NVS */
   if(0 != NVSread(sizeof(calib_data), calib_data) ) { 
     PRINTF("\r\nUsing default calib:\r\n");    // How to do this on the M3?? - setHWStatusReg(HW_DEFAULT_CAL_USED);
@@ -1180,9 +1162,10 @@ void CoolAndLidTask( void * pvParameters )
   initTogglePeltierTimer();
   initCLStatusTimer();
 
-  lidHeater[0].controller.setPoint = calib_data[0].c_1; //Todo: needs cleaning
-  peltier[0].controller.setPoint = calib_data[1].c_1;
-  fan[0].controller.setPoint     = calib_data[2].c_1;
+  *fan[0].io.ctrVal = 0;
+  *peltier[0].io.ctrVal = 0;
+  *lidHeater[0].io.ctrVal = 0;
+  *lidHeater[1].io.ctrVal = 0;
 
   init_peltier(&peltier[0]);
   init_fan(&fan[0]);
@@ -1210,6 +1193,10 @@ void CoolAndLidTask( void * pvParameters )
 
   lidState = getLidState();
   DEBUG_PRINTF("Lid state: %d", (int)lidState);
+
+
+  fan[0].controller.setPoint = 0;
+
 
   while(1)
   {
@@ -1270,11 +1257,11 @@ void CoolAndLidTask( void * pvParameters )
     adsGetLatest(&adcCh[0], &adcCh[1], &adcCh[2], &adcCh[3]);
 #endif
     //adcDiff[0] =  adc_to_temp(&fan[0].ntcCoef, *adcDiffSource[1]) - adc_to_temp(&fan[0].ntcCoef, *adcDiffSource[0]); // Fan controll is based on the temp diff
-#ifndef STANDALONE
 
   	peltier[0].temp = adc_to_temp(&peltier[0].ntcCoef, peltier[0].adcValFilt);
     uint16_t peltierTemp = temp_to_adc(&peltier[0].ntcCoef, peltier[0].t_hot_est);
-    fan[0].controller.setPoint = temp_to_adc(&fan[0].ntcCoef, 400);
+
+  	//fan[0].controller.setPoint = temp_to_adc(&fan[0].ntcCoef, 400);
 
     peltier[0].voltage = getPeltierVoltage();
     peltier_controller(&peltier[0]);
@@ -1323,7 +1310,6 @@ void CoolAndLidTask( void * pvParameters )
     	ambTempError = TRUE;
     }
 
-#endif
 
 #ifdef USE_TWO_LEVEL_LID_POWER
     // TODO: Reset controller when changing TH power state
@@ -1357,6 +1343,7 @@ void CoolAndLidTask( void * pvParameters )
     //}
 #endif
 
+    //pwmCh[3] = 15000;
     PWM_Set(pwmCh[0], PWM0_TIM4CH3);  /* pwmCh[0], TIM4,CH3 - PB8 -  J175 :  TopHeater1Ctrl */
     PWM_Set(pwmCh[1], PWM1_TIM4CH4);  /* pwmCh[1], TIM4,CH4 - PB9 -  J26  :  TopHeater2Ctrl */
     PWM_Set(pwmCh[3], PWM3_TIM3CH2);  /* pwmCh[3], TIM3,CH2 - PC7 -  J176 :  FAN control    */
@@ -1382,8 +1369,8 @@ void CoolAndLidTask( void * pvParameters )
           SetCooleAndLidReq *p;
           p=(SetCooleAndLidReq *)(msg->ucData);
           fan_setpoint(&fan[0], p->value);
-          //fan_setpoint(&fan[0], 500);
-          fan[0].state = CTR_INIT;
+          //fan[0].state = CTR_INIT;
+          fan[0].state = CTR_MANUAL_STATE;
         }
         break;
         case SET_COOL_TEMP:
@@ -1429,6 +1416,16 @@ void CoolAndLidTask( void * pvParameters )
           //lidData[1].regulator.state = STOP_STATE;
         }
         break;
+        case START_FAN:
+        {
+          fan[0].controller.setPoint = 32767;
+        }
+        break;
+        case STOP_FAN:
+        {
+        	fan[0].controller.setPoint = 0;
+        }
+        break;
         case SET_LID_LOCK:
         {
           SetCooleAndLidReq *p;
@@ -1458,7 +1455,7 @@ void CoolAndLidTask( void * pvParameters )
             case 4: //Fan ctrl
               //*fan[0].io.ctrVal = p->value * 32768/100;
               //PWM_Set(*fan[0].io.ctrVal, PWM1_TIM4CH4);
-            	fan[0].controller.setPoint = temp_to_adc(&fan[0].ntcCoef, p->value);
+            	//fan[0].controller.setPoint = temp_to_adc(&fan[0].ntcCoef, p->value);
               break;
             case 5:
               DEBUG_PRINTF("Set LidLock @ %d", p->value);

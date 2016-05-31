@@ -278,6 +278,8 @@ Tubeloop_t Tubeloop[NTUBES] = {
   { TUBE_INIT, TUBE_P_NORM,0,0,0,0,0,0,0, {}, {0,0,End,0} }
 };
 
+uint16_t temp_old[] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+
 /* Private function prototypes -----------------------------------------------*/
 void vTimerCallback( xTimerHandle pxTimer );
 void NeighbourTubeTimerCallback( xTimerHandle pxTimer );
@@ -766,6 +768,31 @@ void stop_lid_heating()
 }
 
 /* ---------------------------------------------------------------------------*/
+void start_fan()
+{
+  xMessage *msg;
+
+  msg = pvPortMalloc(sizeof(xMessage));
+  if(msg)
+  {
+    msg->ucMessageID = START_FAN;
+    xQueueSend(CoolAndLidQueueHandle, &msg, portMAX_DELAY);
+  }
+}
+
+/* ---------------------------------------------------------------------------*/
+void stop_fan()
+{
+  xMessage *msg;
+
+  msg=pvPortMalloc(sizeof(xMessage));
+  if(msg)
+  {
+    msg->ucMessageID = STOP_FAN;
+    xQueueSend(CoolAndLidQueueHandle, &msg, portMAX_DELAY);
+  }
+}
+/* ---------------------------------------------------------------------------*/
 void stop_all_tube_LED()
 {
   send_led_cmd(SET_LED_ALL_OFF, 1);
@@ -877,6 +904,8 @@ bool stop_tube_seq(long TubeId)
   bool result = TRUE;
   //stageCmd_t STAGE;
   //stageCmd_t *TSeq = &STAGE;
+
+	stop_fan();
 
   if( (TUBE_INIT == Tubeloop[TubeId-1].state) || (TUBE_IDLE == Tubeloop[TubeId-1].state) )
   {
@@ -1949,6 +1978,17 @@ void TubeStageHandler(long TubeId, xMessage *msg)
         // DEBUG_PRINTF("STart sequence");
         data_element[0] = TSeq->temp;
         data_element[1] = TSeq->seq_num;
+
+        if (TSeq->temp < temp_old[TubeId-1])
+        {
+        	start_fan();
+        }
+        else
+        {
+        	stop_fan();
+        }
+        temp_old[TubeId-1] = TSeq->temp;
+
         // Write both SETPOINT_REG and STAGE_NUM_REG at the same time to make sure the log stage and measurements are in sync.
         WriteTubeHeaterReg(TubeId, SETPOINT_REG, data_element, sizeof(data_element)/2);
         pTubeloop->state = TUBE_WAIT_TEMP;

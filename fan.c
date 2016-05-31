@@ -58,7 +58,7 @@ void fan_init_rate_limiter(rateLimiter_t * rateLimiter)
 
 void fan_setpoint(fan_t *fan, int16_t value)
 {
-  fan->setPoint = fan->controller.setPoint = temp_to_adc(&fan->ntcCoef, value);
+  fan->setPoint = temp_to_adc(&fan->ntcCoef, value);
 }
 
 void fan_init_adc_to_temp(ntcCoef_t * ntcCoef)
@@ -88,10 +88,7 @@ void fan_controller(fan_t *fan, int16_t peltierTemp)
     {
       reset_controller(&fan->controller);
       reset_rateLimiter(&fan->rateLimiter, *fan->io.adcVal);
-
-      fan[0].state = CTR_CLOSED_LOOP_STATE; // ToDo: FJERN NAAR KIM HAR FIKSET KOMMANDOEN FRA LINUX - JSL!!
-      //fan->setPoint = 40; //2500; //
-      //fan->setPoint = 2000; //350; //2500; //
+      fan[0].state = CTR_CLOSED_LOOP_STATE;
     }
     break;
     case CTR_MANUAL_STATE:
@@ -108,9 +105,7 @@ void fan_controller(fan_t *fan, int16_t peltierTemp)
     {
     	fan->controller.setPoint = (double)fan->setPoint;
     	ctr_out = (uint16_t)feedback_controller_neg(&fan->controller, fan->adcValFilt);
-
       //PRINTF("FAN: %d, %d, %d, %d\n", (int16_t)peltierTemp, (int16_t)fan->adcValFilt, (int16_t)fan->controller.setPoint, (int16_t)ctr_out);
-
     }
     break;
     default:
