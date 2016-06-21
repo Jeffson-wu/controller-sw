@@ -51,7 +51,6 @@
 
 /* Private feature defines ---------------------------------------------------*/
 #define QUEUESIZE 10
-//#define USE_DEVELOPMENT_LOGGING
 
 /* Private debug define ------------------------------------------------------*/
 //#define DEBUG_CLOCK_MSO /*Set mux to output sysclk or other clocks on PA8*/
