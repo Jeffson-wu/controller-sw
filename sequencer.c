@@ -95,6 +95,7 @@ xTimerHandle M3RebootSurvivalTimer[1];
 long lStartTickCounters[ NUM_TIMERS ] = { 0 };
 
 /* Private variables ---------------------------------------------------------*/
+
 const char *  signals_txt[] =
 {
   "FIRST_MSG",
@@ -128,7 +129,14 @@ const char *  signals_txt[] =
   "START_LID_HEATING",
   "STOP_LID_HEATING",
   "SET_LID_PWM",
+  "DISABLE_NEIGHBOUR_TUBE_TEMP",
+  "ENABLE_NEIGHBOUR_TUBE_TEMP",
+  "SET_PWM",
+  "SET_PWM_RES",
+  "SET_DAC",
   "CHECK_LID_PELTIER_TEMP",
+  "SET_DAC_RES",
+  "CLEAR_LOG"
 };
 
 typedef enum
@@ -804,6 +812,20 @@ bool start_tube_seq( long TubeId)
   else
   {
     result = FALSE;
+  }
+  /* Befor restarting a tube clear old log entries */
+  if( Tubeloop[TubeId-1].state == TUBE_IDLE )
+  {
+    xMessage *msg;
+    msg = pvPortMalloc(sizeof(xMessage));
+
+    if(msg)
+    {
+      msg->ucMessageID = CLEAR_LOG;
+      msg->ucData[0] = (portCHAR)TubeId;
+      xQueueSend(LogQueueHandle, &msg, portMAX_DELAY);
+      // DEBUG_PRINTF("Clear log");
+    }
   }
   return result;
 }

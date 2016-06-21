@@ -348,6 +348,9 @@ void LogTask( void * pvParameters )
           }
         }
       break;
+      case CLEAR_LOG:
+        emptyLog((int)msg->ucData);
+        break;
       }
     }
    // DEBUG_LOG_PRINTF("msg done");
