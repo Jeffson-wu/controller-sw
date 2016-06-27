@@ -945,11 +945,11 @@ bool coolLidWriteRegs(u8 slave, u16 addr, u16 *data, u16 datasize)
         switch(slave)
         {
           case LID_ADDR:
-            lidHeater[0].controller.setPoint = val;
+            lidHeater[0].controller.setPoint =  val; //temp_to_adc(&lidHeater[0].ntcCoef, val); //ToDO split into pwm og temp sp
             lidTempOK = FALSE;
             break;
           case MID_ADDR:
-            lidHeater[1].controller.setPoint = val;
+            lidHeater[1].controller.setPoint = val; //temp_to_adc(&lidHeater[1].ntcCoef, val); //ToDO split into pwm og temp sp
             //lidTempOK = FALSE;
             break;
           case PELTIER_ADDR:
@@ -1400,7 +1400,15 @@ void CoolAndLidTask( void * pvParameters )
           SetCooleAndLidReq *p;
           p=(SetCooleAndLidReq *)(msg->ucData);
           lid_heater_setpoint(&lidHeater[0], p->value);
-          lid_heater_setpoint(&lidHeater[1], 0); //0
+          lidHeater[0].state = CTR_INIT;
+          lidHeater[1].state = CTR_INIT;
+        }
+        break;
+        case SET_MID_TEMP:
+        {
+          SetCooleAndLidReq *p;
+          p=(SetCooleAndLidReq *)(msg->ucData);
+          lid_heater_setpoint(&lidHeater[1], p->value);
           lidHeater[0].state = CTR_INIT;
           lidHeater[1].state = CTR_INIT;
         }

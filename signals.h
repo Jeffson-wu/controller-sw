@@ -44,6 +44,7 @@ enum
   CHECK_LID_PELTIER_TEMP,
   SET_DAC_RES,
   CLEAR_LOG,
+  SET_MID_TEMP,
   nofSIG
 };
 
