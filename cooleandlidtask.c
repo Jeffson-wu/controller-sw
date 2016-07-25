@@ -1281,6 +1281,7 @@ void CoolAndLidTask( void * pvParameters )
     fan_controller(&fan[0], peltierTemp);  // Todo T to ADC
 
     lid_heater_controller(&lidHeater[LID_HEATER_1]);
+    lidHeater[LID_HEATER_2].state = CTR_CLOSED_LOOP_STATE;
     lid_heater_controller(&lidHeater[LID_HEATER_2]);
 
     /*
