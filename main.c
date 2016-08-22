@@ -44,7 +44,7 @@
 #include "util.h"
 #include "serial.h"
 #include "adc.h"
-#include "../heater-sw/heater_reg.h"
+#include <heater-sw/heater_reg.h>
 #include "version.h"
 #include "debug.h"
 #include "sequencer.h"
