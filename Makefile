@@ -14,9 +14,9 @@ CC = $(TARGET)gcc
 CXX = $(TARGET)g++
 OBJCOPY = $(TARGET)objcopy
 ifeq ($(HEATER_INCDIR),)
-  INCLUDES = -I ./include -I ./board -I ./arch -I ./freertos/include -I ./ -I ./freertos/portable/GCC/ARM_CM3 -I ./GenericRecorderLibSrc/Include -I./GenericRecorderLibSrc/ConfigurationTemplate -I$(HEATER_INCDIR)
+  INCLUDES = -I ./include -I ./board -I ./arch -I ./freertos/include -I ./ -I ./freertos/portable/GCC/ARM_CM3 -I ./GenericRecorderLibSrc/Include -I./GenericRecorderLibSrc/ConfigurationTemplate -I../heater-sw
 else
-  INCLUDES = -I ./include -I ./board -I ./arch -I ./freertos/include -I ./ -I ./freertos/portable/GCC/ARM_CM3 -I ./GenericRecorderLibSrc/Include -I./GenericRecorderLibSrc/ConfigurationTemplate
+  INCLUDES = -I ./include -I ./board -I ./arch -I ./freertos/include -I ./ -I ./freertos/portable/GCC/ARM_CM3 -I ./GenericRecorderLibSrc/Include -I./GenericRecorderLibSrc/ConfigurationTemplate -I$(HEATER_INCDIR)
 endif
 ifeq ($(TARGET),arm-none-eabi-)
   CFLAGS = -g -O0 -c -Wall -Werror -mcpu=cortex-m3 -mthumb -ffunction-sections -D__START=main -D__STARTUP_CLEAR_BSS -DSTM32F1XX -DUSE_STDPERIPH_DRIVER $(INCLUDES)
