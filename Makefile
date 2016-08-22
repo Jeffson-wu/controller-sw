@@ -13,7 +13,7 @@ TARGET = arm-none-eabi-
 CC = $(TARGET)gcc
 CXX = $(TARGET)g++
 OBJCOPY = $(TARGET)objcopy
-ifeg ($(HEATER_INCDIR),)
+ifeq ($(HEATER_INCDIR),)
   INCLUDES = -I ./include -I ./board -I ./arch -I ./freertos/include -I ./ -I ./freertos/portable/GCC/ARM_CM3 -I ./GenericRecorderLibSrc/Include -I./GenericRecorderLibSrc/ConfigurationTemplate -I$(HEATER_INCDIR)
 else
   INCLUDES = -I ./include -I ./board -I ./arch -I ./freertos/include -I ./ -I ./freertos/portable/GCC/ARM_CM3 -I ./GenericRecorderLibSrc/Include -I./GenericRecorderLibSrc/ConfigurationTemplate
