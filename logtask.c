@@ -32,7 +32,7 @@
 #include "trcUser.h"
 #include "trcConfig.h"
 #include "trcHardwarePort.h"
-#include "../heater-sw/heater_reg.h"
+#include <heater_reg.h>
 #include "debug.h"
 #include "logtask.h"
 #include "util.h"

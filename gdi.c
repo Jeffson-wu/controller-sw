@@ -28,7 +28,7 @@
 #include "sequencer.h"
 #include "cooleandlidtask.h"
 #include "signals.h"
-#include "../heater-sw/heater_reg.h"
+#include <heater_reg.h>
 #include "gdi.h"
 #include "serial.h"
 #include <ctype.h>

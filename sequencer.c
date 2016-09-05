@@ -17,7 +17,7 @@
 #include <string.h>
 #include "logtask.h"
 #include "sequencer.h"
-#include "../heater-sw/heater_reg.h"
+#include <heater_reg.h>
 #include "gdi.h"
 #include "serial.h"
 #include "util.h"
