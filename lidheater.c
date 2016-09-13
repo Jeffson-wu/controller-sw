@@ -58,9 +58,9 @@ void lid_heater_init_feedback_ctr(controller_t * controller)
 
 void mid_heater_init_feedback_ctr(controller_t * controller)
 {
-  controller->diff_eq.N0 = 2.001E2;
-  controller->diff_eq.N1 = -1.999E2;
-  controller->diff_eq.D1 = -1.0E0;
+  controller->diff_eq.N0 = 1.001E2;
+  controller->diff_eq.N1 = -9.99E1;
+  controller->diff_eq.D1 = -1.000000E0;
 
   controller->diff_eq.minOutputValue = 0;
   //The topheater element melts down if we diserpate more power than this.

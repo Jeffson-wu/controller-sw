@@ -28,7 +28,7 @@
 #include "sequencer.h"
 #include "cooleandlidtask.h"
 #include "signals.h"
-#include "../heater-sw/heater_reg.h"
+#include <heater_reg.h>
 #include "gdi.h"
 #include "serial.h"
 #include <ctype.h>
@@ -94,6 +94,7 @@ enum gdi_func_type
   coolandlid,
   cool,
   lid,
+  mid,
   fantemp,
   seq_cmd,
   test_func,
@@ -144,6 +145,7 @@ gdi_func_table_type gdi_func_info_table[] =
   {"print",   " Print the debug variable values",     "at@gdi:print()",             print },
   {"cool",    " Set cooling temperature & start",     "at@gdi:cool(setpoint)",      cool },
   {"lid",     " Set lid temperature & start",         "at@gdi:lid(setpoint)",       lid },
+  {"mid",     " Set mid temperature & start",         "at@gdi:mid(setpoint)",       mid },
   {"fantemp", " Set fan temperature & start",         "at@gdi:fantemp(setpoint)",   fantemp },
   {"test_func",         " Test function call",        "at@gdi:test_func(parameter1,parameter2)",test_func},
 #ifdef USE_FLOAT_REG_FEATURE
@@ -931,6 +933,45 @@ void gdi_map_to_functions()
       }
       break;
 
+    case mid:
+      {
+        s16 setpoint;
+        xMessage *msg;
+        int result = TRUE;
+        u8 paramcount;
+
+        if(!gdiEcho) {
+          uid = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
+          i++;
+          paramcount = 2;
+        } else {
+          paramcount = 1;
+        }
+
+        if (gdi_req_func_info.number_of_parameters != paramcount) {
+          gdi_send_data_response("NOK invalid parameter count", newline_both);
+          break;
+        }
+        SetCooleAndLidReq *p;
+        msg = pvPortMalloc(sizeof(xMessage)+sizeof(SetCooleAndLidReq)+20);
+        if(msg)
+        {
+          setpoint = (s16)strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
+          if((setpoint >= 0) && (setpoint <= 1300))
+          {
+            msg->ucMessageID = SET_MID_TEMP;
+          } else {
+            result = FALSE;
+            gdi_send_data_response("NOK invalid fn", newline_end);
+          }
+          p = (SetCooleAndLidReq *)msg->ucData;
+          p->value = setpoint;
+          p->idx   = 0;
+          xQueueSend(CoolAndLidQueueHandle, &msg, portMAX_DELAY);
+        }
+        if(result) { gdi_send_data_response("OK", newline_end); }
+      }
+      break;
     case fantemp:
       {
         s16 setpoint;

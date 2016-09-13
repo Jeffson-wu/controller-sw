@@ -17,7 +17,7 @@
 #include <string.h>
 #include "logtask.h"
 #include "sequencer.h"
-#include "../heater-sw/heater_reg.h"
+#include <heater_reg.h>
 #include "gdi.h"
 #include "serial.h"
 #include "util.h"
@@ -36,7 +36,6 @@ extern xQueueHandle CoolAndLidQueueHandle;
 
 /* Private debug define ------------------------------------------------------*/
 //#define SIMULATE_HEATER /*Disable communication to M0 CPU's return temperature reached when temp is requested*/
-//#define USE_DEVELOPMENT_LOGGING
 #define DEBUG       /*General debug shows state changes of tubes (new temp, new time etc.)*/
 //#define DEBUG_SEQ   /*Debug of sequencer, to follow state of sequencer    */
 //#define DEBUG_IF    /*Debug of external interfaces modbus, IRQ and serial */
@@ -96,6 +95,7 @@ xTimerHandle M3RebootSurvivalTimer[1];
 long lStartTickCounters[ NUM_TIMERS ] = { 0 };
 
 /* Private variables ---------------------------------------------------------*/
+
 const char *  signals_txt[] =
 {
   "FIRST_MSG",
@@ -129,7 +129,14 @@ const char *  signals_txt[] =
   "START_LID_HEATING",
   "STOP_LID_HEATING",
   "SET_LID_PWM",
+  "DISABLE_NEIGHBOUR_TUBE_TEMP",
+  "ENABLE_NEIGHBOUR_TUBE_TEMP",
+  "SET_PWM",
+  "SET_PWM_RES",
+  "SET_DAC",
   "CHECK_LID_PELTIER_TEMP",
+  "SET_DAC_RES",
+  "CLEAR_LOG"
 };
 
 typedef enum
@@ -808,6 +815,20 @@ bool start_tube_seq(u8 TubeId, u32 syncId)
   {
     result = FALSE;
   }
+  /* Befor restarting a tube clear old log entries */
+  if( Tubeloop[TubeId-1].state == TUBE_IDLE )
+  {
+    xMessage *msg;
+    msg = pvPortMalloc(sizeof(xMessage));
+
+    if(msg)
+    {
+      msg->ucMessageID = CLEAR_LOG;
+      msg->ucData[0] = (portCHAR)TubeId;
+      xQueueSend(LogQueueHandle, &msg, portMAX_DELAY);
+      // DEBUG_PRINTF("Clear log");
+    }
+  }
   return result;
 }
 
@@ -872,10 +893,6 @@ void restart_tube_error(long TubeId)
 bool stop_tube_seq(long TubeId)
 {
   u16 data;
-  #ifdef USE_DEVELOPMENT_LOGGING
-  long *p;
-  xMessage *new_msg;
-  #endif
   bool result = TRUE;
   //stageCmd_t STAGE;
   //stageCmd_t *TSeq = &STAGE;
@@ -921,16 +938,6 @@ bool stop_tube_seq(long TubeId)
     //while( (getseq(TubeId, TSeq) == TRUE));                 /*empty buffer*/
     emptyLog(TubeId);
     Tubeloop[TubeId-1].curr.seq_num = 0;
-    #ifdef USE_DEVELOPMENT_LOGGING
-    new_msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
-    if(new_msg)
-    {
-      new_msg->ucMessageID=END_DEV_LOG;
-      p=(long *)new_msg->ucData;
-      *p=TubeId;
-      xQueueSend(LogQueueHandle, &new_msg, portMAX_DELAY);
-    }
-    #endif
   }
   return result;
 }
@@ -1888,10 +1895,6 @@ void TubeMessageHandler (long TubeId, xMessage *msg)
 /* NEXT_TUBE_STAGE messages  */
 void TubeStageHandler(long TubeId, xMessage *msg)
 {
-  #ifdef USE_DEVELOPMENT_LOGGING
-  xMessage *new_msg;
-  long *p;
-  #endif
   u16 data;
   u16 data_element[2];
   Tubeloop_t *pTubeloop = &Tubeloop[TubeId-1];
@@ -1931,17 +1934,6 @@ void TubeStageHandler(long TubeId, xMessage *msg)
             stop_all_tube_LED();
           }
         }
-      #ifdef USE_DEVELOPMENT_LOGGING
-        /*Stop monitoring temperature on the tube*/
-        new_msg = pvPortMalloc(sizeof(xMessage)+sizeof(long));
-        if(new_msg)
-        {
-          new_msg->ucMessageID=END_DEV_LOG;
-          p=(long *)new_msg->ucData;
-          *p=TubeId;
-          xQueueSend(LogQueueHandle, &new_msg, portMAX_DELAY);
-        }
-      #endif
         break;
         //Normal entries are one of these stages - they are handled alike, except for pause.
       case Melting:
@@ -1967,17 +1959,6 @@ void TubeStageHandler(long TubeId, xMessage *msg)
           DEBUG_SEQ_PRINTF("###\n\rTube[%ld] Step %d Time reached. New stage:%s, temp %d.%01dC",
             TubeId, TSeq->seq_num, stageToChar[TSeq->stage], TSeq->temp/10, TSeq->temp%10);
         }
-      #ifdef USE_DEVELOPMENT_LOGGING
-        /*Start monitoring temperature on the tube*/
-        new_msg=pvPortMalloc(sizeof(xMessage)+sizeof(long));
-        if(new_msg)
-        {
-          new_msg->ucMessageID=START_DEV_LOG;
-          p=(long *)new_msg->ucData;
-          *p=TubeId;
-          xQueueSend(LogQueueHandle, &new_msg, portMAX_DELAY);
-        }
-      #endif
         break;
       default:
         DEBUG_PRINTF("ERROR STATE NOT HADLED Tube[%ld]@%s-%d TubeSeq[%s] ",

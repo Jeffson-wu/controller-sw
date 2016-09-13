@@ -44,14 +44,13 @@
 #include "util.h"
 #include "serial.h"
 #include "adc.h"
-#include "../heater-sw/heater_reg.h"
+#include <heater_reg.h>
 #include "version.h"
 #include "debug.h"
 #include "sequencer.h"
 
 /* Private feature defines ---------------------------------------------------*/
 #define QUEUESIZE 10
-//#define USE_DEVELOPMENT_LOGGING
 
 /* Private debug define ------------------------------------------------------*/
 //#define DEBUG_CLOCK_MSO /*Set mux to output sysclk or other clocks on PA8*/

@@ -32,13 +32,12 @@
 #include "trcUser.h"
 #include "trcConfig.h"
 #include "trcHardwarePort.h"
-#include "../heater-sw/heater_reg.h"
+#include <heater_reg.h>
 #include "debug.h"
 #include "logtask.h"
 #include "util.h"
 
 /* Private feature defines ---------------------------------------------------*/
-//#define USE_DEVELOPMENT_LOGGING
 
 /* Private debug define ------------------------------------------------------*/
 
@@ -84,9 +83,6 @@ static logDataQueue_t __attribute__ ((aligned (16))) logDataQueue[NUM_OF_TUBES];
 
 int logcount[NUM_OF_TUBES]={0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 u8 cur_tubeid = 0;
-#ifdef USE_DEVELOPMENT_LOGGING
-  xTimerHandle logTimer;
-#endif // USE_DEVELOPMENT_LOGGING
 /* Private function prototypes -----------------------------------------------*/
 void SERIAL_String(const char *string);
 
@@ -285,21 +281,6 @@ void sendLog()
 }
 /* Public functions ----------------------------------------------------------*/
 /* ---------------------------------------------------------------------------*/
-#ifdef USE_DEVELOPMENT_LOGGING /* --> For USE_DEVELOPMENT_LOGGING feature */
-void LogOn(int log_time)/*In secs*/
-{
-  if( xTimerStart(logTimer, 0 ) != pdPASS );
-  if(xTimerChangePeriod( logTimer,10 * log_time,100)!= pdPASS );
-}
-
-/* ---------------------------------------------------------------------------*/
-void LogOff()
-{
-  if( xTimerStop( logTimer, 0 ) != pdPASS );
-}
-#endif // USE_DEVELOPMENT_LOGGING /* <-- For USE_DEVELOPMENT_LOGGING feature */
-
-/* ---------------------------------------------------------------------------*/
 void vReadTubeTemp(xTimerHandle pxTimer )
 {
   xMessage *msg;
@@ -342,17 +323,6 @@ void LogTask( void * pvParameters )
   uint16_t modbus_addr;
   xMessage *msg;
   long TubeId;
-#ifdef USE_DEVELOPMENT_LOGGING
-  long log_interval;
-  int i = 1;
-  static long last_tube_to_log;
-  xTimerHandle logTimer;
-
-  logTimer = xTimerCreate((char *)"LogTimer", 10000, pdTRUE,( void * ) 103, vReadTubeTemp);
-  if(NULL != logTimer) { 
-    xTimerStart(logTimer, 0 ); 
-  } // This is a debug feature - if initi fails it is not handled
-#endif // USE_DEVELOPMENT_LOGGING
   initQueue();
 
   while(1)
@@ -361,55 +331,11 @@ void LogTask( void * pvParameters )
     {
       switch(msg->ucMessageID)
       {
-#ifdef USE_DEVELOPMENT_LOGGING /* --> For USE_DEVELOPMENT_LOGGING feature */
-      case START_DEV_LOG:
-        i=1;
-        TubeId = *((long *)(msg->ucData));
-        while((i < NUM_OF_TUBES)&&(log_tubes[i++]== FALSE));/*Check if this is the first tube to enable log on then enable log timer*/
-        last_tube_to_log = i-1;
-        if(i >= NUM_OF_TUBES)
-        {
-          LogOn(1000);
-          last_tube_to_log = 0; /*Init to 0 since first tube*/
-        }
-        log_tubes[TubeId]= TRUE;
-        if (TubeId > last_tube_to_log) last_tube_to_log = TubeId;
-      break;
-      case END_DEV_LOG:
-        i=1;
-        TubeId = *((long *)(msg->ucData));
-        log_tubes[TubeId]= FALSE;
-        while((i < NUM_OF_TUBES)&&(log_tubes[i++]== FALSE));/*Check if this is last tube to log on, then disable log timer*/
-        last_tube_to_log = i-1;
-        if(i >= NUM_OF_TUBES)
-        {
-          LogOff();
-        }
-      break;
-      case SET_DEV_LOG_INTERVAL:
-        log_interval = *((long *)(msg->ucData));
-        if(0 == log_interval) {
-          LogOff();
-        } else {
-          LogOn(log_interval);
-        }
-        if(xTimerChangePeriod( logTimer,1 * log_interval,100)!= pdPASS ) {
-          //error handling
-        }
-      break;
-#endif // USE_DEVELOPMENT_LOGGING /* <-- For USE_DEVELOPMENT_LOGGING feature */
       case READ_MODBUS_REGS_RES:
         preg=(ReadModbusRegsRes *)msg->ucData;
         TubeId = preg->slave;
         modbus_addr = preg->addr;
         if(preg->resultOk == NO_ERROR) {
-#ifdef USE_DEVELOPMENT_LOGGING /* --> For USE_DEVELOPMENT_LOGGING feature */
-          if( (TUBE1_TEMP_REG == modbus_addr) || (TUBE2_TEMP_REG == modbus_addr)||(TUBE3_TEMP_REG == modbus_addr) || (TUBE4_TEMP_REG == modbus_addr) )
-          { // Debug Logging
-            modbus_data =(((u16)(preg->data[0])<<8)|(preg->data[1]));
-            DEBUG_LOG_PRINTF("T%ld:%d.%01dC ",TubeId,modbus_data/10,modbus_data%10);
-          }
-#endif //USE_DEVELOPMENT_LOGGING /* <-- For USE_DEVELOPMENT_LOGGING feature */
           if(DATA_LOG == modbus_addr)
           { // Auto Logging
             // Data log is {seq#,stage#,t1,stage#,t2,stage#,t3,stage#,t4,stage#,t5,stage#,t6,stage#,t7,stage#,t8,stage#,t9,stage#,t10}
@@ -422,6 +348,9 @@ void LogTask( void * pvParameters )
           }
         }
       break;
+      case CLEAR_LOG:
+        emptyLog((int)msg->ucData);
+        break;
       }
     }
    // DEBUG_LOG_PRINTF("msg done");
