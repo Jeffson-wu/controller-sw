@@ -122,6 +122,12 @@ typedef struct
   s16 value;
 } SetCLStatusReq;
 
+typedef struct
+{
+  u8 tube;
+  u32 syncid;
+} startTubeReq;
+
 extern xQueueHandle ModbusQueueHandle;
 extern xQueueHandle TubeSequencerQueueHandle;
 extern xQueueHandle LogQueueHandle;

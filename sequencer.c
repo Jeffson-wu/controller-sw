@@ -190,6 +190,7 @@ typedef struct
   int head;                                                 /* Write Pointer                            */
   stageCmd_t seq[STAGES_QUEUE_SIZE];                        /* The sequence                             */
   stageCmd_t curr;
+  uint32_t syncId;
 }Tubeloop_t;
 
 typedef struct
@@ -775,23 +776,24 @@ void stop_all_tube_LED()
 }
 
 /* ---------------------------------------------------------------------------*/
-bool start_tube_seq( long TubeId)
+bool start_tube_seq(u8 TubeId, u32 syncId)
 {
   bool result = TRUE;
-  DEBUG_PRINTF("Start seq Tube %ld @ %s", TubeId, tube_states[Tubeloop[TubeId-1].state]); 
+  DEBUG_PRINTF("Start seq Tube %d @ %s", TubeId, tube_states[Tubeloop[TubeId-1].state]); 
 
   if( (Tubeloop[TubeId-1].state == TUBE_PAUSED) || Tubeloop[TubeId-1].state == TUBE_IDLE )
   {
-    long *p;
+    startTubeReq *p;
     xMessage *msg;
-    msg = pvPortMalloc(sizeof(xMessage)+sizeof(long));
+    msg = pvPortMalloc(sizeof(xMessage)+sizeof(startTubeReq));
 
     //  DEBUG_PRINTF("start_tube_seq-data valid");
     if(msg)
     {
       msg->ucMessageID = START_TUBE_SEQ;
-      p = (long *)msg->ucData;
-      *p = TubeId;
+      p = (startTubeReq *)msg->ucData;
+      p->tube = TubeId;
+      p->syncid=syncId;
       xQueueSend(TubeSequencerQueueHandle, &msg, portMAX_DELAY);
       //  DEBUG_PRINTF("start_tube_seq-send msg");
     }
@@ -800,7 +802,7 @@ bool start_tube_seq( long TubeId)
   else if(Tubeloop[TubeId-1].pausePendingState == TUBE_P_PAUSE_REQUESTED)
   {
     Tubeloop[TubeId-1].pausePendingState = TUBE_P_NORM;
-    DEBUG_PRINTF("Tube[%ld] pause aborted REQ[%d]",TubeId,Tubeloop[TubeId-1].pausePendingState);
+    DEBUG_PRINTF("Tube[%d] pause aborted REQ[%d]",TubeId,Tubeloop[TubeId-1].pausePendingState);
   }
   else
   {
@@ -1989,6 +1991,7 @@ void TubeStageHandler(long TubeId, xMessage *msg)
     pTubeloop->curr.temp = 0;
     pTubeloop->curr.time = 0;
     pTubeloop->state = TUBE_OUT_OF_DATA;
+    pTubeloop->syncId = ((startTubeReq *)(msg->ucData))->syncid;
   }
 }
 
@@ -2037,7 +2040,7 @@ void TubeSequencerTask( void * pvParameter)
           ReadTubeHeaterReg(TubeId, EVENT_REG, 1, TubeSequencerQueueHandle, FALSE);
           break;
         case START_TUBE_SEQ:
-          TubeId = *((long *)(msg->ucData));
+          TubeId = ((startTubeReq *)(msg->ucData))->tube;
           DEBUG_PRINTF("Tube[%ld]@%s START TUBE SEQUENCE ", TubeId, tube_states[Tubeloop[TubeId-1].state]);
           TubeStageHandler(TubeId,msg);
           break;
