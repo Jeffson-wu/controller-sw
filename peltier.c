@@ -99,13 +99,15 @@ void th_estmator(peltier_t *peltier, uint16_t ctr_out)
   double alpha = 0.0001012;
   double Kelvin = 273.15;
   //double Tc = ((adc_to_temp(&peltier->ntcCoef, peltier->adcValFilt)) / 10.0) + Kelvin;
+  double t_hot_est = 0;
   double Tc;
-  Tc = peltier[0].temp/10.0 + Kelvin;
-  double I = (double)(8.36/4095.00) * (double)ctr_out; //8.36 max Amp
+  double I = (double)((16.5*47.0/147.0)/4095.00) * (double)ctr_out; //Transfer function for bq24600
   double phi_a = 4.15841584158E-06;
   double phi_b = -0.000215247524752;
 
-  double t_hot_est = (((peltier->voltage/10.0)-(2*N*I*phi_b)/G+alpha*Tc*2*N) / ((2*N*I*phi_a)/G+alpha*2*N) - Kelvin) * 10; //10 deci oC
+  Tc = peltier[0].temp/10.0 + Kelvin;
+  t_hot_est = (((peltier->voltage/10.0)-(2*N*I*phi_b)/G+alpha*Tc*2*N) / ((2*N*I*phi_a)/G+alpha*2*N) - Kelvin) * 10; //10 deci oC
+
   if (t_hot_est <= 0)
   {
   	t_hot_est = 0;
