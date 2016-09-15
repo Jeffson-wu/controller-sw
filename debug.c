@@ -74,7 +74,7 @@ void send_msg_on_monitor(char * response)
   if(USART3_intitalized)
   {
     char i = 0;
-    const char lineend[3] = "\r\n\0";
+    const char lineend[1] = "\r";
     int len = strlen(response);
     while(i<len)
     {
@@ -82,7 +82,7 @@ void send_msg_on_monitor(char * response)
       USART_SendData(USART3,*(response+i));
       i++;
     }
-    for(i=0; i<3; i++)
+    for(i=0; i<1; i++)
     {
       while(USART_GetFlagStatus(USART3, USART_FLAG_TXE)==RESET);
       USART_SendData(USART3,*(lineend+i));
