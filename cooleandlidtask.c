@@ -651,6 +651,7 @@ void logUpdate(lidHeater_t *lidHeater, peltier_t *peltier, fan_t *fan, lidHeater
   cl_dataLog.accum[1] += adc_to_temp(&midHeater->ntcCoef, midHeater->adcValFilt);
   cl_dataLog.accum[2] += adc_to_temp(&peltier->ntcCoef, peltier->adcValFilt);
   cl_dataLog.accum[3] += peltier->t_hot_est;
+  //cl_dataLog.accum[3] += adc_to_temp(&fan->ntcCoef, fan->adcValFilt);
   cl_dataLog.accum[4] += adc_to_temp(&peltier->ntcCoef, (int16_t)*adcAmbient);
 
   // Is the log buffer full?
@@ -1219,22 +1220,32 @@ void CoolAndLidTask( void * pvParameters )
       static int toggle = 0;
       //PRINTF("%d, %d, %d, %d, %d, %d, %d, %d, %d, %d", (int16_t)peltier->controller.setPoint, *peltier[0].io.ctrVal, peltier[0].adcValFilt, (int16_t)fan[0].controller.setPoint, *fan[0].io.ctrVal, *fan[0].io.adcVal, (int16_t)lidHeater[0].controller.setPoint, *lidHeater[0].io.ctrVal, lidHeater[0].adcValFilt, *lidHeater[0].io.adcVal);
       //PRINTF("%d, %d, %d, %d, %d, %d, %d", (int16_t)peltier->controller.setPoint, *peltier[0].io.ctrVal, peltier[0].adcValFilt, getPeltierVoltage(), (int16_t)fan[0].controller.setPoint, *fan[0].io.ctrVal, *fan[0].io.adcVal);
-      /*
-      PRINTF("%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d",
-      			adc_to_temp(&peltier[0].ntcCoef, (int16_t)*adcAmbient),
-      			adc_to_temp(&peltier[0].ntcCoef, (int16_t)peltier->controller.setPoint),
-      			*peltier[0].io.ctrVal,
-      			peltier[0].temp,
-      			peltier[0].voltage,
-      			peltier[0].t_hot_est,
-      			fan[0].adcValFilt,
-      			adc_to_temp(&fan[0].ntcCoef, (int16_t)fan[0].controller.setPoint),
-      			*fan[0].io.ctrVal,
+
+      PRINTF("%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d",
+      		 (int16_t)peltier->controller.setPoint,
+      		 (int16_t)*peltier[0].io.adcVal,
+      		 (int16_t)peltier[0].adcValFilt,
+      		 (int16_t)*peltier[0].io.ctrVal,
+      		 (int16_t)peltier[0].voltage,
+
+
+      			(int16_t)fan[0].controller.setPoint,
+      			(int16_t)peltier[0].t_hot_est,
+      			(int16_t)fan[0].adcValFilt,
+      			(int16_t)*fan[0].io.ctrVal,
+
+      			(int16_t)lidHeater[0].controller.setPoint,
       			(int16_t)*lidHeater[0].io.adcVal,
-      			(int16_t)lidHeater[1].adcValFilt,
+      			(int16_t)lidHeater[0].adcValFilt,
+      			(int16_t)*lidHeater[0].io.ctrVal,
+
+      			(int16_t)lidHeater[1].controller.setPoint,
       			(int16_t)*lidHeater[1].io.adcVal,
-      			(int16_t)lidHeater[1].adcValFilt);
-       */
+      			(int16_t)lidHeater[1].adcValFilt,
+      			(int16_t)*lidHeater[1].io.ctrVal
+      			);
+
+       /*
       PRINTF("%d, %d, %d, %d, %d, %d, %d ",
     			(int16_t)*lidHeater[0].io.adcVal,
     			adc_to_temp(&lidHeater[0].ntcCoef, (int16_t)lidHeater[0].adcValFilt),
@@ -1243,7 +1254,7 @@ void CoolAndLidTask( void * pvParameters )
     			adc_to_temp(&lidHeater[1].ntcCoef, (int16_t)lidHeater[1].adcValFilt),
     			lidHeater[1].setPoint,
     			peltier[0].voltage)
-
+       */
       //DEBUG_PRINTF("Adc:%4d, %4d, %4d, %4d", adcCh[0], adcCh[1], adcCh[2], adcCh[3]);
       cnt = 0;
       if(toggle) {
@@ -1383,7 +1394,7 @@ void CoolAndLidTask( void * pvParameters )
           SetCooleAndLidReq *p;
           p=(SetCooleAndLidReq *)(msg->ucData);
           fan_setpoint(&fan[0], p->value);
-          //fan_setpoint(&fan[0], 500);
+          fan_setpoint(&fan[0], 600);
           fan[0].state = CTR_INIT;
         }
         break;
