@@ -28,7 +28,7 @@
 #include "sequencer.h"
 #include "cooleandlidtask.h"
 #include "signals.h"
-#include "../heater-sw/heater_reg.h"
+#include <heater_reg.h>
 #include "gdi.h"
 #include "serial.h"
 #include <ctype.h>
@@ -1140,19 +1140,25 @@ void gdi_map_to_functions()
     case seq_cmd:
       {
         long TubeId = 0;
-        
         if(!gdiEcho) {
           uid = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
           i++;
         }
         TubeId = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
+
         if((TubeId < 17)||(TubeId > 0))
         {
           // "at@gdi:seq_cmd(<uid>,<tube>,tubestart)\r"
-          if(!strncmp((*(gdi_req_func_info.parameters + i + 1)),"tubestart", strlen("tubestart")))
+          if(!strncmp((*(gdi_req_func_info.parameters + gdi_req_func_info.number_of_parameters - 1)),"tubestart", strlen("tubestart")))
           {
+            u32 syncId=0;
+            if(gdi_req_func_info.number_of_parameters ==  i+2) {
+              syncId=0;
+            } else {
+              syncId = (u16) strtol(*(gdi_req_func_info.parameters + gdi_req_func_info.number_of_parameters - 2), (char **)NULL, 10);
+            }
             GDI_PRINTF("T%ld: Start seq", TubeId);
-            if(start_tube_seq(TubeId))    /*Start the seq*/
+            if(start_tube_seq((u8)TubeId, syncId))    /*Start the seq*/
             {
               gdi_send_data_response("OK", newline_end);
             }

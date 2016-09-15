@@ -58,7 +58,7 @@
 #include "util.h"
 #include "nvs.h"
 #include "debug.h"
-#include "../heater-sw/heater_reg.h"
+#include <heater_reg.h>
 #include "cooleandlidtask.h"
 
 /* ---------------------------------------------------------------------------*/

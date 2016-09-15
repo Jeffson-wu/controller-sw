@@ -39,7 +39,7 @@ void pingAllM0(void);
 void setPingMode(int mode);
 void setProdTestMode(int mode);
 
-bool start_tube_seq(long TubeId);
+bool start_tube_seq( u8 TubeId, u32 syncId);
 bool stop_tube_seq(long TubeId);
 
 char *get_tube_state(long TubeId, char *poutText, int size);
