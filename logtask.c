@@ -76,6 +76,7 @@ typedef struct LOG_DATA_QUEUE {
 #else
 #define DEBUG_LOG_PRINTF(fmt, args...)    /* Don't do anything in release builds */
 #endif
+
 /* Private variables ---------------------------------------------------------*/
 bool log_tubes[NUM_OF_TUBES]={FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE};
 
@@ -172,20 +173,19 @@ void dataQueueAdd(u8 tubeId, u16 seqNumber, u8 data[])
   }
   if(NULL != poutData)
   {
-    DEBUG_LOG_PRINTF("dataQueueAdd @0x%08X", poutData);
     poutData->seqNum = seqNumber;
+  	DEBUG_LOG_PRINTF("dataQueueAdd, %d, %d", tubeId, poutData->seqNum);
     for(i = 0; i < LOG_ELEMENT_SIZE; i ++)
     {
       poutData->ldata[i].stage_num = (((u16)(data[i*4])<<8)  |(data[i*4+1]));
       poutData->ldata[i].temp =      (((u16)(data[i*4+2])<<8)|(data[i*4+3]));
-      //DEBUG_LOG_PRINTF("dataQueueAdd Tube %d - stage %d, %d", tubeId,poutData->ldata[i].stage_num,poutData->ldata[i].temp);
+      DEBUG_LOG_PRINTF("dataQueueAdd Tube %d - stage %d, %d", tubeId,poutData->ldata[i].stage_num,poutData->ldata[i].temp);
     }
   }
   else
   {
     DEBUG_LOG_PRINTF("T%d:dataQueueAdd - buffer full",tubeId);
   }
-  
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -232,7 +232,6 @@ int addLog(char *poutText,int tubeId, int size )
     }
     addStrToBuf(poutText, ",", size); 
     nElements+=LOG_ELEMENT_SIZE;
-
   }
   
   if(dataAdded) { 
@@ -344,7 +343,7 @@ void LogTask( void * pvParameters )
           }
           else
           {
-            DEBUG_LOG_PRINTF("Tube[%d]ERROR MODBUS read log FAILED!!! %d",TubeId,preg->resultOk);
+            DEBUG_LOG_PRINTF("Tube[%ld]ERROR MODBUS read log FAILED!!! %d",TubeId,preg->resultOk);
           }
         }
       break;
@@ -353,7 +352,6 @@ void LogTask( void * pvParameters )
         break;
       }
     }
-   // DEBUG_LOG_PRINTF("msg done");
     vPortFree(msg);
   }
 }

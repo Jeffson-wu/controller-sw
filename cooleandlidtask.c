@@ -25,9 +25,7 @@
 
 /* Private debug define ------------------------------------------------------*/
 //#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
-//#define DEBUG_COOL
 //#define DEBUG_LOGGING
-//#define STANDALONE /*Defines if the M3 Runs with or without Linux box*/
 
 /* Includes ------------------------------------------------------------------*/
 #include <stdio.h>
@@ -178,6 +176,11 @@ static uint16_t pwmCh[6] = {0, 0, 0, 0, 0, 0};
 
 // Parameters for DAC
 static uint16_t dacCh[1] = {0};
+
+bool lid_debug_so_enable = FALSE;
+bool mid_debug_so_enable = FALSE;
+bool peltier_debug_so_enable = FALSE;
+bool fan_debug_so_enable = FALSE;
 
 /*                      GPIO           On PCB Rev3
  * pwmCh[0], TIM4,CH3 - PB8 -  J173 :  TopHeater1Ctrl - lid heater
@@ -451,20 +454,6 @@ void stopPeltier()
   //*peltierData[1].regulator.pwmVal = 0;
   peltier[0].state = CTR_STOP_STATE;
   //peltierData[1].regulator.state = STOP_STATE;
-}
-
-/* ---------------------------------------------------------------------------*/
-void standAlone() //These settings should be made from the Linux Box
-{
-
-  *peltier[0].io.ctrVal = 8000;
-  *fan[0].io.ctrVal = 20000; //40% of 32767
-
-  *lidHeater[0].io.ctrVal = 25000;
-  *lidHeater[1].io.ctrVal = 0;
-  pwmCh[3] = 12000; ///###JRJ DEBUG 10% on Aux
-  coolTempOK = TRUE;
-  lidTempOK  = TRUE;
 }
 
 /* ---------------------------------------------------------------------------*/
@@ -940,8 +929,56 @@ bool coolLidWriteRegs(u8 slave, u16 addr, u16 *data, u16 datasize)
   {
     val = Swap2Bytes(*(data + reg)); // correct endianess
     //DEBUG_PRINTF("coolLidWriteRegs s:%d, r:%d, d:%d", slave, addr + reg, val);
+
     switch((heater_regs_t)(addr + reg))
     {
+    	case DEBUG_SO_REG:
+    	{
+        switch(val)
+        {
+					case SET_DEBUG_SO_ON:
+						switch(slave)
+						{
+							case LID_ADDR:
+								lid_debug_so_enable = TRUE;
+								break;
+							case MID_ADDR:
+								mid_debug_so_enable = TRUE;
+								break;
+							case PELTIER_ADDR:
+								peltier_debug_so_enable = TRUE;
+								break;
+							case FAN_ADDR:
+								fan_debug_so_enable = TRUE;
+								break;
+							default:
+								break;
+						}
+						break;
+					case SET_DEBUG_SO_OFF:
+						switch(slave)
+						{
+							case LID_ADDR:
+								lid_debug_so_enable = FALSE;
+								break;
+							case MID_ADDR:
+								mid_debug_so_enable = FALSE;
+								break;
+							case PELTIER_ADDR:
+								peltier_debug_so_enable = FALSE;
+								break;
+							case FAN_ADDR:
+								fan_debug_so_enable = FALSE;
+								break;
+							default:
+								break;
+						}
+						default:
+							break;
+        }
+        break;
+    	}
+    	break;
       case SETPOINT_REG:
         switch(slave)
         {
@@ -1093,6 +1130,7 @@ bool coolLidWriteRegs(u8 slave, u16 addr, u16 *data, u16 datasize)
           default:
             break;
         }
+        break;
         default:
           break;
     }
@@ -1116,10 +1154,6 @@ void CoolAndLidTask( void * pvParameters )
   xSemaphoreHandle xADCSemaphore = NULL;
 
   xMessage *msg;
-
-#ifdef DEBUG_COOL
-  int8_t cnt = 0;
-#endif
 
   gpioInit();
   /* Create ADC synchrinization semaphore and let the ADC ISR know about it */
@@ -1167,11 +1201,6 @@ void CoolAndLidTask( void * pvParameters )
   /* <-- Init DAC */
 
 // use "setCLStatusReg(HW_DEFAULT_CAL_USED)" if default calib is used
-#ifdef STANDALONE
-  standAlone();
-  setCLStatusReg(0xf00f); //Debug####JRJ
-  DEBUG_PRINTF("CL stand alone\r\n");
-#endif
   /* Read calibration data form NVS */
   if(0 != NVSread(sizeof(calib_data), calib_data) ) { 
     PRINTF("\r\nUsing default calib:\r\n");    // How to do this on the M3?? - setHWStatusReg(HW_DEFAULT_CAL_USED);
@@ -1214,59 +1243,40 @@ void CoolAndLidTask( void * pvParameters )
 
   while(1)
   {
-  #ifdef DEBUG_COOL
-    if (cnt == 1)
-    {
-      static int toggle = 0;
-      //PRINTF("%d, %d, %d, %d, %d, %d, %d, %d, %d, %d", (int16_t)peltier->controller.setPoint, *peltier[0].io.ctrVal, peltier[0].adcValFilt, (int16_t)fan[0].controller.setPoint, *fan[0].io.ctrVal, *fan[0].io.adcVal, (int16_t)lidHeater[0].controller.setPoint, *lidHeater[0].io.ctrVal, lidHeater[0].adcValFilt, *lidHeater[0].io.adcVal);
-      //PRINTF("%d, %d, %d, %d, %d, %d, %d", (int16_t)peltier->controller.setPoint, *peltier[0].io.ctrVal, peltier[0].adcValFilt, getPeltierVoltage(), (int16_t)fan[0].controller.setPoint, *fan[0].io.ctrVal, *fan[0].io.adcVal);
+		if (lid_debug_so_enable)
+		{
+			PRINTF("17, %d, %d, %d, %d",
+					(int16_t)lidHeater[0].controller.setPoint,
+					(int16_t)*lidHeater[0].io.adcVal,
+					(int16_t)lidHeater[0].adcValFilt,
+					(int16_t)*lidHeater[0].io.ctrVal);
+		}
+		if (mid_debug_so_enable)
+		{
+			PRINTF("18, %d, %d, %d, %d",
+					(int16_t)lidHeater[1].controller.setPoint,
+					(int16_t)*lidHeater[1].io.adcVal,
+					(int16_t)lidHeater[1].adcValFilt,
+					(int16_t)*lidHeater[1].io.ctrVal);
+		}
+		if (peltier_debug_so_enable)
+		{
+			PRINTF("19, %d, %d, %d, %d, %d",
+					 (int16_t)peltier->controller.setPoint,
+					 (int16_t)*peltier[0].io.adcVal,
+					 (int16_t)peltier[0].adcValFilt,
+					 (int16_t)*peltier[0].io.ctrVal,
+					 (int16_t)peltier[0].voltage);
+		}
+		if (fan_debug_so_enable)
+		{
+			PRINTF("20, %d, %d, %d, %d",
+					(int16_t)fan[0].controller.setPoint,
+					(int16_t)peltier[0].t_hot_est,
+					(int16_t)fan[0].adcValFilt,
+					(int16_t)*fan[0].io.ctrVal);
+		}
 
-      PRINTF("%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d",
-      		 (int16_t)peltier->controller.setPoint,
-      		 (int16_t)*peltier[0].io.adcVal,
-      		 (int16_t)peltier[0].adcValFilt,
-      		 (int16_t)*peltier[0].io.ctrVal,
-      		 (int16_t)peltier[0].voltage,
-
-
-      			(int16_t)fan[0].controller.setPoint,
-      			(int16_t)peltier[0].t_hot_est,
-      			(int16_t)fan[0].adcValFilt,
-      			(int16_t)*fan[0].io.ctrVal,
-
-      			(int16_t)lidHeater[0].controller.setPoint,
-      			(int16_t)*lidHeater[0].io.adcVal,
-      			(int16_t)lidHeater[0].adcValFilt,
-      			(int16_t)*lidHeater[0].io.ctrVal,
-
-      			(int16_t)lidHeater[1].controller.setPoint,
-      			(int16_t)*lidHeater[1].io.adcVal,
-      			(int16_t)lidHeater[1].adcValFilt,
-      			(int16_t)*lidHeater[1].io.ctrVal
-      			);
-
-       /*
-      PRINTF("%d, %d, %d, %d, %d, %d, %d ",
-    			(int16_t)*lidHeater[0].io.adcVal,
-    			adc_to_temp(&lidHeater[0].ntcCoef, (int16_t)lidHeater[0].adcValFilt),
-    			lidHeater[0].setPoint,
-    			(int16_t)*lidHeater[1].io.adcVal,
-    			adc_to_temp(&lidHeater[1].ntcCoef, (int16_t)lidHeater[1].adcValFilt),
-    			lidHeater[1].setPoint,
-    			peltier[0].voltage)
-       */
-      //DEBUG_PRINTF("Adc:%4d, %4d, %4d, %4d", adcCh[0], adcCh[1], adcCh[2], adcCh[3]);
-      cnt = 0;
-      if(toggle) {
-        //DEBUG_PRINTF("vmon: %d", readADC(ADC_VMON_MUX_CH));
-        toggle = 0;
-      } else {
-        //DEBUG_PRINTF("hw_id: %d", readADC(ADC_HW_REV_ID_MUX_CH));
-        toggle = 1;
-      }
-    }
-    cnt++;
-  #endif
     /* The control task is synchronized to the ADC interrupt by semaphore        */
     /* The ADC is startet by a timer that determines the sampling frequency      */
     /* wait indefinitely for the semaphore to become free i.e. the ISR frees it. */
@@ -1281,7 +1291,6 @@ void CoolAndLidTask( void * pvParameters )
     adsGetLatest(&adcCh[0], &adcCh[1], &adcCh[2], &adcCh[3]);
 #endif
     //adcDiff[0] =  adc_to_temp(&fan[0].ntcCoef, *adcDiffSource[1]) - adc_to_temp(&fan[0].ntcCoef, *adcDiffSource[0]); // Fan controll is based on the temp diff
-#ifndef STANDALONE
 
   	peltier[0].temp = adc_to_temp(&peltier[0].ntcCoef, peltier[0].adcValFilt);
     uint16_t peltierTemp = temp_to_adc(&peltier[0].ntcCoef, peltier[0].t_hot_est);
@@ -1335,7 +1344,6 @@ void CoolAndLidTask( void * pvParameters )
     	ambTempError = TRUE;
     }
 
-#endif
 
 #ifdef USE_TWO_LEVEL_LID_POWER
     // TODO: Reset controller when changing TH power state
