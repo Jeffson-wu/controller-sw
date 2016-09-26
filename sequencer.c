@@ -26,7 +26,7 @@
 extern xQueueHandle CoolAndLidQueueHandle;
 
 /* Private feature defines ---------------------------------------------------*/
-//#define USE_SYNCHRONOUS_PROTOCOL /* All tubes are synced at temp hold timeout */
+#define USE_SYNCHRONOUS_PROTOCOL /* All tubes with the same syncid are synced at temp hold timeout */
 #define USE_PAUSE_FEATURE
 //#define USE_NEIGHBOUR_TUBE_TEMP_FEATURE
 #define USE_LOGGING_FEATURE
@@ -36,7 +36,7 @@ extern xQueueHandle CoolAndLidQueueHandle;
 
 /* Private debug define ------------------------------------------------------*/
 //#define SIMULATE_HEATER /*Disable communication to M0 CPU's return temperature reached when temp is requested*/
-#define DEBUG       /*General debug shows state changes of tubes (new temp, new time etc.)*/
+//#define DEBUG       /*General debug shows state changes of tubes (new temp, new time etc.)*/
 //#define DEBUG_SEQ   /*Debug of sequencer, to follow state of sequencer    */
 //#define DEBUG_IF    /*Debug of external interfaces modbus, IRQ and serial */
 //#define DEBUG_QUEUE /*Debug of stage queue */
@@ -815,7 +815,7 @@ bool start_tube_seq(u8 TubeId, u32 syncId)
   {
     result = FALSE;
   }
-  /* Befor restarting a tube clear old log entries */
+  /* Before restarting a tube clear old log entries */
   if( Tubeloop[TubeId-1].state == TUBE_IDLE )
   {
     xMessage *msg;
@@ -934,6 +934,9 @@ bool stop_tube_seq(long TubeId)
         tubeinitQueue();
       }
     }
+
+    Tubeloop[TubeId-1].tail = -1;
+    Tubeloop[TubeId-1].head = -1;
 
     //while( (getseq(TubeId, TSeq) == TRUE));                 /*empty buffer*/
     emptyLog(TubeId);
@@ -1940,7 +1943,7 @@ void TubeStageHandler(long TubeId, xMessage *msg)
       case Annealing:
       case Extension:
       case Incubation:
-        // DEBUG_PRINTF("STart sequence");
+        //DEBUG_PRINTF("Start sequence");
         data_element[0] = TSeq->temp;
         data_element[1] = TSeq->seq_num;
         // Write both SETPOINT_REG and STAGE_NUM_REG at the same time to make sure the log stage and measurements are in sync.
@@ -1950,6 +1953,7 @@ void TubeStageHandler(long TubeId, xMessage *msg)
         if( /*TUBE_IDLE == pTubeloop->state) //####*/(pTubeloop->head == 0) && (pTubeloop->tail == 0) ) // First element in sequence
         {
           DEBUG_PRINTF("### Start heater controller on well %ld ###", TubeId);
+          emptyLog(TubeId);
           /*Set heater to automatic mode if a new sequence is started*/
           data = SET_AUTOMATIC_MODE;
           WriteTubeHeaterReg(TubeId, TUBE_COMMAND_REG, &data, sizeof(data)/2);
@@ -2075,40 +2079,54 @@ void TubeSequencerTask( void * pvParameter)
           }
           else
       #endif
+
       #ifdef USE_SYNCHRONOUS_PROTOCOL
           {
-            int time_done = TRUE;
-            int i;
-            
-            static int well_sync[16] = {FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE};
-            well_sync[TubeId - 1] = TRUE;
-            DEBUG_PRINTF("Tube %ld Timeout",TubeId);
+          	int i;
+          	int time_done = TRUE;
+          	static int well_sync[16] = {FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE};
+          	well_sync[TubeId - 1] = TRUE;
 
-            // If all running tubes have timed out then proceed
-            for(i = 0; i < 16; i++)
-            {
-              //TUBE_INIT, TUBE_IDLE, TUBE_WAIT_TEMP, TUBE_WAIT_TIME, TUBE_WAIT_P_TEMP, TUBE_PAUSED, TUBE_OUT_OF_DATA
-              if( (TUBE_WAIT_TIME   == Tubeloop[i].state) || (TUBE_PAUSED      == Tubeloop[i].state) || 
-                  (TUBE_OUT_OF_DATA == Tubeloop[i].state) || (TUBE_WAIT_P_TEMP == Tubeloop[i].state))
-              { // All running tubes
-                if(FALSE == well_sync[i])
-                time_done = FALSE;             
-              }
+            DEBUG_PRINTF("Tube %ld Timeout",TubeId-1);
+
+						for(i = 0; i < 16; i++)
+						{
+							if (TubeId-1 == i)
+								continue;
+							if (Tubeloop[TubeId-1].syncId == Tubeloop[i].syncId)
+							{
+                if( (TUBE_WAIT_TIME   == Tubeloop[i].state) || (TUBE_PAUSED      == Tubeloop[i].state) ||
+                    (TUBE_OUT_OF_DATA == Tubeloop[i].state) || (TUBE_WAIT_P_TEMP == Tubeloop[i].state))
+                {
+  								if (well_sync[TubeId - 1] != well_sync[i])
+  								{
+  									time_done = FALSE;
+  									break;
+  								}
+                }
+							}
             }
             if(TRUE == time_done)
             { //Start next stage on all tubes running
               DEBUG_PRINTF("Last tube timeout");
               for(i = 0; i < 16; i++)
               {
-                if(TRUE == well_sync[i])
-                {
-                  new_msg = pvPortMalloc(sizeof(xMessage)+sizeof(long));
-                  new_msg->ucMessageID = NEXT_TUBE_STAGE;
-                  p=(long *)new_msg->ucData;
-                  *p=i+1; // i to TubeId
-                  xQueueSend(TubeSequencerQueueHandle, &new_msg, portMAX_DELAY);
-                }
-                well_sync[i] = FALSE; //Make sure all wells are in the not synched state
+  							if (Tubeloop[TubeId-1].syncId == Tubeloop[i].syncId)
+  							{
+                  if( (TUBE_WAIT_TIME   == Tubeloop[i].state) || (TUBE_PAUSED      == Tubeloop[i].state) ||
+                      (TUBE_OUT_OF_DATA == Tubeloop[i].state) || (TUBE_WAIT_P_TEMP == Tubeloop[i].state))
+                  {
+										if (well_sync[i] == TRUE)
+										{
+											new_msg = pvPortMalloc(sizeof(xMessage)+sizeof(long));
+											new_msg->ucMessageID = NEXT_TUBE_STAGE;
+											p=(long *)new_msg->ucData;
+											*p=i+1; // i to TubeId
+											xQueueSend(TubeSequencerQueueHandle, &new_msg, portMAX_DELAY);
+										}
+                  }
+                  well_sync[i] = FALSE; //Make sure all wells are in the not synched state
+  							}
               }
             }
           }
