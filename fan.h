@@ -49,6 +49,7 @@ void fan_controller(fan_t *fan, int16_t peltierTemp);
 void fan_init_rate_limiter(rateLimiter_t * rateLimiter);
 void fan_setpoint(fan_t * fan, int16_t value);
 void fan_init_adc_to_temp(ntcCoef_t * ntcCoef);
+int16_t fan_power(fan_t *fan);
 
 #endif /* __FAN_H */
 

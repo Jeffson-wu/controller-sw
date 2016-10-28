@@ -91,6 +91,8 @@ xTimerHandle NeighbourTubeTempTimer[ 1 ];
 xTimerHandle M3RebootSurvivalTimer[1];
 #endif
 
+static int well_heating[16] = {FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE};
+
 /* An array to hold the tick count of times each timer started - used for progress. */
 long lStartTickCounters[ NUM_TIMERS ] = { 0 };
 
@@ -1677,6 +1679,7 @@ void TubeEventHandler (long TubeId, int event, xMessage *msg)
     else
   #endif
     {
+      well_heating[TubeId-1] = FALSE;
       StartTubeTimer(TubeId,pTubeloop->curr.time);
       pTubeloop->state = TUBE_WAIT_TIME;
     }
@@ -1903,6 +1906,14 @@ void TubeStageHandler(long TubeId, xMessage *msg)
   Tubeloop_t *pTubeloop = &Tubeloop[TubeId-1];
   stageCmd_t *TSeq = &pTubeloop->curr;
 
+#ifdef PELT_I_LIM
+  int i;
+  uint8_t well_power = 0;
+  static uint16_t well_last_temp[16] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+  xMessage *new_msg;
+  long *p;
+#endif
+
   if(getseq(TubeId, TSeq) == TRUE) //Get next stage in sequence
   {
     // DEBUG_PRINTF("FOUND next stage %d",TSeq->stage);
@@ -1963,6 +1974,36 @@ void TubeStageHandler(long TubeId, xMessage *msg)
           DEBUG_SEQ_PRINTF("###\n\rTube[%ld] Step %d Time reached. New stage:%s, temp %d.%01dC",
             TubeId, TSeq->seq_num, stageToChar[TSeq->stage], TSeq->temp/10, TSeq->temp%10);
         }
+
+#ifdef PELT_I_LIM
+        if (TSeq->temp > well_last_temp[TubeId-1])
+        {
+          well_heating[TubeId-1] = TRUE;
+        }
+        for(i = 0; i < 16; i++)
+        {
+          /* Calculating worst cast power consumption for peltier I saturation */
+          if (well_heating[i] == TRUE)
+          {
+            well_power += 6; //Worst case power consumption (6W)
+          }
+          else
+          {
+            if (Tubeloop[i].state == TUBE_WAIT_TIME)
+            {
+              well_power += 3;
+            }
+          }
+        }
+
+        new_msg = pvPortMalloc(sizeof(xMessage)+sizeof(long));
+        new_msg->ucMessageID = SET_MAX_PELT_I;
+        p=(long *)new_msg->ucData;
+        *p=well_power;
+        xQueueSend(CoolAndLidQueueHandle, &new_msg, portMAX_DELAY);
+
+        well_last_temp[TubeId-1] = TSeq->temp;
+#endif
         break;
       default:
         DEBUG_PRINTF("ERROR STATE NOT HADLED Tube[%ld]@%s-%d TubeSeq[%s] ",
@@ -2085,48 +2126,50 @@ void TubeSequencerTask( void * pvParameter)
           	int i;
           	int time_done = TRUE;
           	static int well_sync[16] = {FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE};
+
           	well_sync[TubeId - 1] = TRUE;
 
             DEBUG_PRINTF("Tube %ld Timeout",TubeId-1);
 
-						for(i = 0; i < 16; i++)
-						{
-							if (TubeId-1 == i)
-								continue;
-							if (Tubeloop[TubeId-1].syncId == Tubeloop[i].syncId)
-							{
+            for(i = 0; i < 16; i++)
+            {
+              /* Synchronizing wells with the same protocol */
+              if (TubeId-1 == i)
+                continue;
+              if (Tubeloop[TubeId-1].syncId == Tubeloop[i].syncId)
+              {
                 if( (TUBE_WAIT_TIME   == Tubeloop[i].state) || (TUBE_PAUSED      == Tubeloop[i].state) ||
                     (TUBE_OUT_OF_DATA == Tubeloop[i].state) || (TUBE_WAIT_P_TEMP == Tubeloop[i].state))
                 {
-  								if (well_sync[TubeId - 1] != well_sync[i])
-  								{
-  									time_done = FALSE;
-  									break;
-  								}
+                  if (well_sync[TubeId - 1] != well_sync[i])
+                  {
+                    time_done = FALSE;
+                    break;
+                  }
                 }
-							}
+              }
             }
             if(TRUE == time_done)
             { //Start next stage on all tubes running
               DEBUG_PRINTF("Last tube timeout");
               for(i = 0; i < 16; i++)
               {
-  							if (Tubeloop[TubeId-1].syncId == Tubeloop[i].syncId)
-  							{
+                if (Tubeloop[TubeId-1].syncId == Tubeloop[i].syncId)
+                {
                   if( (TUBE_WAIT_TIME   == Tubeloop[i].state) || (TUBE_PAUSED      == Tubeloop[i].state) ||
                       (TUBE_OUT_OF_DATA == Tubeloop[i].state) || (TUBE_WAIT_P_TEMP == Tubeloop[i].state))
                   {
-										if (well_sync[i] == TRUE)
-										{
-											new_msg = pvPortMalloc(sizeof(xMessage)+sizeof(long));
-											new_msg->ucMessageID = NEXT_TUBE_STAGE;
-											p=(long *)new_msg->ucData;
-											*p=i+1; // i to TubeId
-											xQueueSend(TubeSequencerQueueHandle, &new_msg, portMAX_DELAY);
-										}
+                    if (well_sync[i] == TRUE)
+                    {
+                      new_msg = pvPortMalloc(sizeof(xMessage)+sizeof(long));
+                      new_msg->ucMessageID = NEXT_TUBE_STAGE;
+                      p=(long *)new_msg->ucData;
+                      *p=i+1; // i to TubeId
+                      xQueueSend(TubeSequencerQueueHandle, &new_msg, portMAX_DELAY);
+                    }
                   }
                   well_sync[i] = FALSE; //Make sure all wells are in the not synched state
-  							}
+                }
               }
             }
           }

@@ -90,6 +90,16 @@ void lid_heater_init_ntc_coef(ntcCoef_t * ntcCoef)
   //ntcCoef->r_s_ohm = 10000;
 }
 
+int16_t lid_heater_power(lidHeater_t *lidHeater)
+{
+  return lidHeater->controller.diff_eq.output/PWM_UPPER_LIMIT*97; //Watt*10
+}
+
+int16_t mid_heater_power(lidHeater_t *lidHeater)
+{
+  return lidHeater->controller.diff_eq.output/PWM_UPPER_LIMIT*74; //Watt*10
+}
+
 void lid_heater_controller(lidHeater_t *lidHeater)
 {
   uint16_t ctr_out = 0;
@@ -117,12 +127,12 @@ void lid_heater_controller(lidHeater_t *lidHeater)
     break;
     case CTR_OPEN_LOOP_STATE:
     {
-			ctr_out = PWM_UPPER_LIMIT;
+      ctr_out = PWM_UPPER_LIMIT;
       if (*lidHeater->io.adcVal > lidHeater->setPointLow)
-			{
+      {
       	lidHeater->controller.diff_eq.output = lidHeater->controller.diff_eq.input = ctr_out;
-				lidHeater->state = CTR_CLOSED_LOOP_STATE;
-			}
+		lidHeater->state = CTR_CLOSED_LOOP_STATE;
+      }
     }
     break;
     case CTR_CLOSED_LOOP_STATE:

@@ -30,20 +30,25 @@ typedef enum {
 typedef struct PELTIER {
   peltierID_t     		peltierID;
   controllerState_t		state;
-  io_t								io;
-  controller_t        controller;
-  rateLimiter_t       rateLimiter;
-  medianFilter_t      medianFilter;
-  ntcCoef_t           ntcCoef;
-  //int16_t             (*adc_to_temp)(peltier_t);
-  int16_t             setPoint;
-  int16_t             adcValFilt;
-  uint16_t						voltage;
-  int16_t							t_hot_est;
-  int16_t							max_adc;
-  int8_t							error;
-  int16_t							temp;
-  filter_t            filter;
+  io_t					io;
+  controller_t          controller;
+  rateLimiter_t         rateLimiter;
+  medianFilter_t        medianFilter;
+  ntcCoef_t             ntcCoef;
+  int16_t               setPoint;
+  int16_t               adcValFilt;
+  uint16_t			    voltage;
+  int16_t				ThEst;
+  int16_t				max_adc;
+  int8_t				error;
+  int16_t				temp;
+  double                Qc;
+  double                Qp;
+  double                COP;
+  double                Rheatsink;
+  int16_t               Tamb;
+  double                current;
+  filter_t              filter;
 } peltier_t;
 
 

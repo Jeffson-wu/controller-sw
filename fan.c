@@ -67,11 +67,11 @@ void fan_init_adc_to_temp(ntcCoef_t * ntcCoef)
   ntcCoef->r_s_ohm = 10000;
 }
 
-/*
-#include <stdio.h>
-#include "debug.h"
-#define PRINTF(fmt, args...)      sprintf(dbgbuf, fmt, ## args);  send_msg_on_monitor(dbgbuf);
-*/
+int16_t fan_power(fan_t *fan)
+{
+  return fan->controller.diff_eq.output/PWM_UPPER_LIMIT*77; //Watt*10 new fan
+}
+
 void fan_controller(fan_t *fan, int16_t peltierTemp)
 {
   uint16_t ctr_out = 0;
@@ -88,10 +88,7 @@ void fan_controller(fan_t *fan, int16_t peltierTemp)
     {
       reset_controller(&fan->controller);
       reset_rateLimiter(&fan->rateLimiter, *fan->io.adcVal);
-
-      fan[0].state = CTR_CLOSED_LOOP_STATE; // ToDo: FJERN NAAR KIM HAR FIKSET KOMMANDOEN FRA LINUX - JSL!!
-      //fan->setPoint = 40; //2500; //
-      //fan->setPoint = 2000; //350; //2500; //
+      fan[0].state = CTR_CLOSED_LOOP_STATE;
     }
     break;
     case CTR_MANUAL_STATE:

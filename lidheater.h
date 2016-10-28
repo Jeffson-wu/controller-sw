@@ -58,6 +58,7 @@ void lid_heater_controller(lidHeater_t *lidHeater);
 void lid_heater_init_rate_limiter(rateLimiter_t * rateLimiter);
 void lid_heater_setpoint(lidHeater_t * lidHeater, int16_t value);
 void lid_heater_init_ntc_coef(ntcCoef_t * ntcCoef);
+int16_t lid_heater_power(lidHeater_t *lidHeater);
 
 #endif /* __LIDHEATER_H */
 

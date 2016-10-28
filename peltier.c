@@ -86,36 +86,83 @@ void init_lp_filter(lp_filter_t * lp_filter)
   lp_filter->diff_eq.D1 = -(double)ticks/(lp_filter->wc+(double)ticks);
 }
 
-/*
-#include <stdio.h>
-#include "debug.h"
-#define PRINTF(fmt, args...)      sprintf(dbgbuf, fmt, ## args);  send_msg_on_monitor(dbgbuf);
-*/
-
 void th_estmator(peltier_t *peltier, uint16_t ctr_out)
 {
-  double G = 0.291;
-  double N = 127.0;
-  double alpha = 0.0001012;
-  double Kelvin = 273.15;
-  //double Tc = ((adc_to_temp(&peltier->ntcCoef, peltier->adcValFilt)) / 10.0) + Kelvin;
-  double t_hot_est = 0;
-  double Tc;
-  double I = (double)((16.5*47.0/147.0)/4095.00) * (double)ctr_out; //Transfer function for bq24600
-  double phi_a = 4.15841584158E-06;
-  double phi_b = -0.000215247524752;
+  double Kelvin, ThEst, Tc, Tamb, V;
+  double Sm, Km, Rm;
+  //double Z;
+
+
+  /*
+   * Icharge = Viset/(20*Rsr) , bq24600 eqn 2
+   * Icharge = 3.3/(20*0.01) = 16.5A
+   *
+   * ISET = Icharge*R1123/(R1123+R1124)
+   * ISET = 16.5*47/(47+100) = 5.3A
+   *
+   * I = ISET/DACmax*DACctr
+   */
+
+  peltier->current = (double)((16.5*47.0/147.0)/4095.00) * (double)ctr_out;
+
+
+  /*
+   * Ref: http://www.electronics-cooling.com/2008/08/a-simple-method-to-estimate-the-physical-characteristics-of-a-thermoelectric-cooler-from-vendor-datasheets/
+   *
+   * Qc = 2*N*(s*I*Tc-0.5*I*I*P/G-K*G*DT)   // Heat absorbed at cold surface [W]
+   * V = 2*N*(I*P/G+s*DT)                   // Voltage [V]
+   * Qp = V*I
+   * Z = S*S/(P*K)                          // Figure of Merit [1/K]
+   *
+   * Sm = 2*s*N                             // Device Seeback Voltage [V/K]
+   * Rm = 2*p*N/G                           // Device Electrical Resistance [Ohm]
+   * Km = 2*N*K/G                           // Device Thermal Conductance [W/K]
+   *
+   * Qc = Sm*Tc*I-0.5*I*I*Rm-Km*DT
+   * Z = Sm*Sm/Rm*Km
+   * V = Sm*DT+I*Rm
+   *
+   * Th = (V-I*Rm)/Sm+Tc                    // Hot Side Temperature [K]
+   *
+   * Equivalent eqn for Sm, Rm, Km, Z
+   * Sm = Vmax/Th
+   * Rm = (Th-DTmax)*Vmax/(Th*Imax)
+   * Km = (Th-DTmax)/(Th+DTmax)*Qmax/DTmax
+   * Z = 2*DTmax/((Th-DTmax)*(Th-DTmax))
+   *
+   * Sm, Rm, Km and Z are calculated for 40 celsius deg
+   * using the values in the UT15,12,F2,4040 datasheet
+   */
+
+  Sm = 0.049904;
+  Km = 1.168012;
+  //Z = 0.002465;
+  Rm = 0.819922;
+  Kelvin = 273.15;
 
   Tc = peltier[0].temp/10.0 + Kelvin;
-  t_hot_est = (((peltier->voltage/10.0)-(2*N*I*phi_b)/G+alpha*Tc*2*N) / ((2*N*I*phi_a)/G+alpha*2*N) - Kelvin) * 10; //10 deci oC
+  Tamb = peltier->Tamb/10.0 + Kelvin;
+  V = peltier->voltage/10.0;
 
-  if (t_hot_est <= 0)
+  ThEst = (V-peltier->current*Rm)/Sm+Tc;
+  peltier->Qp = peltier->current*V;
+  peltier->Qc = Sm*Tc*peltier->current-0.5*peltier->current*peltier->current*Rm-Km*(ThEst-Tc);
+  peltier->COP = peltier->Qc/peltier->Qp;
+  peltier->Rheatsink = ((ThEst-Tamb)/(peltier->Qc+peltier->Qp));
+
+  ThEst = (ThEst-Kelvin)*10;
+  peltier->Qp *= 100;
+  peltier->Qc *= 100;
+  peltier->COP *= 100;
+  peltier->Rheatsink *= 100;
+
+  if (ThEst <= 0)
   {
-  	t_hot_est = 0;
+    ThEst = 0;
   }
-  peltier->t_hot_est = lp_filter(&peltier->filter.lp_filter[0], (double)(t_hot_est));
-
-  //PRINTF("FAN: %d, %d\n", (int16_t)t_hot_est, (int16_t)peltier->t_hot_est);
+  peltier->ThEst = lp_filter(&peltier->filter.lp_filter[0], (double)(ThEst));
 }
+
 
 void peltier_controller(peltier_t *peltier)
 {
@@ -131,8 +178,6 @@ void peltier_controller(peltier_t *peltier)
     break;
     case CTR_INIT:
     {
-    	//peltier->filter.lp_filter[0].diff_eq.input = peltier->filter.lp_filter[0].diff_eq.output = 0;
-      //reset_lp_filter(&peltier->filter.lp_filter[0]);
       reset_controller(&peltier->controller);
       reset_rateLimiter(&peltier->rateLimiter, *peltier->io.adcVal);
       peltier[0].state = CTR_CLOSED_LOOP_STATE;
@@ -183,14 +228,14 @@ void peltier_controller(peltier_t *peltier)
   int8_t i;
   if (peltier->adcValFilt > peltier->max_adc)
   {
-	  //setCLStatusReg(0x0001);
-	  for (i=0;i<16; i++)
-	  {
-		  stop_tube_seq(i+1);
-		  //send_led_cmd(21, i+1); //SET_LED_OFF
-	  }
-	  peltier->state = CTR_STOP_STATE;
-	  peltier->error = TRUE;
+    //setCLStatusReg(0x0001);
+    for (i=0;i<16; i++)
+    {
+      stop_tube_seq(i+1);
+      //send_led_cmd(21, i+1); //SET_LED_OFF
+    }
+    peltier->state = CTR_STOP_STATE;
+    peltier->error = TRUE;
   }
 
   /*
