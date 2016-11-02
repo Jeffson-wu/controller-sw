@@ -49,11 +49,14 @@ void LogOff();
 /* Private define ------------------------------------------------------------*/
 #define NUM_OF_TUBES 16+1
 #define LOG_QUEUE_SIZE 4 /*valid values for this is 2,4,8,16,....*/
-#define LOG_ELEMENT_SIZE (DATA_LOG_SIZE/2)
 #define MAX_LOG_DATA_REQUESTED 20 /*Two chunks of log data*/
+#define LOG_ELEMENT_SIZE (DATA_LOG_SIZE/3)
+
+
 typedef struct ldata {
   u16 stage_num;
   u16 temp;
+  u16 pwm;
 }ldata_t;
 
 /* Private typedef -----------------------------------------------------------*/
@@ -70,7 +73,7 @@ typedef struct LOG_DATA_QUEUE {
 } logDataQueue_t;
 
 /* Private macro -------------------------------------------------------------*/
-//#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
+#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
 #ifdef DEBUG
 #define DEBUG_LOG_PRINTF(fmt, args...)      sprintf(dbgbuf, fmt, ## args);  send_msg_on_monitor(dbgbuf);
 #else
@@ -175,11 +178,12 @@ void dataQueueAdd(u8 tubeId, u16 seqNumber, u8 data[])
   {
     poutData->seqNum = seqNumber;
   	DEBUG_LOG_PRINTF("dataQueueAdd, %d, %d", tubeId, poutData->seqNum);
-    for(i = 0; i < LOG_ELEMENT_SIZE; i ++)
+    for(i=0; i<LOG_ELEMENT_SIZE; i++)
     {
-      poutData->ldata[i].stage_num = (((u16)(data[i*4])<<8)  |(data[i*4+1]));
-      poutData->ldata[i].temp =      (((u16)(data[i*4+2])<<8)|(data[i*4+3]));
-      DEBUG_LOG_PRINTF("dataQueueAdd Tube %d - stage %d, %d", tubeId,poutData->ldata[i].stage_num,poutData->ldata[i].temp);
+      poutData->ldata[i].stage_num  = (((u16)(data[i*6])<<8)  |(data[i*6+1]));
+      poutData->ldata[i].temp       = (((u16)(data[i*6+2])<<8)|(data[i*6+3]));
+      poutData->ldata[i].pwm        = (((u16)(data[i*6+4])<<8)|(data[i*6+5]));
+      DEBUG_LOG_PRINTF("dataQueueAdd Tube %d - stage %d, %d, %d", tubeId,poutData->ldata[i].stage_num,poutData->ldata[i].temp,poutData->ldata[i].pwm);
     }
   }
   else
@@ -195,6 +199,8 @@ void emptyLog(int tubeId)
 }
 
 /* ---------------------------------------------------------------------------*/
+
+
 int addLog(char *poutText,int tubeId, int size )
 {
   int i = 0;
@@ -204,6 +210,7 @@ int addLog(char *poutText,int tubeId, int size )
   char str[20];
   int dataAdded = 0;
   int counter=0;
+  int tmplen=0;
   
   // Send all available log elements for each tube
   while( (counter < MAX_LOG_DATA_REQUESTED/LOG_ELEMENT_SIZE) && (NULL != (pinData = dequeue(&logDataQueue[tubeId-1]))) ) //idx=[0..15]
@@ -219,18 +226,32 @@ int addLog(char *poutText,int tubeId, int size )
     }
     for(i=0; i<LOG_ELEMENT_SIZE; i++)
     {
-      int templen=0;
       Itoa(pinData->ldata[i].stage_num, str);
-      templen = strlen(str);
-      str[templen]=',';
-      Itoa(pinData->ldata[i].temp, &str[templen+1]);
+      tmplen = strlen(str);
+      str[tmplen]=',';
+      Itoa(pinData->ldata[i].temp, &str[tmplen+1]);
       addStrToBuf(poutText, str, size);
+
       if(LOG_ELEMENT_SIZE - 1 > i)
       { 
         addStrToBuf(poutText, ",", size);
       }
     }
-    addStrToBuf(poutText, ",", size); 
+
+    addStrToBuf(poutText, "}",size);
+    addStrToBuf(poutText,";pwmlog={", size);
+    for(i=0; i<LOG_ELEMENT_SIZE; i++)
+    {
+      Itoa(pinData->ldata[i].pwm, &str[0]);
+      addStrToBuf(poutText, str, size);
+
+      if(LOG_ELEMENT_SIZE - 1 > i)
+      {
+        addStrToBuf(poutText, ",", size);
+      }
+    }
+
+    addStrToBuf(poutText, ",", size);
     nElements+=LOG_ELEMENT_SIZE;
   }
   
@@ -242,6 +263,7 @@ int addLog(char *poutText,int tubeId, int size )
   DEBUG_LOG_PRINTF("Lenght of log %d",strlen(poutText));
   return nElements;
 }
+
 
 /* ---------------------------------------------------------------------------*/
 /* Development logging */
