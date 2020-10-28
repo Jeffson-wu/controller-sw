@@ -839,6 +839,7 @@ bool coolLidReadRegs(u8 slave, u16 addr, u16 datasize, u16 *buffer)
         switch(slave)
         {
           case LID_ADDR:
+        	  // lidHeater[0] and lidHeater[1] are swapped again...
             val = adc_to_temp(&lidHeater[0].ntcCoef, lidHeater[0].adcValFilt);
             break;
           case MID_ADDR:
@@ -1219,8 +1220,11 @@ void CoolAndLidTask( void * pvParameters )
 
   init_peltier(&peltier[0]);
   init_fan(&fan[0]);
-  init_lid_heater(&lidHeater[0]);
-  init_mid_heater(&lidHeater[1]);
+
+  // These two are swapped
+  init_lid_heater(&lidHeater[0]);	// lidHeater[0] = MidHeater
+  init_mid_heater(&lidHeater[1]);	// lidHeater[1] = TopHeater
+
 
   lidHeater[0].ntcCoef.beta = 3940;
   lidHeater[0].ntcCoef.r_s_ohm = 470;
@@ -1228,6 +1232,15 @@ void CoolAndLidTask( void * pvParameters )
   lidHeater[1].ntcCoef.beta = 3984;
   lidHeater[1].ntcCoef.r_s_ohm = 10000;
 
+
+  /* This was to test if the regulator are are pointing to the
+   * wrong coef. Tests showed they are swapped.
+  lidHeater[0].ntcCoef.beta = 3940;
+  lidHeater[0].ntcCoef.r_s_ohm = 10000;
+
+  lidHeater[1].ntcCoef.beta = 3984;
+  lidHeater[1].ntcCoef.r_s_ohm = 470;
+   */
   init_median_filter(&fan[0].medianFilter);
   init_median_filter(&peltier[0].medianFilter);
   init_median_filter(&lidHeater[0].medianFilter);

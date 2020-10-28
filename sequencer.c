@@ -242,6 +242,21 @@ const ExtiGpioTypeDef tube2heater[]=
   Heater4, Heater4, Heater4, Heater4
 };
 
+//const ExtiGpioTypeDef tube2heater[]=
+//{
+//		Heater1, Heater1, Heater1, Heater1,
+//		Heater1, Heater1, Heater1, Heater1,
+//		Heater1, Heater1, Heater1, Heater1,
+//		Heater1, Heater1, Heater1, Heater1
+//};
+
+//typedef struct
+//{
+//  uint16_t tube_1;
+//  uint16_t tube_2;
+//  uint16_t tube_3;
+//  uint16_t tube_4;
+//}heater_tubes_t;
 typedef struct
 {
   uint16_t tube_1;
@@ -250,12 +265,22 @@ typedef struct
   uint16_t tube_4;
 }heater_tubes_t;
 
+
+//XXX
 const heater_tubes_t heater2tube[]= {
   { 1,2,3,4 },                                              /*Heater1*/
   { 5,6,7,8 },                                              /*Heater2*/
   { 9,10,11,12 },                                           /*Heater3*/
   { 13,14,15,16 },                                          /*Heater4*/
 };
+//const heater_tubes_t heater2tube[]= {
+//  { 1,1,1,1 },                                              /*Heater1*/
+//  { 1,1,1,1 },                                              /*Heater2*/
+//  { 1,1,1,1 },                                           /*Heater3*/
+//  { 1,1,1,1 },                                          /*Heater4*/
+//};
+
+
 
 const gpio_extint_t gpio_EXTI_CNF[nExtiGpio+1]={
   { GPIO_PinSource3 ,GPIO_PortSourceGPIOC,EXTI_Line3, EXTI3_IRQn },     /*Heater1*/

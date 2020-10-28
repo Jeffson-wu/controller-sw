@@ -706,6 +706,20 @@ int gdi_get_regwrite_values(u16 * buffer)
 }
 
 /* ---------------------------------------------------------------------------*/
+long tubeId2PhysicalId(long raw_ID){
+    // Convert the command LED from MainBoard to corresponding physical LED.
+    // 0 is for Tubemand to make an action on ALL LED's at once.
+    long TubeIdConvertionTable[] =
+	{ 0,
+	 16, 15, 14, 13,
+	 12, 11, 10,  9,
+	  1,  2,  3,  4,
+	  5,  6,  7,  8};
+    return TubeIdConvertionTable[raw_ID];
+}
+
+
+/* ---------------------------------------------------------------------------*/
 void gdi_map_to_functions()
 {
   int retvalue, i=0;
@@ -1144,7 +1158,20 @@ void gdi_map_to_functions()
           uid = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
           i++;
         }
+
         TubeId = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
+
+        //char minTest[50] = ("MinTest");
+        //char convertLong[10];
+        //itoa((int)TubeId, convertLong, 10);
+        //strcat(minTest, convertLong);
+
+		//send_msg_on_monitor(minTest);
+		//send_msg_on_monitor(convertLong);
+
+
+
+        //TubeId = tubeId2PhysicalId((u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10));
 
         if((TubeId < 17)||(TubeId > 0))
         {
@@ -1522,20 +1549,7 @@ void gdi_map_to_functions()
           uid = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
           i++;
         }
-        TubeId = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
-
-
-
-        // Convert the command LED from MainBoard to corresponding physical LED.
-        // 0 is for Tubemand to make an action on ALL LED's at once.
-        long TubeIdConvertionTable[] =
-		{0,
-		 16, 15, 14, 13,
-		 12, 11, 10,  9,
-		  1,  2,  3,  4,
-		  5,  6,  7,  8};
-        TubeId = TubeIdConvertionTable[TubeId];
-
+        TubeId = tubeId2PhysicalId((u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10));
 
         i++;
         cmd = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);

@@ -22,15 +22,15 @@
 /* Private define ------------------------------------------------------------*/
 /* Exported constants --------------------------------------------------------*/
 /* Exported macro ------------------------------------------------------------*/
-/* Exported functions ------------------------------------------------------- */
+/* Exported functions --------------------------------------------------------*/
 
 // SW version
 #define SW_VERSION "2.000.000"
 
 // Strings in file version.c generated from the build process - Do NOT commit version.c to Git!!
-extern char buildRevStr[]    __attribute__ ((section (".buildId_data")));
-extern char buildDateStr[]   __attribute__ ((section (".buildId_data")));
-extern char gitCommitIdStr[] __attribute__ ((section (".buildId_data")));
+extern char buildRevStr[]   __attribute__ ((section (".buildId_data")));
+extern char buildDateStr[]  __attribute__ ((section (".buildId_data")));
+extern char gitCommitIdStr[]    __attribute__ ((section (".buildId_data")));
 
 #endif /* __VERSION_H */
 
