@@ -23,11 +23,25 @@
 /* Includes ------------------------------------------------------------------*/
 /* Exported types ------------------------------------------------------------*/
 
+
+
+
+typedef enum {
+  MID_HEATER,
+  LID_HEATER,
+  nLID_HEATER
+} lidHeaterID_t;
+/*
 typedef enum {
   LID_HEATER_1,
   LID_HEATER_2,
   nLID_HEATER
 } lidHeaterID_t;
+*/
+
+
+
+
 
 typedef struct LID {
   lidHeaterID_t   		lidHeaterID;
