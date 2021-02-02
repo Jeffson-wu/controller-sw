@@ -73,7 +73,7 @@ typedef struct LOG_DATA_QUEUE {
 } logDataQueue_t;
 
 /* Private macro -------------------------------------------------------------*/
-#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
+//#define DEBUG /*General debug shows state changes of tubes (new temp, new time etc.)*/
 #ifdef DEBUG
 #define DEBUG_LOG_PRINTF(fmt, args...)      sprintf(dbgbuf, fmt, ## args);  send_msg_on_monitor(dbgbuf);
 #else
@@ -136,7 +136,7 @@ logDataElement_t * enqueue(logDataQueue_t * pQueue)
   t = pQueue->tail;
 #endif
   taskEXIT_CRITICAL();
-  DEBUG_LOG_PRINTF("T%d:enqueue: head %d tail %d",cur_tubeid, h, t);
+//  DEBUG_LOG_PRINTF("T%d:enqueue: head %d tail %d",cur_tubeid, h, t);
   return pElement;
 }
 
@@ -177,13 +177,13 @@ void dataQueueAdd(u8 tubeId, u16 seqNumber, u8 data[])
   if(NULL != poutData)
   {
     poutData->seqNum = seqNumber;
-  	DEBUG_LOG_PRINTF("dataQueueAdd, %d, %d", tubeId, poutData->seqNum);
+//  	DEBUG_LOG_PRINTF("dataQueueAdd, %d, %d", tubeId, poutData->seqNum);
     for(i=0; i<LOG_ELEMENT_SIZE; i++)
     {
       poutData->ldata[i].stage_num  = (((u16)(data[i*6])<<8)  |(data[i*6+1]));
       poutData->ldata[i].temp       = (((u16)(data[i*6+2])<<8)|(data[i*6+3]));
       poutData->ldata[i].pwm        = (((u16)(data[i*6+4])<<8)|(data[i*6+5]));
-      DEBUG_LOG_PRINTF("dataQueueAdd Tube %d - stage %d, %d, %d", tubeId,poutData->ldata[i].stage_num,poutData->ldata[i].temp,poutData->ldata[i].pwm);
+//      DEBUG_LOG_PRINTF("dataQueueAdd Tube %d - stage %d, %d, %d", tubeId,poutData->ldata[i].stage_num,poutData->ldata[i].temp,poutData->ldata[i].pwm);
     }
   }
   else

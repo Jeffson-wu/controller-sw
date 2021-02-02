@@ -103,7 +103,8 @@ void th_estmator(peltier_t *peltier, uint16_t ctr_out)
    * I = ISET/DACmax*DACctr
    */
 
-  peltier->current = (double)((16.5*47.0/147.0)/4095.00) * (double)ctr_out;
+  //peltier->current = (double)((16.5*47.0/147.0)/4095.00) * (double)ctr_out;
+  peltier->current = (double)((16.5*100000/1000000+100000)/4095.00) * (double)ctr_out;
 
 
   /*

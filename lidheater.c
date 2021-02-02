@@ -20,7 +20,8 @@
 #include "lidheater.h"
 //#include "sequencer.h"
 //#include "dll_dummy.h"
-
+#include "stdio.h"
+#include "debug.h"
 /* ---------------------------------------------------------------------------*/
 /* Lid handling */
 /* ---------------------------------------------------------------------------*/
@@ -137,7 +138,14 @@ void lid_heater_controller(lidHeater_t *lidHeater)
     break;
     case CTR_CLOSED_LOOP_STATE:
     {
+int16_t temp=adc_to_temp(&lidHeater->ntcCoef,lidHeater->adcValFilt);
+
       ctr_out = (uint16_t)feedback_controller_pos(&lidHeater->controller, lidHeater->adcValFilt);
+
+PRINTF("CTR%d: %d %d %f %d %d\n",
+       lidHeater->lidHeaterID,ctr_out,lidHeater->adcValFilt,
+       lidHeater->controller.setPoint,temp,
+       temp_to_adc(&lidHeater->ntcCoef,temp));
       /*
       if (*lidHeater->io.adcVal < lidHeater->setPointLow_1)
 			{

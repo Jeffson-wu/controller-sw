@@ -133,10 +133,20 @@ void PWM_Set(uint16_t pwm_width,PWMPort_t pwm_port)
     case PWM0_TIM4CH3:
       ChannelPulse = (uint16_t) (((uint32_t) pwm_width * (TimerPeriod_TIM4 - 1)) / 32768);
       TIM_SetCompare3(TIM4,ChannelPulse);
+      if (pwm_width >= 32768) {
+        GPIO_ResetBits(GPIOB, GPIO_Pin_12);
+      } else {
+        GPIO_ResetBits(GPIOB, GPIO_Pin_12);
+      }
     break;
     case PWM1_TIM4CH4:
       ChannelPulse = (uint16_t) (((uint32_t) pwm_width * (TimerPeriod_TIM4 - 1)) / 32768);
       TIM_SetCompare4(TIM4,ChannelPulse);
+      if (pwm_width >= 32768) {
+        GPIO_ResetBits(GPIOB, GPIO_Pin_13);
+      } else {
+        GPIO_ResetBits(GPIOB, GPIO_Pin_13);
+      }
     break;
     case PWM2_TIM3CH1:
       ChannelPulse = (uint16_t) (((uint32_t) pwm_width * (TimerPeriod_TIM3 - 1)) / 32768);
@@ -179,6 +189,12 @@ void PWM_PinConfig(void)
   /* GPIOB Configuration: Channel 3 and 4 as alternate function push-pull */
   GPIO_InitStructure.GPIO_Pin = GPIO_Pin_8 | GPIO_Pin_9;
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
+  GPIO_Init(GPIOB, &GPIO_InitStructure);
+
+  /* GPIOB Configuration: GPIO push-pull */
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_12 | GPIO_Pin_13;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
   GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
   GPIO_Init(GPIOB, &GPIO_InitStructure);
 

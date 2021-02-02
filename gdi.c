@@ -706,6 +706,32 @@ int gdi_get_regwrite_values(u16 * buffer)
 }
 
 /* ---------------------------------------------------------------------------*/
+long tubeId2PhysicalId(long raw_ID){
+    // Convert the command LED from MainBoard to corresponding physical LED.
+    // 0 is for Tubemand to make an action on ALL LED's at once.
+    long TubeIdConvertionTable[] =
+	{ 0,
+	 16, 15, 14, 13,
+	 12, 11, 10,  9,
+	  1,  2,  3,  4,
+	  5,  6,  7,  8};
+    return TubeIdConvertionTable[raw_ID];
+}
+
+long tubeId2PhysicalId2(long raw_ID){
+    // Convert the command LED from MainBoard to corresponding physical LED.
+    // 0 is for Tubemand to make an action on ALL LED's at once.
+    long TubeIdConvertionTable[] =
+	{ 0,
+	 16, 14, 15, 13,
+	 12, 10, 11,  9,
+	  1,  3,  2,  4,
+	  5,  7,  6,  8};
+    return TubeIdConvertionTable[raw_ID];
+}
+
+
+/* ---------------------------------------------------------------------------*/
 void gdi_map_to_functions()
 {
   int retvalue, i=0;
@@ -1139,15 +1165,18 @@ void gdi_map_to_functions()
     /***************************************************************/
     case seq_cmd:
       {
-        long TubeId = 0;
+        long TubeId = 0, TubeIdHeat=0;
         if(!gdiEcho) {
           uid = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
           i++;
         }
         TubeId = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
+        TubeIdHeat = tubeId2PhysicalId(TubeId);
 
-        if((TubeId < 17)||(TubeId > 0))
+PRINTF("SEQ: %d %s\n", (int)TubeId,*(gdi_req_func_info.parameters + gdi_req_func_info.number_of_parameters - 1));
+        if((TubeIdHeat < 17)||(TubeIdHeat > 0))
         {
+        TubeIdHeat = tubeId2PhysicalId(TubeId);
           // "at@gdi:seq_cmd(<uid>,<tube>,tubestart)\r"
           if(!strncmp((*(gdi_req_func_info.parameters + gdi_req_func_info.number_of_parameters - 1)),"tubestart", strlen("tubestart")))
           {
@@ -1157,8 +1186,8 @@ void gdi_map_to_functions()
             } else {
               syncId = (u16) strtol(*(gdi_req_func_info.parameters + gdi_req_func_info.number_of_parameters - 2), (char **)NULL, 10);
             }
-            GDI_PRINTF("T%ld: Start seq", TubeId);
-            if(start_tube_seq((u8)TubeId, syncId))    /*Start the seq*/
+            GDI_PRINTF("T%ld: Start seq", TubeIdHeat);
+            if(start_tube_seq((u8)TubeIdHeat, syncId))    /*Start the seq*/
             {
               gdi_send_data_response("OK", newline_end);
             }
@@ -1170,8 +1199,8 @@ void gdi_map_to_functions()
           // "at@gdi:seq_cmd(<uid>,<tube>,tubestop)\r"
           else if(!strncmp((*(gdi_req_func_info.parameters + i + 1)),"tubestop", strlen("tubestop")))
           {
-            GDI_PRINTF("T%ld: Stop seq", TubeId);
-            if(stop_tube_seq(TubeId))    /*Stop the seq*/
+            GDI_PRINTF("T%ld: Stop seq", TubeIdHeat);
+            if(stop_tube_seq(TubeIdHeat))    /*Stop the seq*/
             {
               gdi_send_data_response("OK", newline_end);
             }
@@ -1183,8 +1212,8 @@ void gdi_map_to_functions()
           // "at@gdi:seq_cmd(<uid>,<tube>,tubepause)\r"
           else if(!strncmp((*(gdi_req_func_info.parameters +gdi_req_func_info.number_of_parameters-1)), "tubepause", strlen("tubepause")))
           {
-            GDI_PRINTF("T%ld: pause seq", TubeId);
-            if(pause_tube_state(TubeId))    /*Pause the seq*/
+            GDI_PRINTF("T%ld: pause seq", TubeIdHeat);
+            if(pause_tube_state(TubeIdHeat))    /*Pause the seq*/
             {
               gdi_send_data_response("OK", newline_end);
             }
@@ -1196,14 +1225,14 @@ void gdi_map_to_functions()
           // "at@gdi:seq_cmd(<uid>,<tube>,tubestatus)\r"
           else if(!strncmp((*(gdi_req_func_info.parameters + i + 1)),"tubestatus",strlen("tubestatus")))
           {
-            GDI_PRINTF("T%ld: Get tubestatus.", TubeId);
-            if((1 > TubeId) || (16 < TubeId)) 
+            GDI_PRINTF("T%ld: Get tubestatus.", TubeIdHeat);
+            if((1 > TubeIdHeat) || (16 < TubeIdHeat)) 
             {
               gdi_send_data_response("NOK invalid tube", newline_end);
             }
             else
             {
-              gdi_send_data_response(get_tube_state(TubeId, str, SIZE_OF_STR_RESULT), newline_end);
+              gdi_send_data_response(get_tube_state(TubeIdHeat, str, SIZE_OF_STR_RESULT), newline_end);
             }
           }
           // "at@gdi:seq_cmd(<uid>,<tube>,<stage number>,<temp>,<time>,<stage>,tubestage)\r"
@@ -1213,7 +1242,7 @@ void gdi_map_to_functions()
             data.temp = (u16) strtol(*(gdi_req_func_info.parameters + 2 + i), (char **)NULL, 10);
             data.time = (u32) strtol(*(gdi_req_func_info.parameters + 3 + i), (char **)NULL, 10);
             state =  (**(gdi_req_func_info.parameters + 4 + i));
-            if(tubedataQueueAdd(TubeId, seq_num, state, &data)== TRUE) //Insert next state into sequence
+            if(tubedataQueueAdd(TubeIdHeat, seq_num, state, &data)== TRUE) //Insert next state into sequence
             {
               gdi_send_data_response("OK", newline_end);
             }
@@ -1231,7 +1260,7 @@ void gdi_map_to_functions()
         }
         else
         {
-          GDI_PRINTF("ERROR TubeID out of range Tube:%ld", TubeId);
+          GDI_PRINTF("ERROR TubeID out of range Tube:%ld", TubeIdHeat);
           gdi_send_data_response("NOK TubeID out of range", newline_end);
           break;
         }
@@ -1522,9 +1551,15 @@ void gdi_map_to_functions()
           uid = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
           i++;
         }
+
         TubeId = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
         i++;
         cmd = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
+PRINTF("LED: %d %d\n", (int)TubeId, (int)cmd);
+        if (cmd==SET_LED_SLOW_BLINK || cmd==SET_LED_FAST_BLINK || cmd==SET_LED_PULSE)
+            TubeId=tubeId2PhysicalId2(TubeId);
+        else
+            TubeId=tubeId2PhysicalId(TubeId);
         i++;
         if( (0<=TubeId) && (16>=TubeId) )
         {

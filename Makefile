@@ -100,12 +100,12 @@ all: $(SOURCES) $(PROGRAM) $(PROGRAM).hex
 .PHONY: version.c
 
 version.c:
-	echo '#include "version.h"' > $@ 
-	echo '/* This file is AUTO GENERATED - Do NOT Check in!!! */' >> $@
-	echo 'char buildRevStr[] = SW_VERSION ;' >> $@ 
-	echo -n 'char buildDateStr[] = ' >> $@ 
-	date +'"%Y.%m.%d-%T";' >> $@ 
-	echo -n "char gitCommitIdStr[] = \"$(shell git describe --always --dirty)\";" >> $@
+	@echo '#include "version.h"' > $@ 
+	@echo '/* This file is AUTO GENERATED - Do NOT Check in!!! */' >> $@
+	@echo 'char buildRevStr[] = SW_VERSION ;' >> $@ 
+	@echo 'char buildDateStr[] = ' >> $@ 
+	@date +'"%Y.%m.%d-%T";' >> $@ 
+	@echo "char gitCommitIdStr[] = \"$(shell git describe --always --dirty)\";" >> $@
 
 $(PROGRAM): $(OBJECTS)
 	@echo -n "Linking $@... "
