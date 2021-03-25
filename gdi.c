@@ -113,6 +113,7 @@ enum gdi_func_type
   setprodtest,
   crash_cmd,
   bu_cmd,     // Crash cmd - used after crashes - see debug.c
+  hyst,
   invalid_command
 };
 
@@ -137,6 +138,7 @@ gdi_func_table_type gdi_func_info_table[] =
 {    
   {"seq_cmd",     " Set seq start, stop, state, pause, continue, log, getlog", "at@gdi:seq_cmd(tube, cmd)",seq_cmd },
   {"coolandlid",  " Set temperatures and fan speed",  "at@gdi:coolandlid(idx, setpoint)",   coolandlid },
+  {"hyst", " Set hysteresis for tube heater", "at@gdi:hyst(idx, hystVal)", hyst },
   {"led",         " Set tube LED function",           "at@gdi:led(tube,fn)",        modbus_LED},
   {"synchronizeled",    " Synchronize tube LEDs",     "at@gdi:SynchronizeLED()",    modbus_Synchronize_LED},
   {"help",    " Help command",                        "at@gdi:help()",              help},
@@ -186,11 +188,34 @@ struct_gdi_req_func_info gdi_req_func_info;
 void (*forceHardFault)(void);
 
 /* ---------------------------------------------------------------------------*/
+int sendHyst(long TubeId, u16 hyst)
+{
+  xMessage *msg;
+  WriteModbusRegsReq *p;
+  int rtc=pdFALSE;
+
+  msg = pvPortMalloc(sizeof(xMessage)+sizeof(WriteModbusRegsReq)+sizeof(u16));
+  if(NULL != msg)
+  {
+    hyst = ((hyst&0xFF)<<8)|(hyst>>8);
+    msg->ucMessageID = WRITE_MODBUS_REGS;
+    p = (WriteModbusRegsReq *)msg->ucData;
+    p->slave = TubeId;
+    p->addr = SET_HYST_REG;
+    memcpy(p->data, &hyst, sizeof(u16));
+    p->datasize = 1; //datasize (nof regs)
+    p->reply = NULL; //No reply
+    rtc=xQueueSend(ModbusQueueHandle, &msg, portMAX_DELAY);     
+  }
+  return rtc;
+}
+
 int send_led_cmd(u16 fn, long TubeId) 
 {
   xMessage *msg;
   WriteModbusRegsReq *p;
 
+        PRINTF("LED %d %d\n\r",fn , (int)TubeId);
   msg = pvPortMalloc(sizeof(xMessage)+sizeof(WriteModbusRegsReq)+sizeof(u16));
   if(NULL != msg)
   {
@@ -1173,7 +1198,6 @@ void gdi_map_to_functions()
         TubeId = (u16) strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
         TubeIdHeat = tubeId2PhysicalId(TubeId);
 
-PRINTF("SEQ: %d %s\n", (int)TubeId,*(gdi_req_func_info.parameters + gdi_req_func_info.number_of_parameters - 1));
         if((TubeIdHeat < 17)||(TubeIdHeat > 0))
         {
         TubeIdHeat = tubeId2PhysicalId(TubeId);
@@ -1510,6 +1534,24 @@ PRINTF("SEQ: %d %s\n", (int)TubeId,*(gdi_req_func_info.parameters + gdi_req_func
             }
           }
         }
+      }
+      break;
+
+    case hyst:
+      {
+        u16 hystVal;
+
+        i++; // Goto param
+        hystVal=atoi(*(gdi_req_func_info.parameters + i));
+//        if (gdi_req_func_info.number_of_parameters > 0) {
+//          hystVal   = (u16)strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
+//        }
+        PRINTF("Hyst %d %d\n\r",i , hystVal);
+
+        sendHyst(1,hystVal);
+        sendHyst(5,hystVal);
+        sendHyst(9,hystVal);
+        sendHyst(13,hystVal);
       }
       break;
 
