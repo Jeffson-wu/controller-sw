@@ -1547,11 +1547,13 @@ void gdi_map_to_functions()
 //          hystVal   = (u16)strtol(*(gdi_req_func_info.parameters + i), (char **)NULL, 10);
 //        }
         PRINTF("Hyst %d %d\n\r",i , hystVal);
-
-        sendHyst(1,hystVal);
-        sendHyst(5,hystVal);
-        sendHyst(9,hystVal);
-        sendHyst(13,hystVal);
+        if (hystVal>=15 && hystVal<=500) {
+           hystVal=(hystVal*3333)/10;
+           sendHyst(1,hystVal);
+           sendHyst(5,hystVal);
+           sendHyst(9,hystVal);
+           sendHyst(13,hystVal);
+        }
       }
       break;
 
